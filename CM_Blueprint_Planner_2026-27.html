@@ -632,6 +632,8 @@ window.updateBookField = function (catId, idx, field, val) {
   var cat = L.findCategory(CATS, catId); if (!cat) return;
   if (field === 'tot' || field === 'per' || field === 'currentUnit') cat.bks[idx][field] = parseFloat(val) || 0;
   else if (field === 'startWeek' || field === 'endWeek') cat.bks[idx][field] = val === '' ? null : (parseInt(val, 10) || null);
+  else if (field === 'loopId') cat.bks[idx][field] = val || null;
+  else if (field === 'fixedDays') cat.bks[idx][field] = val.split(',').map(function (s) { return parseInt(s.trim(), 10); }).filter(function (n) { return !isNaN(n) && n > 0; });
   else cat.bks[idx][field] = val;
   saveApp(); renderCats();
 };
@@ -699,6 +701,16 @@ window.updateFreq = function (catId, val) {
   var cat = L.findCategory(CATS, catId); if (!cat) return;
   cat.freq = parseFloat(val); saveApp(); renderCats();
 };
+window.updateCatDefaultLoop = function (catId, loopId) {
+  var cat = L.findCategory(CATS, catId); if (!cat) return;
+  cat.defaultLoopId = loopId || null;
+  saveApp(); renderCats();
+};
+window.updateGroupDefaultLoop = function (grpName, loopId) {
+  var grp = CATS.find(function (g) { return g.grp === grpName; }); if (!grp) return;
+  grp.defaultLoopId = loopId || null;
+  saveApp(); renderCats();
+};
 window.toggleFormTag = function (catId, formId) {
   var cat = L.findCategory(CATS, catId); if (!cat) return;
   var idx = cat.forms.indexOf(formId);
@@ -731,6 +743,10 @@ function renderCats() {
       '<button class="mini-btn" onclick="addSubcatUI(\'' + escAttr(grp.grp) + '\')" title="Add category">+ Category</button>' +
       '<button class="mini-btn" onclick="deleteGroupUI(\'' + escAttr(grp.grp) + '\')" title="Delete group">Delete group</button>' +
       '</span></div>';
+    h += '<div class="freq-inline" style="margin:-4px 0 8px;"><span style="font-size:11px;color:#888;">Group default loop:</span><select onchange="updateGroupDefaultLoop(\'' + escAttr(grp.grp) + '\',this.value)">';
+    h += '<option value="">— none —</option>';
+    LOOPS.forEach(function (lp) { h += '<option value="' + lp.id + '"' + (grp.defaultLoopId === lp.id ? ' selected' : '') + '>' + escAttr(lp.name) + '</option>'; });
+    h += '</select></div>';
     if (!visibleItems.length) return;
     grp.items.forEach(function (cat) {
       if (!catAppliesToFilter(cat)) return;
@@ -754,6 +770,11 @@ function renderCats() {
       h += '<button class="mini-btn" onclick="event.stopPropagation();moveSubcatUI(\'' + escAttr(grp.grp) + '\',\'' + cat.id + '\',1)" title="Move down">↓</button>';
       h += '<button class="mini-btn" onclick="event.stopPropagation();deleteSubcatUI(\'' + escAttr(grp.grp) + '\',\'' + cat.id + '\')" title="Delete category">Delete</button>';
       h += '</div>';
+
+      h += '<div class="freq-inline" onclick="event.stopPropagation()"><span style="font-size:11px;color:#888;">Default loop for loop-rotation books here:</span><select onchange="updateCatDefaultLoop(\'' + cat.id + '\',this.value)">';
+      h += '<option value="">— none —</option>';
+      LOOPS.forEach(function (lp) { h += '<option value="' + lp.id + '"' + (cat.defaultLoopId === lp.id ? ' selected' : '') + '>' + escAttr(lp.name) + '</option>'; });
+      h += '</select></div>';
 
       h += '<div class="forms-edit"><span style="font-size:11px;color:#888;">Applies to Forms:</span>';
       L.FORMS.forEach(function (f) {
@@ -818,6 +839,18 @@ function renderCats() {
         h += '<div><label>Start week</label><input type="number" min="1" value="' + (nb.startWeek || '') + '" placeholder="any" onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'startWeek\',this.value)"></div>';
         h += '<div><label>End/finish week</label><input type="number" min="1" value="' + (nb.endWeek || '') + '" placeholder="any" onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'endWeek\',this.value)"></div>';
         h += '<div><label>Currently at</label><input type="number" min="0" value="' + (nb.currentUnit || 0) + '" onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'currentUnit\',this.value)"></div>';
+        h += '<div><label>Schedule style</label><select onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'scheduleStyle\',this.value)">';
+        L.SCHEDULE_STYLES.forEach(function (s) { h += '<option value="' + s + '"' + (nb.scheduleStyle === s ? ' selected' : '') + '>' + s + '</option>'; });
+        h += '</select></div>';
+        if (nb.scheduleStyle === 'loop-rotation') {
+          var resolvedLoopId = L.resolveBookLoopId(nb, cat, grp);
+          h += '<div><label>Loop' + (resolvedLoopId ? '' : ' — Needs Loop Assignment') + '</label><select onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'loopId\',this.value)">';
+          h += '<option value="">— inherit / none —</option>';
+          LOOPS.forEach(function (lp) { h += '<option value="' + lp.id + '"' + (nb.loopId === lp.id ? ' selected' : '') + '>' + escAttr(lp.name) + '</option>'; });
+          h += '</select></div>';
+        } else if (nb.scheduleStyle === 'fixed-days') {
+          h += '<div><label>Fixed days (e.g. 1,3)</label><input type="text" value="' + (nb.fixedDays || []).join(',') + '" onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'fixedDays\',this.value)"></div>';
+        }
         h += '</div>';
         h += '<div class="book-actions">';
         h += '<button class="mini-btn" onclick="rebalanceBookUI(\'' + cat.id + '\',' + bi + ')" title="Rebalance remaining sittings from current progress to end week">Rebalance from here</button>';
@@ -1055,6 +1088,12 @@ function renderPlanningAudit() {
   var totalW = L.totalWeeks(sy);
   var eff = totalW - behind;
   var h = '<p class="fs-help">Full year-planning detail: every category regardless of this week\'s frequency, pacing math, and book coverage. This is not the parent-facing weekly view — see Weekly by Subject or Daily View for that.</p>';
+  var needingLoop = L.findBooksNeedingLoopAssignment(CATS);
+  if (needingLoop.length) {
+    h += '<div class="rec" style="margin-bottom:14px;">Needs Loop Assignment — these books are set to "loop-rotation" but aren\'t in any loop yet:<ul style="margin:6px 0 0 18px;">';
+    needingLoop.forEach(function (n) { h += '<li>' + escAttr(n.grpName) + ' — ' + escAttr(n.catName) + ': ' + escAttr(n.title) + '</li>'; });
+    h += '</ul></div>';
+  }
   h += '<div class="wk-grid">';
   for (var w = range[0]; w <= range[1]; w++) {
     var isExam = examWeeks.indexOf(w) > -1;

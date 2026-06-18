@@ -760,6 +760,101 @@ test('buildLoopDailySlots excludes loops whose audience does not apply to the re
 });
 
 // ---------------------------------------------------------------------------
+// Scheduling method: direct-frequency vs loop-rotation vs fixed-days vs manual
+// ---------------------------------------------------------------------------
+test('Daily Math (direct-frequency, 4x/wk) schedules itself without any loop', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories(); // Math is freq:4, scheduleStyle defaults to direct-frequency
+  const days = L.buildDailyView(cats, fs.children, fs.schoolYear, 5, 4, 'all', {});
+  const mathDays = days.filter(d => d.groups.some(g => g.grp === 'Math'));
+  assert.equal(mathDays.length, days.length); // 4x/wk shows every school day
+});
+
+test('2x/week Foreign Language schedules itself without any loop', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const flang = L.findCategory(cats, 'flang');
+  flang.freq = 2; // ensure 2x/week regardless of demo defaults
+  const days = L.buildDailyView(cats, fs.children, fs.schoolYear, 5, 4, 'all', {});
+  const flangDays = days.filter(d => d.groups.some(g => g.items.some(it => /Foreign Language/.test(it.text))));
+  assert.equal(flangDays.length, 2);
+});
+
+test('Beauty Loop rotates one item per loop slot, not every item at once', () => {
+  const cats = [{ grp: 'Beauty Loop', col: '#000', items: [
+    { id: 'pic', name: 'Picture Study', forms: [], childOverrides: [], freq: 1, bks: [{ t: 'Artist rotation', tot: 3, per: 1, unitType: 'lessons', currentUnit: 0, scheduleStyle: 'loop-rotation' }] },
+    { id: 'comp', name: 'Composer Study', forms: [], childOverrides: [], freq: 1, bks: [{ t: 'Composer rotation', tot: 3, per: 1, unitType: 'lessons', currentUnit: 0, scheduleStyle: 'loop-rotation' }] },
+    { id: 'folk', name: 'Folk Song', forms: [], childOverrides: [], freq: 1, bks: [{ t: 'Folk song rotation', tot: 3, per: 1, unitType: 'lessons', currentUnit: 0, scheduleStyle: 'loop-rotation' }] }
+  ] }];
+  let loops = L.addLoop([], { name: 'Beauty Loop' });
+  loops = L.addLoopItem(loops, loops[0].id, { targetType: 'subcategory', targetCatId: 'pic' });
+  loops = L.addLoopItem(loops, loops[0].id, { targetType: 'subcategory', targetCatId: 'comp' });
+  loops = L.addLoopItem(loops, loops[0].id, { targetType: 'subcategory', targetCatId: 'folk' });
+  const slots = L.buildLoopDailySlots(loops, cats, [], 'all', 1);
+  assert.equal(slots.length, 1); // one slot for the whole loop, not 3
+  assert.ok(/Picture Study/.test(slots[0].text));
+});
+
+test('Bible Loop rotates one item (Matthew, then Psalms, then Hymn Study) per slot', () => {
+  const cats = [{ grp: 'Bible + Faith', col: '#000', items: [
+    { id: 'matt', name: 'Matthew', forms: [], childOverrides: [], freq: 1, bks: [{ t: 'Matthew', tot: 28, per: 1, unitType: 'chapters', currentUnit: 0, scheduleStyle: 'loop-rotation' }] },
+    { id: 'psalms', name: 'Psalms + Proverbs', forms: [], childOverrides: [], freq: 1, bks: [{ t: 'Psalms', tot: 66, per: 1, unitType: 'chapters', currentUnit: 0, scheduleStyle: 'loop-rotation' }] },
+    { id: 'hymn', name: 'Hymn Study', forms: [], childOverrides: [], freq: 1, bks: [{ t: 'Hymn rotation', tot: 9, per: 1, unitType: 'lessons', currentUnit: 0, scheduleStyle: 'loop-rotation' }] }
+  ] }];
+  let loops = L.addLoop([], { name: 'Bible Loop' });
+  const loopId = loops[0].id;
+  loops = L.addLoopItem(loops, loopId, { targetType: 'subcategory', targetCatId: 'matt' });
+  loops = L.addLoopItem(loops, loopId, { targetType: 'subcategory', targetCatId: 'psalms' });
+  loops = L.addLoopItem(loops, loopId, { targetType: 'subcategory', targetCatId: 'hymn' });
+  const loop = loops[0];
+
+  let slots = L.buildLoopDailySlots(loops, cats, [], 'all', 1);
+  assert.ok(/Matthew/.test(slots[0].text));
+  L.advanceLoopAndQueue(loop, loop.items[loop.cursor % loop.items.length], cats, 1);
+
+  slots = L.buildLoopDailySlots(loops, cats, [], 'all', 1);
+  assert.ok(/Psalms/.test(slots[0].text));
+  L.advanceLoopAndQueue(loop, loop.items[loop.cursor % loop.items.length], cats, 1);
+
+  slots = L.buildLoopDailySlots(loops, cats, [], 'all', 1);
+  assert.ok(/Hymn/.test(slots[0].text));
+});
+
+test('Direct-frequency items never appear in Needs Loop Assignment', () => {
+  const cats = L.demoCategories(); // all demo books default to scheduleStyle 'direct-frequency'
+  const needing = L.findBooksNeedingLoopAssignment(cats);
+  assert.equal(needing.length, 0);
+});
+
+test('Loop-rotation items appear in Needs Loop Assignment only when no loop resolves', () => {
+  const cats = [{ grp: 'Beauty Loop', col: '#000', defaultLoopId: null, items: [
+    { id: 'pic', name: 'Picture Study', forms: [], childOverrides: [], freq: 1,
+      bks: [{ t: 'Artist rotation', tot: 3, per: 1, unitType: 'lessons', scheduleStyle: 'loop-rotation', loopId: null }] }
+  ] }];
+  // No loopId anywhere yet -> needs assignment.
+  let needing = L.findBooksNeedingLoopAssignment(cats);
+  assert.equal(needing.length, 1);
+  assert.equal(needing[0].title, 'Artist rotation');
+
+  // Book-level loopId resolves it.
+  cats[0].items[0].bks[0].loopId = 'loop_abc';
+  needing = L.findBooksNeedingLoopAssignment(cats);
+  assert.equal(needing.length, 0);
+
+  // Subcategory-level default also resolves it, even without a book-level id.
+  cats[0].items[0].bks[0].loopId = null;
+  cats[0].items[0].defaultLoopId = 'loop_xyz';
+  needing = L.findBooksNeedingLoopAssignment(cats);
+  assert.equal(needing.length, 0);
+
+  // Group-level default also resolves it.
+  cats[0].items[0].defaultLoopId = null;
+  cats[0].defaultLoopId = 'loop_grp';
+  needing = L.findBooksNeedingLoopAssignment(cats);
+  assert.equal(needing.length, 0);
+});
+
+// ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
 let passed = 0, failed = 0;
