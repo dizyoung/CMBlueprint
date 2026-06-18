@@ -147,6 +147,30 @@
   @media (max-width: 560px) { .sy-grid { grid-template-columns: 1fr; } }
   .sy-field label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .04em; font-family: sans-serif; display: block; margin-bottom: 3px; }
   .sy-field input, .sy-field select { font-family: sans-serif; font-size: 12px; padding: 6px 7px; border: 1px solid var(--border2); border-radius: 5px; width: 100%; background: white; color: var(--text); }
+  .sched-views { display: flex; gap: 5px; margin-bottom: 1rem; flex-wrap: wrap; }
+  .sv-btn { padding: 6px 13px; font-size: 12px; border: 1px solid var(--border2); border-radius: var(--radius); background: white; cursor: pointer; color: var(--text2); font-family: sans-serif; }
+  .sv-btn.active { background: #555; color: white; border-color: #555; }
+  .sched-toggles { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 1rem; padding: 9px 12px; background: var(--bg2); border-radius: var(--radius); font-family: sans-serif; font-size: 12px; color: var(--text2); }
+  .sched-toggles label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .subj-grp { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; background: white; overflow: hidden; }
+  .subj-hd { display: flex; align-items: center; gap: 8px; padding: 9px 13px; cursor: pointer; user-select: none; }
+  .subj-hd:hover { background: var(--bg2); }
+  .subj-name { font-size: 13px; font-weight: 600; flex: 1; font-family: sans-serif; }
+  .subj-bd { display: none; padding: 0 13px 11px; }
+  .subj-bd.open { display: block; }
+  .aud-block { margin: 7px 0; }
+  .aud-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text3); margin-bottom: 3px; font-family: sans-serif; }
+  .sched-item { font-size: 12px; color: var(--text); line-height: 1.7; font-family: sans-serif; padding-left: 10px; position: relative; }
+  .sched-item::before { content: "·"; position: absolute; left: 1px; color: var(--text3); }
+  .sched-item.manual { color: var(--teal-dark); }
+  .sched-item .manual-tag { font-size: 9px; color: var(--teal); margin-left: 5px; }
+  .day-col { border: 1px solid var(--border); border-radius: var(--radius); padding: 9px 11px; background: white; }
+  .day-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 8px; }
+  .day-n { font-size: 12px; font-weight: 700; color: var(--teal); margin-bottom: 6px; font-family: sans-serif; text-transform: uppercase; letter-spacing: .04em; }
+  .book-actions { display: flex; gap: 5px; flex-wrap: wrap; margin: 6px 0; }
+  .book-fields2 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin: 4px 0 8px; font-family: sans-serif; }
+  .book-fields2 select, .book-fields2 input { font-size: 11px; padding: 4px 6px; border: 1px solid var(--border2); border-radius: 5px; }
+  .book-fields2 label { font-size: 9px; color: var(--text3); text-transform: uppercase; display: block; margin-bottom: 2px; }
   .migrate-banner { background: var(--amber-light); border: 1px solid #e0c79a; border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 1.5rem; font-family: sans-serif; }
   .migrate-banner h2 { font-size: 15px; color: #633806; margin-bottom: 6px; }
   .migrate-banner p { font-size: 13px; color: #633806; line-height: 1.6; margin-bottom: 10px; }
@@ -254,8 +278,11 @@
       <input type="range" min="0" max="8" value="0" step="1" id="bslider" oninput="ubehind(this.value)" style="flex:2;">
       <span class="behind-n" id="bval">0</span>
     </div>
+    <div class="sched-views" id="sched-views"></div>
     <div class="child-tabs" id="sched-child-tabs"></div>
     <div class="term-btns" id="term-btns"></div>
+    <div id="week-picker"></div>
+    <div class="sched-toggles" id="sched-toggles"></div>
     <div id="sched-out"></div>
   </div>
 </div>
@@ -269,10 +296,19 @@ window.L = L; // expose to inline onclick handlers below
 
 var openC = {}, behind = 0, term = 1, schedChild = 'all';
 var currentChildFilter = 'all';
-var APP; // top-level { version, familySetup, categories, uiState }
-var FAMILY, CATS; // shortcuts kept in sync with APP
+var APP; // top-level { version, familySetup, categories, uiState, overrides }
+var FAMILY, CATS, OVERRIDES; // shortcuts kept in sync with APP
+
+// Schedule tab view state (session-only; not persisted)
+var schedView = 'subject'; // 'subject' | 'daily' | 'audit'
+var schedWeek = null; // absolute week number selected within the term (subject/daily views)
+var openSubj = {}; // collapse state for Weekly-by-Subject group sections
+var schedToggle = { showCoop: false, hideOptionalLoop: false, showUnassigned: true, audience: 'all' }; // audience: 'all'|'together'|'togetherPlus'
 
 function escAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+// For text embedded inside a single-quoted JS string literal within an onclick="" attribute
+// (book/category titles may legitimately contain apostrophes, e.g. "Plutarch's Lives").
+function escJs(s) { return escAttr(s).replace(/'/g, '&#39;'); }
 
 // ---------------------------------------------------------------------------
 // Load / migration / persistence
@@ -329,7 +365,7 @@ window.proceedToFreshSetup = function () {
   renderAll();
 };
 
-function syncShortcuts() { FAMILY = APP.familySetup; CATS = APP.categories; }
+function syncShortcuts() { FAMILY = APP.familySetup; CATS = APP.categories; APP.overrides = APP.overrides || {}; OVERRIDES = APP.overrides; }
 
 // ---------------------------------------------------------------------------
 // Export / import / reset
@@ -420,7 +456,7 @@ window.updateSchoolYear = function () {
   }
   saveApp();
   renderSchoolYearForm();
-  if (document.getElementById('panel-sched').classList.contains('active')) { renderSchedChildTabs(); renderTermBtns(); renderSchedule(); }
+  if (document.getElementById('panel-sched').classList.contains('active')) { renderSchedChildTabs(); renderTermBtns(); renderWeekPicker(); renderSchedule(); }
   if (document.getElementById('panel-cats').classList.contains('active')) renderCats();
 };
 
@@ -567,8 +603,55 @@ window.delBook = function (catId, idx) {
 };
 window.updateBookField = function (catId, idx, field, val) {
   var cat = L.findCategory(CATS, catId); if (!cat) return;
-  if (field === 'tot' || field === 'per') cat.bks[idx][field] = parseFloat(val) || 0;
+  if (field === 'tot' || field === 'per' || field === 'currentUnit') cat.bks[idx][field] = parseFloat(val) || 0;
+  else if (field === 'startWeek' || field === 'endWeek') cat.bks[idx][field] = val === '' ? null : (parseInt(val, 10) || null);
   else cat.bks[idx][field] = val;
+  saveApp(); renderCats();
+};
+window.rebalanceBookUI = function (catId, idx) {
+  var cat = L.findCategory(CATS, catId); if (!cat) return;
+  var b = cat.bks[idx];
+  var nb = L.normalizeBook(b);
+  var fromWeek = prompt('Rebalance starting at which week?', nb.startWeek || schedWeek || 1);
+  if (fromWeek === null) return;
+  var toWeek = prompt('Finish by which week?', nb.endWeek || L.totalWeeks(FAMILY.schoolYear));
+  if (toWeek === null) return;
+  L.rebalanceBookFromProgress(b, parseInt(fromWeek, 10) || 1, parseInt(toWeek, 10) || 1, cat.freq);
+  saveApp(); renderCats();
+};
+window.pauseBookUI = function (catId, idx) {
+  var cat = L.findCategory(CATS, catId); if (!cat) return;
+  var wk = prompt('Pause this book until which week?'); if (wk === null) return;
+  L.pauseBookUntilWeek(cat.bks[idx], parseInt(wk, 10) || 1);
+  saveApp(); renderCats();
+};
+window.finishBookUI = function (catId, idx) {
+  var cat = L.findCategory(CATS, catId); if (!cat) return;
+  var b = cat.bks[idx]; var nb = L.normalizeBook(b);
+  var wk = prompt('Finish this book by which week?'); if (wk === null) return;
+  L.finishBookByWeek(b, parseInt(wk, 10) || 1, nb.startWeek || schedWeek || 1, cat.freq);
+  saveApp(); renderCats();
+};
+window.dropBookUI = function (catId, idx) {
+  var cat = L.findCategory(CATS, catId); if (!cat) return;
+  if (!confirm('Drop all remaining assignments for this book? It will no longer appear in generated schedules.')) return;
+  L.dropBookRemaining(cat.bks[idx]);
+  saveApp(); renderCats();
+};
+window.toggleAutoScheduleUI = function (catId, idx) {
+  var cat = L.findCategory(CATS, catId); if (!cat) return;
+  var nb = L.normalizeBook(cat.bks[idx]);
+  L.setBookAutoSchedule(cat.bks[idx], nb.autoSchedule === false);
+  saveApp(); renderCats();
+};
+window.moveBookUI = function (catId, idx) {
+  var names = [];
+  CATS.forEach(function (g) { g.items.forEach(function (c) { names.push(c.id + ' — ' + c.name); }); });
+  var dest = prompt('Move this book to which category? Enter the category id.\n\n' + names.join('\n'));
+  if (!dest) return;
+  var destId = dest.split(' — ')[0].trim();
+  if (!L.findCategory(CATS, destId)) { alert('No category with that id.'); return; }
+  L.moveBookToCategory(CATS, catId, destId, idx);
   saveApp(); renderCats();
 };
 window.updateBookWho = function (catId, idx, val) {
@@ -694,6 +777,29 @@ function renderCats() {
           });
           h += '</div>';
         }
+        var nb = L.normalizeBook(b);
+        h += '<div class="book-fields2" onclick="event.stopPropagation()">';
+        h += '<div><label>Audience</label><select onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'audienceType\',this.value)">';
+        L.AUDIENCE_TYPES.forEach(function (a) { h += '<option value="' + a + '"' + (nb.audienceType === a ? ' selected' : '') + '>' + a + '</option>'; });
+        h += '</select></div>';
+        h += '<div><label>Priority</label><select onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'priority\',this.value)">';
+        L.BOOK_PRIORITIES.forEach(function (p) { h += '<option value="' + p + '"' + (nb.priority === p ? ' selected' : '') + '>' + p + '</option>'; });
+        h += '</select></div>';
+        h += '<div><label>Status</label><select onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'status\',this.value)">';
+        L.BOOK_STATUSES.forEach(function (s) { h += '<option value="' + s + '"' + (nb.status === s ? ' selected' : '') + '>' + s + '</option>'; });
+        h += '</select></div>';
+        h += '<div><label>Start week</label><input type="number" min="1" value="' + (nb.startWeek || '') + '" placeholder="any" onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'startWeek\',this.value)"></div>';
+        h += '<div><label>End/finish week</label><input type="number" min="1" value="' + (nb.endWeek || '') + '" placeholder="any" onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'endWeek\',this.value)"></div>';
+        h += '<div><label>Currently at</label><input type="number" min="0" value="' + (nb.currentUnit || 0) + '" onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'currentUnit\',this.value)"></div>';
+        h += '</div>';
+        h += '<div class="book-actions">';
+        h += '<button class="mini-btn" onclick="rebalanceBookUI(\'' + cat.id + '\',' + bi + ')" title="Rebalance remaining sittings from current progress to end week">Rebalance from here</button>';
+        h += '<button class="mini-btn" onclick="pauseBookUI(\'' + cat.id + '\',' + bi + ')">Pause until week…</button>';
+        h += '<button class="mini-btn" onclick="finishBookUI(\'' + cat.id + '\',' + bi + ')">Finish by week…</button>';
+        h += '<button class="mini-btn" onclick="dropBookUI(\'' + cat.id + '\',' + bi + ')">Drop remaining</button>';
+        h += '<button class="mini-btn" onclick="toggleAutoScheduleUI(\'' + cat.id + '\',' + bi + ')">' + (nb.autoSchedule === false ? 'Resume auto-schedule' : 'Do not auto-schedule') + '</button>';
+        h += '<button class="mini-btn" onclick="moveBookUI(\'' + cat.id + '\',' + bi + ')">Move to subject…</button>';
+        h += '</div>';
       });
       h += '<button class="add-btn" onclick="event.stopPropagation();addBook(\'' + cat.id + '\')">+ Add a book to this category</button>';
       var sugT = c.sc === 'g' ? ('Well-paced — ' + c.sur + ' sitting buffer across the year.') :
@@ -740,7 +846,135 @@ function renderWeekItemsHTML(items) {
   return h;
 }
 
-function renderSchedule() {
+// ---------------------------------------------------------------------------
+// Schedule sub-views: Weekly by Subject (default), Daily, Planning/Audit
+// ---------------------------------------------------------------------------
+window.setSchedView = function (v) { schedView = v; renderTermBtns(); renderWeekPicker(); renderSchedToggles(); renderSchedule(); };
+
+function renderSchedViews() {
+  var el = document.getElementById('sched-views'); if (!el) return;
+  var views = [['subject', 'Weekly by Subject'], ['daily', 'Daily View'], ['audit', 'Planning / Audit']];
+  var h = '';
+  views.forEach(function (v) { h += '<button class="sv-btn' + (schedView === v[0] ? ' active' : '') + '" onclick="setSchedView(\'' + v[0] + '\')">' + v[1] + '</button>'; });
+  el.innerHTML = h;
+}
+
+function renderWeekPicker() {
+  var el = document.getElementById('week-picker'); if (!el) return;
+  if (schedView === 'audit') { el.innerHTML = ''; return; }
+  var ranges = L.termRanges(FAMILY.schoolYear);
+  var range = ranges[term]; if (!range) { el.innerHTML = ''; return; }
+  if (schedWeek == null || schedWeek < range[0] || schedWeek > range[1]) schedWeek = range[0];
+  var h = '<div class="sched-toggles" style="margin-bottom:8px;"><label style="font-weight:600;">Week:</label><select onchange="setSchedWeek(this.value)" style="font-family:sans-serif;font-size:12px;padding:4px 7px;border:1px solid var(--border2);border-radius:5px;">';
+  for (var w = range[0]; w <= range[1]; w++) {
+    h += '<option value="' + w + '"' + (schedWeek === w ? ' selected' : '') + '>Week ' + w + (L.examWeeksFor(FAMILY.schoolYear).indexOf(w) > -1 ? ' — Exam' : '') + '</option>';
+  }
+  h += '</select></div>';
+  el.innerHTML = h;
+}
+window.setSchedWeek = function (v) { schedWeek = parseInt(v, 10); renderSchedule(); };
+
+function renderSchedToggles() {
+  var el = document.getElementById('sched-toggles'); if (!el) return;
+  if (schedView === 'audit') { el.innerHTML = ''; return; }
+  var h = '';
+  h += '<label><input type="checkbox" ' + (schedToggle.showCoop ? 'checked' : '') + ' onchange="setSchedToggle(\'showCoop\',this.checked)"> Show co-op/outside work</label>';
+  h += '<label><input type="checkbox" ' + (schedToggle.showUnassigned ? 'checked' : '') + ' onchange="setSchedToggle(\'showUnassigned\',this.checked)"> Show unassigned items</label>';
+  h += '<label><input type="checkbox" ' + (schedToggle.hideOptionalLoop ? 'checked' : '') + ' onchange="setSchedToggle(\'hideOptionalLoop\',this.checked)"> Hide optional/loop subjects</label>';
+  h += '<label>Show: <select onchange="setSchedToggle(\'audience\',this.value)" style="font-family:sans-serif;font-size:11px;">' +
+    '<option value="all"' + (schedToggle.audience === 'all' ? ' selected' : '') + '>All children</option>' +
+    '<option value="together"' + (schedToggle.audience === 'together' ? ' selected' : '') + '>Together work only</option>' +
+    '<option value="togetherPlus"' + (schedToggle.audience === 'togetherPlus' ? ' selected' : '') + '>Together + selected child</option>' +
+    '</select></label>';
+  el.innerHTML = h;
+}
+window.setSchedToggle = function (key, val) { schedToggle[key] = val; renderSchedule(); };
+window.toggleSubj = function (grp) { openSubj[grp] = !openSubj[grp]; renderSchedule(); };
+
+function schedOpts() {
+  return { showCoop: schedToggle.showCoop, hideOptionalLoop: schedToggle.hideOptionalLoop, showUnassigned: schedToggle.showUnassigned, overrides: OVERRIDES };
+}
+
+function renderItemsList(items) {
+  var h = '';
+  items.forEach(function (it) {
+    h += '<div class="sched-item' + (it.manual ? ' manual' : '') + '" onclick="editOverrideUI(\'' + it.bookKey + '\',' + schedWeek + ',\'' + escJs(it.text) + '\')">' + escAttr(it.text) + (it.manual ? '<span class="manual-tag">(edited)</span>' : '') + '</div>';
+  });
+  return h;
+}
+
+window.editOverrideUI = function (bookKey, weekNum, currentText) {
+  var val = prompt('Edit this week\'s assignment text (leave as-is to cancel):', currentText);
+  if (val === null || val === currentText) return;
+  L.setOverride(OVERRIDES, bookKey, weekNum, null, val);
+  saveApp(); renderSchedule();
+};
+window.resetOverridesUI = function () {
+  if (!confirm('Reset all manually-edited schedule cells back to auto-generated content?')) return;
+  L.resetGeneratedOverrides(OVERRIDES);
+  saveApp(); renderSchedule();
+};
+
+function renderWeeklyBySubjectView() {
+  var out = document.getElementById('sched-out'); if (!out) return;
+  if (schedWeek == null) { out.innerHTML = ''; return; }
+  var contentWeekIndex = Math.max(0, schedWeek - 1 - behind);
+  var groups = L.buildWeeklyBySubject(CATS, FAMILY.children, FAMILY.schoolYear, schedWeek, contentWeekIndex, schedOpts());
+  var h = '';
+  if (groups.length === 0) {
+    h = '<div class="wi" style="color:#aaa;">Nothing scheduled for this week with the current filters.</div>';
+  }
+  groups.forEach(function (g) {
+    var open = openSubj[g.grp] !== false; // default open
+    h += '<div class="subj-grp"><div class="subj-hd" onclick="toggleSubj(\'' + escAttr(g.grp) + '\')">';
+    h += '<div class="dot" style="background:' + g.col + '"></div><span class="subj-name">' + escAttr(g.grp) + '</span>';
+    h += '<span class="chv' + (open ? ' open' : '') + '">&#8964;</span></div>';
+    h += '<div class="subj-bd' + (open ? ' open' : '') + '">';
+    if (g.together.length && (schedToggle.audience === 'all' || schedToggle.audience === 'together' || schedToggle.audience === 'togetherPlus')) {
+      h += '<div class="aud-block"><div class="aud-lbl">Together / Family</div>' + renderItemsList(g.together) + '</div>';
+    }
+    Object.keys(g.sharedGroup).forEach(function (lbl) {
+      if (schedToggle.audience === 'together') return;
+      h += '<div class="aud-block"><div class="aud-lbl">' + escAttr(lbl) + '</div>' + renderItemsList(g.sharedGroup[lbl]) + '</div>';
+    });
+    if (schedToggle.audience !== 'together') {
+      FAMILY.children.forEach(function (kid) {
+        if (schedToggle.audience === 'togetherPlus' && schedChild !== 'all' && kid.id !== schedChild) return;
+        var its = g.individual[kid.id];
+        if (its && its.length) h += '<div class="aud-block"><div class="aud-lbl">' + escAttr(kid.name) + '</div>' + renderItemsList(its) + '</div>';
+      });
+    }
+    if (g.independent.length && schedToggle.audience !== 'together') {
+      h += '<div class="aud-block"><div class="aud-lbl">Independent</div>' + renderItemsList(g.independent) + '</div>';
+    }
+    if (g.coop.length) {
+      h += '<div class="aud-block"><div class="aud-lbl">Co-op / Outside</div>' + renderItemsList(g.coop) + '</div>';
+    }
+    h += '</div></div>';
+  });
+  h += '<button class="util-btn" style="margin-top:10px;" onclick="resetOverridesUI()">Reset generated assignments</button>';
+  out.innerHTML = h;
+}
+
+function renderDailyViewUI() {
+  var out = document.getElementById('sched-out'); if (!out) return;
+  if (schedWeek == null) { out.innerHTML = ''; return; }
+  var contentWeekIndex = Math.max(0, schedWeek - 1 - behind);
+  var days = L.buildDailyView(CATS, FAMILY.children, FAMILY.schoolYear, schedWeek, contentWeekIndex, schedChild, schedOpts());
+  var h = '<div class="day-grid">';
+  days.forEach(function (d) {
+    h += '<div class="day-col"><div class="day-n">Day ' + d.day + '</div>';
+    if (!d.groups.length) h += '<div class="wi" style="color:#aaa;">Nothing scheduled</div>';
+    d.groups.forEach(function (g) {
+      h += '<div class="aud-block"><div class="aud-lbl" style="color:' + g.col + '">' + escAttr(g.grp) + '</div>' + renderItemsList(g.items) + '</div>';
+    });
+    h += '</div>';
+  });
+  h += '</div>';
+  out.innerHTML = h;
+}
+
+function renderPlanningAudit() {
   var out = document.getElementById('sched-out'); if (!out) return;
   var sy = FAMILY.schoolYear;
   var examWeeks = L.examWeeksFor(sy);
@@ -748,7 +982,8 @@ function renderSchedule() {
   var range = ranges[term]; if (!range) { out.innerHTML = ''; return; }
   var totalW = L.totalWeeks(sy);
   var eff = totalW - behind;
-  var h = '<div class="wk-grid">';
+  var h = '<p class="fs-help">Full year-planning detail: every category regardless of this week\'s frequency, pacing math, and book coverage. This is not the parent-facing weekly view — see Weekly by Subject or Daily View for that.</p>';
+  h += '<div class="wk-grid">';
   for (var w = range[0]; w <= range[1]; w++) {
     var isExam = examWeeks.indexOf(w) > -1;
     var contentWeekIndex = Math.max(0, w - 1 - behind);
@@ -779,6 +1014,12 @@ function renderSchedule() {
     h += '<div class="rec">' + behind + ' week' + (behind > 1 ? 's' : '') + ' behind — ' + msg + '</div>';
   }
   out.innerHTML = h;
+}
+
+function renderSchedule() {
+  if (schedView === 'subject') renderWeeklyBySubjectView();
+  else if (schedView === 'daily') renderDailyViewUI();
+  else renderPlanningAudit();
 }
 
 function renderPrintTermPage(kid, t) {
@@ -827,8 +1068,10 @@ window.onafterprint = function () {
 window.ubehind = function (v) { behind = parseInt(v, 10); document.getElementById('bval').textContent = v; renderSchedule(); };
 window.stm = function (n, btn) {
   term = n;
+  schedWeek = null; // re-pick default week for the new term
   document.querySelectorAll('.term-btns .tb').forEach(function (b) { b.classList.remove('active'); });
   btn.classList.add('active');
+  renderWeekPicker();
   renderSchedule();
 };
 
@@ -839,7 +1082,7 @@ window.sw = function (name, el) {
   document.querySelectorAll('.panel').forEach(function (p) { p.classList.remove('active'); });
   document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
   document.getElementById('panel-' + name).classList.add('active'); el.classList.add('active');
-  if (name === 'sched') { renderSchedChildTabs(); renderTermBtns(); renderSchedule(); }
+  if (name === 'sched') { renderSchedViews(); renderSchedChildTabs(); renderTermBtns(); renderWeekPicker(); renderSchedToggles(); renderSchedule(); }
   if (name === 'cycles') renderCycles();
   if (name === 'forms') renderForms();
   if (name === 'cats') renderCats();

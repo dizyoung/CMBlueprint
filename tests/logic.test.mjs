@@ -359,6 +359,238 @@ test('buildWeekItems for "all" dedupes categories across children', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Weekly-by-Subject: grouping, audience, co-op/loop visibility
+// ---------------------------------------------------------------------------
+test('buildWeeklyBySubject groups assignments under their category group', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const out = L.buildWeeklyBySubject(cats, fs.children, fs.schoolYear, 1, 0, {});
+  assert.ok(out.length > 0);
+  out.forEach(g => assert.ok(typeof g.grp === 'string' && g.grp.length > 0));
+});
+
+test('Together/Family book appears exactly once, not duplicated per child', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const mathGrp = cats.find(g => g.grp === 'Math');
+  // demo Math book defaults to who:'all' -> normalizeBook resolves audienceType 'together'
+  const out = L.buildWeeklyBySubject(cats, fs.children, fs.schoolYear, 1, 0, {});
+  const mathOut = out.find(g => g.grp === 'Math');
+  assert.equal(mathOut.together.length, 1);
+  assert.equal(Object.keys(mathOut.individual).length, 0);
+});
+
+test('Individual-audience book appears only under its assigned child(ren)', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const litCat = L.findCategory(cats, 'lit');
+  // mark the "Independent literature" book (who:'specific', lucy+jeremiah) as individual audience
+  const indepBook = litCat.bks.find(b => b.who === 'specific');
+  indepBook.audienceType = 'individual';
+  const out = L.buildWeeklyBySubject(cats, fs.children, fs.schoolYear, 1, 0, {});
+  const litOut = out.find(g => g.grp === 'Language Arts');
+  assert.ok(litOut.individual['lucy'] && litOut.individual['lucy'].length > 0);
+  assert.ok(litOut.individual['jeremiah'] && litOut.individual['jeremiah'].length > 0);
+  assert.equal(litOut.individual['charis'], undefined);
+  assert.equal(litOut.individual['kayla'], undefined);
+});
+
+test('co-op/outside books are hidden by default and shown when opts.showCoop is true', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const upperSci = L.findCategory(cats, 'sc-up');
+  upperSci.bks[0].audienceType = 'co-op-outside';
+  const hidden = L.buildWeeklyBySubject(cats, fs.children, fs.schoolYear, 1, 0, { showCoop: false });
+  const shown = L.buildWeeklyBySubject(cats, fs.children, fs.schoolYear, 1, 0, { showCoop: true });
+  const hiddenSci = hidden.find(g => g.grp === 'Science + Nature');
+  const shownSci = shown.find(g => g.grp === 'Science + Nature');
+  assert.equal((hiddenSci && hiddenSci.coop.length) || 0, 0);
+  assert.ok(shownSci.coop.length > 0);
+});
+
+test('optional-loop books are hidden when opts.hideOptionalLoop is true', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const picStudy = L.findCategory(cats, 'pic');
+  picStudy.bks[0].priority = 'optional-loop';
+  const withLoop = L.buildWeeklyBySubject(cats, fs.children, fs.schoolYear, 1, 0, { hideOptionalLoop: false });
+  const withoutLoop = L.buildWeeklyBySubject(cats, fs.children, fs.schoolYear, 1, 0, { hideOptionalLoop: true });
+  const beautyWith = withLoop.find(g => g.grp === 'Beauty Loop');
+  const beautyWithout = withoutLoop.find(g => g.grp === 'Beauty Loop');
+  const picWith = beautyWith.together.some(it => it.catId === 'pic');
+  const picWithout = beautyWithout ? beautyWithout.together.some(it => it.catId === 'pic') : false;
+  assert.ok(picWith);
+  assert.equal(picWithout, false);
+});
+
+// ---------------------------------------------------------------------------
+// Daily View
+// ---------------------------------------------------------------------------
+test('buildDailyView produces one entry per schoolDaysPerWeek day for a child', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const days = L.buildDailyView(cats, fs.children, fs.schoolYear, 1, 0, 'jeremiah', {});
+  assert.equal(days.length, 3); // jeremiah has schoolDaysPerWeek: 3
+});
+
+test('a 2x/week category does not appear on every day of a 4-day week', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  // grammar ('gr') is freq:2, applies to charis? no (f2/f34/f56) - use kayla? kayla is f1.
+  // Use 'am-story' (American History Story, freq:2, forms f2/f34) - none of demo kids are f2; add one.
+  L.addChild(fs, { id: 'testkid', name: 'Test', gradeLabel: '5th', formId: 'f2', schoolDaysPerWeek: 4, notes: '' });
+  const days = L.buildDailyView(cats, fs.children, fs.schoolYear, 1, 0, 'testkid', {});
+  assert.equal(days.length, 4);
+  let daysWithAmStory = 0;
+  days.forEach(d => {
+    d.groups.forEach(g => {
+      if (g.items.some(it => it.catId === 'am-story')) daysWithAmStory++;
+    });
+  });
+  assert.ok(daysWithAmStory < 4, 'a 2x/week category should not appear on all 4 days');
+  assert.ok(daysWithAmStory > 0);
+});
+
+test('pickDaySlots never exceeds totalDays and respects occurrence count', () => {
+  assert.deepEqual(L.pickDaySlots(4, 4), [1, 2, 3, 4]);
+  assert.ok(L.pickDaySlots(4, 2).length <= 2);
+  assert.ok(L.pickDaySlots(3, 10).length <= 3);
+});
+
+// ---------------------------------------------------------------------------
+// Book-level scheduling: startWeek/endWeek bounds, status, rebalancing
+// ---------------------------------------------------------------------------
+test('bookActiveForWeek respects startWeek/endWeek bounds', () => {
+  const book = { t: 'Test', tot: 100, per: 5, startWeek: 5, endWeek: 10 };
+  assert.equal(L.bookActiveForWeek(book, 3), false);
+  assert.equal(L.bookActiveForWeek(book, 5), true);
+  assert.equal(L.bookActiveForWeek(book, 10), true);
+  assert.equal(L.bookActiveForWeek(book, 11), false);
+});
+
+test('startWeek/endWeek bound generated weekly assignments', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const mathCat = L.findCategory(cats, 'math');
+  mathCat.bks[0].startWeek = 10;
+  mathCat.bks[0].endWeek = 20;
+  const before = L.buildWeeklyBySubject(cats, fs.children, fs.schoolYear, 5, 4, {});
+  const during = L.buildWeeklyBySubject(cats, fs.children, fs.schoolYear, 12, 11, {});
+  const after = L.buildWeeklyBySubject(cats, fs.children, fs.schoolYear, 25, 24, {});
+  const mathBefore = before.find(g => g.grp === 'Math');
+  const mathDuring = during.find(g => g.grp === 'Math');
+  const mathAfter = after.find(g => g.grp === 'Math');
+  assert.equal(mathBefore, undefined);
+  assert.ok(mathDuring && mathDuring.together.length > 0);
+  assert.equal(mathAfter, undefined);
+});
+
+test('paused books are excluded until pauseUntilWeek, then resume', () => {
+  const book = { t: 'Test', tot: 100, per: 5, status: 'paused', pauseUntilWeek: 8 };
+  assert.equal(L.bookActiveForWeek(book, 5), false);
+  assert.equal(L.bookActiveForWeek(book, 8), true);
+  assert.equal(L.bookActiveForWeek(book, 20), true);
+});
+
+test('dropped and finished books are excluded from all weeks', () => {
+  const dropped = { t: 'Test', tot: 100, per: 5, status: 'dropped' };
+  const finished = { t: 'Test', tot: 100, per: 5, status: 'finished' };
+  assert.equal(L.bookActiveForWeek(dropped, 1), false);
+  assert.equal(L.bookActiveForWeek(finished, 1), false);
+});
+
+test('autoSchedule:false excludes a book from generation entirely', () => {
+  const book = { t: 'Test', tot: 100, per: 5, autoSchedule: false };
+  assert.equal(L.bookActiveForWeek(book, 1), false);
+});
+
+test('rebalanceBookFromProgress recomputes per-sitting pace from remaining units', () => {
+  const book = { t: 'Test', tot: 100, per: 5, currentUnit: 40 };
+  L.rebalanceBookFromProgress(book, 10, 19, 1); // 10 weeks, 1 sitting/week = 10 sittings
+  assert.equal(book.per, 6); // 60 remaining / 10 sittings
+  assert.equal(book.startWeek, 10);
+  assert.equal(book.endWeek, 19);
+});
+
+test('finishBookByWeek rebalances to land exactly on the target week', () => {
+  const book = { t: 'Test', tot: 90, per: 3, currentUnit: 0 };
+  L.finishBookByWeek(book, 9, 1, 1); // weeks 1-9, 1 sitting/wk = 9 sittings
+  assert.equal(book.endWeek, 9);
+  assert.equal(book.per, 10); // 90 / 9
+});
+
+test('dropBookRemaining marks status dropped', () => {
+  const book = { t: 'Test', tot: 90, per: 3, status: 'active' };
+  L.dropBookRemaining(book);
+  assert.equal(book.status, 'dropped');
+});
+
+test('pauseBookUntilWeek sets status and resume week', () => {
+  const book = { t: 'Test', tot: 90, per: 3, status: 'active' };
+  L.pauseBookUntilWeek(book, 15);
+  assert.equal(book.status, 'paused');
+  assert.equal(book.pauseUntilWeek, 15);
+});
+
+test('moveBookToCategory moves a book between categories', () => {
+  const cats = L.demoCategories();
+  const fromCat = L.findCategory(cats, 'math');
+  const toCat = L.findCategory(cats, 'gr');
+  const beforeFrom = fromCat.bks.length, beforeTo = toCat.bks.length;
+  L.moveBookToCategory(cats, 'math', 'gr', 0);
+  assert.equal(fromCat.bks.length, beforeFrom - 1);
+  assert.equal(toCat.bks.length, beforeTo + 1);
+});
+
+// ---------------------------------------------------------------------------
+// Manual overrides: survive regeneration, distinguishable from generated
+// ---------------------------------------------------------------------------
+test('a manual override replaces the generated text for that book/week', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const overrides = {};
+  L.setOverride(overrides, 'math#0', 5, null, 'Math: Custom lesson note for week 5');
+  const out = L.buildWeeklyBySubject(cats, fs.children, fs.schoolYear, 5, 4, { overrides });
+  const mathOut = out.find(g => g.grp === 'Math');
+  assert.equal(mathOut.together[0].text, 'Math: Custom lesson note for week 5');
+  assert.equal(mathOut.together[0].manual, true);
+});
+
+test('manual overrides survive regeneration (calling buildWeeklyBySubject again)', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const overrides = {};
+  L.setOverride(overrides, 'math#0', 5, null, 'Manual note');
+  L.buildWeeklyBySubject(cats, fs.children, fs.schoolYear, 5, 4, { overrides });
+  // second "regeneration" call with the same overrides object
+  const out2 = L.buildWeeklyBySubject(cats, fs.children, fs.schoolYear, 5, 4, { overrides });
+  const mathOut = out2.find(g => g.grp === 'Math');
+  assert.equal(mathOut.together[0].text, 'Manual note');
+});
+
+test('resetGeneratedOverrides clears all overrides, restoring generated text', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const overrides = {};
+  L.setOverride(overrides, 'math#0', 5, null, 'Manual note');
+  L.resetGeneratedOverrides(overrides);
+  const out = L.buildWeeklyBySubject(cats, fs.children, fs.schoolYear, 5, 4, { overrides });
+  const mathOut = out.find(g => g.grp === 'Math');
+  assert.notEqual(mathOut.together[0].text, 'Manual note');
+  assert.equal(mathOut.together[0].manual, false);
+});
+
+test('skipBookForWeek marks a week as skipped via an empty-string override', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const overrides = {};
+  L.skipBookForWeek(overrides, 'math#0', 5);
+  const out = L.buildWeeklyBySubject(cats, fs.children, fs.schoolYear, 5, 4, { overrides });
+  const mathOut = out.find(g => g.grp === 'Math');
+  assert.ok(/skipped this week/.test(mathOut.together[0].text));
+});
+
+// ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
 let passed = 0, failed = 0;
