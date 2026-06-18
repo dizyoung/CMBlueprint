@@ -855,6 +855,90 @@ test('Loop-rotation items appear in Needs Loop Assignment only when no loop reso
 });
 
 // ---------------------------------------------------------------------------
+// Family Coverage Matrix, AO-style Term Chart, multi-loop subject families,
+// and daily conflict-group load rules.
+// ---------------------------------------------------------------------------
+test('Family Coverage Matrix places assignments in correct subject column and audience row', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const matrix = L.buildFamilyCoverageMatrix(cats, fs.children, []);
+  assert.ok(matrix.columns.some(c => c.grp === 'Math'));
+  const together = matrix.rows.find(r => r.key === 'together');
+  assert.ok(together.cells['Math'].some(text => /Math curriculum/.test(text)));
+  const lucyRow = matrix.rows.find(r => r.key === 'child:lucy');
+  assert.ok(lucyRow.cells['Language Arts'].some(text => /Independent literature/.test(text)));
+});
+
+test('AO-style Term Chart creates rows by subject/book and columns by week', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const chart = L.buildAOTermChart(cats, fs.children, fs.schoolYear, 1, 'all', {});
+  assert.equal(chart.weeks.length, fs.schoolYear.weeksPerTerm);
+  const mathGroup = chart.groups.find(g => g.grp === 'Math');
+  assert.ok(mathGroup.rows.length > 0);
+  assert.ok(mathGroup.rows[0].cells.hasOwnProperty(chart.weeks[0]));
+});
+
+test('Same subject family can appear in different loops for different audiences', () => {
+  const cats = [{ grp: 'Language Arts', col: '#000', items: [
+    { id: 'fam-lit', name: 'Family Literature', forms: [], childOverrides: [], freq: 1,
+      bks: [{ t: 'Family read-aloud', who: 'all', whoChildren: [], tot: 10, per: 1, unitType: 'chapters', scheduleStyle: 'loop-rotation', loopId: 'loop_family', audienceType: 'together', subjectFamily: 'literature' }] },
+    { id: 'lucy-lit', name: "Lucy's Literature", forms: [], childOverrides: [{ childId: 'lucy', included: true }], freq: 1,
+      bks: [{ t: "Lucy's independent novel", who: 'specific', whoChildren: ['lucy'], tot: 200, per: 8, unitType: 'pages', scheduleStyle: 'loop-rotation', loopId: 'loop_lucy', audienceType: 'individual', subjectFamily: 'literature' }] },
+    { id: 'jer-lit', name: "Jeremiah's Literature", forms: [], childOverrides: [{ childId: 'jeremiah', included: true }], freq: 1,
+      bks: [{ t: "Jeremiah's independent novel", who: 'specific', whoChildren: ['jeremiah'], tot: 200, per: 8, unitType: 'pages', scheduleStyle: 'loop-rotation', loopId: 'loop_jeremiah', audienceType: 'individual', subjectFamily: 'literature' }] }
+  ] }];
+  let loops = L.addLoop([], { name: 'Family Reading Loop' });
+  loops = L.addLoopItem(loops, loops[0].id, { targetType: 'subcategory', targetCatId: 'fam-lit' });
+  loops[0].id = 'loop_family';
+  loops = L.addLoop(loops, { name: "Lucy's Reading Loop" });
+  loops[1].id = 'loop_lucy';
+  loops = L.addLoopItem(loops, 'loop_lucy', { targetType: 'subcategory', targetCatId: 'lucy-lit' });
+  const needing = L.findBooksNeedingLoopAssignment(cats);
+  assert.equal(needing.length, 0); // all three resolve, each to its own loop
+  const matrix = L.buildFamilyCoverageMatrix(cats, L.demoFamilySetup().children, loops);
+  assert.ok(matrix.rows.find(r => r.key === 'together').cells['Language Arts'].some(t => /Family read-aloud/.test(t)));
+  assert.ok(matrix.rows.find(r => r.key === 'child:lucy').cells['Language Arts'].some(t => /independent novel/.test(t)));
+});
+
+test('Family Literature and individual Literature can both exist without colliding', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories(); // 'lit' category already mixes a together read-aloud + individual reading
+  const matrix = L.buildFamilyCoverageMatrix(cats, fs.children, []);
+  const together = matrix.rows.find(r => r.key === 'together').cells['Language Arts'];
+  const lucy = matrix.rows.find(r => r.key === 'child:lucy').cells['Language Arts'];
+  assert.ok(together.some(t => /Family read-aloud/.test(t)));
+  assert.ok(lucy.some(t => /Independent literature/.test(t)));
+  assert.ok(!together.some(t => /Independent literature/.test(t)));
+});
+
+test('Daily load rules prevent too many heavy-reading items for one child on one day', () => {
+  const items = [
+    { text: 'History spine', conflictGroup: 'heavy-reading', audienceType: 'individual' },
+    { text: 'Science spine', conflictGroup: 'heavy-reading', audienceType: 'individual' },
+    { text: 'Plutarch', conflictGroup: 'heavy-reading', audienceType: 'individual' },
+    { text: 'Math', conflictGroup: null, audienceType: 'individual' }
+  ];
+  const { accepted, deferred } = L.applyDailyLoadRules(items, L.defaultLoadRules());
+  assert.equal(accepted.filter(i => i.conflictGroup === 'heavy-reading').length, 1);
+  assert.equal(deferred.length, 2);
+  assert.ok(accepted.some(i => i.text === 'Math'));
+});
+
+test('Together work and individual work are treated separately for load rules unless configured otherwise', () => {
+  const items = [
+    { text: 'Family read-aloud', conflictGroup: 'heavy-reading', audienceType: 'together' },
+    { text: "Child's independent novel", conflictGroup: 'heavy-reading', audienceType: 'individual' }
+  ];
+  const { accepted, deferred } = L.applyDailyLoadRules(items, L.defaultLoadRules());
+  assert.equal(accepted.length, 2);
+  assert.equal(deferred.length, 0);
+
+  const { accepted: accepted2 } = L.applyDailyLoadRules(items, Object.assign({}, L.defaultLoadRules(), { treatTogetherAsIndividualLoad: true }));
+  assert.equal(accepted2.length, 1);
+});
+
+// ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
 let passed = 0, failed = 0;
