@@ -591,6 +591,175 @@ test('skipBookForWeek marks a week as skipped via an empty-string override', () 
 });
 
 // ---------------------------------------------------------------------------
+// Loops & Rhythm
+// ---------------------------------------------------------------------------
+test('addLoop/renameLoop/deleteLoop/moveLoop manage the loops array', () => {
+  let loops = [];
+  loops = L.addLoop(loops, { name: 'Bible Loop' });
+  loops = L.addLoop(loops, { name: 'Reading Loop' });
+  assert.equal(loops.length, 2);
+  const id1 = loops[0].id;
+  loops = L.renameLoop(loops, id1, 'Faith Loop');
+  assert.equal(loops[0].name, 'Faith Loop');
+  loops = L.moveLoop(loops, id1, 1);
+  assert.equal(loops[1].name, 'Faith Loop');
+  loops = L.deleteLoop(loops, id1);
+  assert.equal(loops.length, 1);
+  assert.equal(loops[0].name, 'Reading Loop');
+});
+
+test('addLoopItem/removeLoopItem/moveLoopItem manage items within a loop', () => {
+  let loops = L.addLoop([], { name: 'Loop A' });
+  const loopId = loops[0].id;
+  loops = L.addLoopItem(loops, loopId, { targetType: 'custom', customText: 'Item 1' });
+  loops = L.addLoopItem(loops, loopId, { targetType: 'custom', customText: 'Item 2' });
+  assert.equal(loops[0].items.length, 2);
+  const item1Id = loops[0].items[0].id;
+  loops = L.moveLoopItem(loops, loopId, item1Id, 1);
+  assert.equal(loops[0].items[1].customText, 'Item 1');
+  loops = L.removeLoopItem(loops, loopId, item1Id);
+  assert.equal(loops[0].items.length, 1);
+  assert.equal(loops[0].items[0].customText, 'Item 2');
+});
+
+test('updateLoopItem sets target type, audience tags, and custom fields', () => {
+  let loops = L.addLoop([], { name: 'Loop A' });
+  const loopId = loops[0].id;
+  loops = L.addLoopItem(loops, loopId, { targetType: 'custom', customText: 'X' });
+  const itemId = loops[0].items[0].id;
+  loops = L.updateLoopItem(loops, loopId, itemId, { targetType: 'task', taskLabel: 'Tidy desk', tags: { attention: 'light', mode: 'hands-on', setting: 'independent' } });
+  const item = loops[0].items[0];
+  assert.equal(item.targetType, 'task');
+  assert.equal(item.taskLabel, 'Tidy desk');
+  assert.deepEqual(item.tags, { attention: 'light', mode: 'hands-on', setting: 'independent' });
+});
+
+test('loopTemplates exposes Simple CM Rhythm, Expanded Family Rhythm, and Custom Blank', () => {
+  const tpls = L.loopTemplates();
+  const ids = tpls.map(t => t.id);
+  assert.ok(ids.includes('simple-cm'));
+  assert.ok(ids.includes('expanded-family'));
+  assert.ok(ids.includes('blank'));
+  const blank = tpls.find(t => t.id === 'blank');
+  assert.equal(blank.loops.length, 0);
+});
+
+test('applyLoopTemplate matches existing subcategories by name into loop items', () => {
+  const cats = L.demoCategories();
+  const loops = L.applyLoopTemplate(cats, 'simple-cm');
+  assert.equal(loops.length, 3);
+  const loopA = loops.find(l => /Language Arts/.test(l.name));
+  assert.ok(loopA.items.length > 0);
+  const grammarItem = loopA.items.find(i => i.targetType === 'subcategory');
+  assert.ok(grammarItem);
+  const cat = L.findCategory(cats, grammarItem.targetCatId);
+  assert.ok(cat);
+});
+
+test('applyLoopTemplate falls back to a custom item when no subcategory name matches', () => {
+  const cats = [{ grp: 'Empty', col: '#000', items: [] }];
+  const loops = L.applyLoopTemplate(cats, 'simple-cm');
+  const loopA = loops.find(l => /Language Arts/.test(l.name));
+  assert.ok(loopA.items.every(i => i.targetType === 'custom'));
+});
+
+test('nextBookForSubcategory round-robins across a subcategory\'s books via queueCursor', () => {
+  const cat = { id: 'c1', bks: [{ t: 'Book 1', tot: 10, per: 1, unitType: 'chapters' }, { t: 'Book 2', tot: 10, per: 1, unitType: 'chapters' }] };
+  let next = L.nextBookForSubcategory(cat);
+  assert.equal(next.t, 'Book 1');
+  L.advanceSubcategoryQueue(cat);
+  next = L.nextBookForSubcategory(cat);
+  assert.equal(next.t, 'Book 2');
+  L.advanceSubcategoryQueue(cat);
+  next = L.nextBookForSubcategory(cat);
+  assert.equal(next.t, 'Book 1');
+});
+
+test('advanceBookQueue moves currentUnit forward by per, clamped to tot', () => {
+  const book = { t: 'B', tot: 5, per: 2, unitType: 'pages', currentUnit: 0 };
+  L.advanceBookQueue(book);
+  assert.equal(book.currentUnit, 2);
+  L.advanceBookQueue(book);
+  assert.equal(book.currentUnit, 4);
+  L.advanceBookQueue(book);
+  assert.equal(book.currentUnit, 5); // clamped to tot, not 6
+});
+
+test('resolveLoopItemAssignment for a subcategory item pulls the next book and unit range', () => {
+  const cats = [{ grp: 'Bible', col: '#000', items: [
+    { id: 'bf', name: 'Bible — Family', forms: [], childOverrides: [], freq: 4, bks: [
+      { t: 'Matthew', tot: 28, per: 1, unitType: 'chapters', currentUnit: 0 }
+    ] }
+  ] }];
+  const item = L.normalizeLoopItem({ id: 'i1', targetType: 'subcategory', targetCatId: 'bf' });
+  const resolved = L.resolveLoopItemAssignment(item, cats, 1);
+  assert.ok(/Bible — Family/.test(resolved.text));
+  assert.ok(/Matthew/.test(resolved.text));
+  assert.ok(/ch\.1/.test(resolved.text));
+});
+
+test('resolveLoopItemAssignment for a task item shows the task label; custom item shows custom text', () => {
+  const taskItem = L.normalizeLoopItem({ id: 'i1', targetType: 'task', taskLabel: 'Memory work' });
+  assert.equal(L.resolveLoopItemAssignment(taskItem, [], 1).text, 'Memory work');
+  const customItem = L.normalizeLoopItem({ id: 'i2', targetType: 'custom', customText: 'Family read-aloud' });
+  assert.equal(L.resolveLoopItemAssignment(customItem, [], 1).text, 'Family read-aloud');
+});
+
+test('advanceLoopAndQueue advances both the book/subcategory queue and the loop cursor', () => {
+  const cats = [{ grp: 'Bible', col: '#000', items: [
+    { id: 'bf', name: 'Bible — Family', forms: [], childOverrides: [], freq: 4, bks: [
+      { t: 'Matthew', tot: 28, per: 1, unitType: 'chapters', currentUnit: 0 },
+      { t: 'Psalms', tot: 10, per: 1, unitType: 'chapters', currentUnit: 0 }
+    ] }
+  ] }];
+  let loops = L.addLoop([], { name: 'Bible Loop' });
+  loops = L.addLoopItem(loops, loops[0].id, { targetType: 'subcategory', targetCatId: 'bf' });
+  loops = L.addLoopItem(loops, loops[0].id, { targetType: 'task', taskLabel: 'Prayer' });
+  const loop = loops[0];
+  const item = loop.items[0];
+  L.advanceLoopAndQueue(loop, item, cats, 1);
+  assert.equal(cats[0].items[0].bks[0].currentUnit, 1); // book queue advanced
+  assert.equal(cats[0].items[0].queueCursor, 1); // subcategory round-robin advanced
+  assert.equal(loop.cursor, 1); // loop moved to its next slot
+});
+
+test('loopAppliesToChild filters by together/form/child/custom-group audience', () => {
+  const children = [
+    { id: 'a', formId: 'f1' },
+    { id: 'b', formId: 'f2' }
+  ];
+  assert.equal(L.loopAppliesToChild({ audience: { type: 'together' } }, 'a', children), true);
+  assert.equal(L.loopAppliesToChild({ audience: { type: 'form', value: 'f1' } }, 'a', children), true);
+  assert.equal(L.loopAppliesToChild({ audience: { type: 'form', value: 'f1' } }, 'b', children), false);
+  assert.equal(L.loopAppliesToChild({ audience: { type: 'child', value: 'a' } }, 'b', children), false);
+  assert.equal(L.loopAppliesToChild({ audience: { type: 'custom-group', value: ['a', 'b'] } }, 'b', children), true);
+});
+
+test('buildLoopDailySlots shows only the current item per loop, not every book in the loop', () => {
+  const cats = [{ grp: 'Bible', col: '#000', items: [
+    { id: 'bf', name: 'Bible — Family', forms: [], childOverrides: [], freq: 4, bks: [
+      { t: 'Matthew', tot: 28, per: 1, unitType: 'chapters', currentUnit: 0 }
+    ] }
+  ] }];
+  let loops = L.addLoop([], { name: 'Bible Loop' });
+  loops = L.addLoopItem(loops, loops[0].id, { targetType: 'subcategory', targetCatId: 'bf' });
+  loops = L.addLoopItem(loops, loops[0].id, { targetType: 'task', taskLabel: 'Prayer' });
+  const slots = L.buildLoopDailySlots(loops, cats, [], 'all', 1);
+  assert.equal(slots.length, 1); // one slot per loop, current item only
+  assert.ok(/Matthew/.test(slots[0].text));
+});
+
+test('buildLoopDailySlots excludes loops whose audience does not apply to the requested child', () => {
+  const children = [{ id: 'lucy', formId: 'f34' }, { id: 'kayla', formId: 'f1' }];
+  let loops = L.addLoop([], { name: 'Older Loop', audience: { type: 'child', value: 'lucy' } });
+  loops = L.addLoopItem(loops, loops[0].id, { targetType: 'custom', customText: 'Latin' });
+  const forLucy = L.buildLoopDailySlots(loops, [], children, 'lucy', 1);
+  const forKayla = L.buildLoopDailySlots(loops, [], children, 'kayla', 1);
+  assert.equal(forLucy.length, 1);
+  assert.equal(forKayla.length, 0);
+});
+
+// ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
 let passed = 0, failed = 0;

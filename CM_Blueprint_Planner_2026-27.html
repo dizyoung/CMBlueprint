@@ -171,6 +171,22 @@
   .book-fields2 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin: 4px 0 8px; font-family: sans-serif; }
   .book-fields2 select, .book-fields2 input { font-size: 11px; padding: 4px 6px; border: 1px solid var(--border2); border-radius: 5px; }
   .book-fields2 label { font-size: 9px; color: var(--text3); text-transform: uppercase; display: block; margin-bottom: 2px; }
+  .loop-template-row { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; font-family: sans-serif; }
+  .loop-template-row select { font-size: 12px; padding: 6px 8px; border: 1px solid var(--border2); border-radius: 6px; }
+  .loop-card { border: 1px solid var(--border); border-radius: var(--radius); background: white; margin-bottom: 12px; padding: 10px 12px; }
+  .loop-hd { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .loop-hd input[type=text] { font-size: 13px; font-weight: 700; padding: 5px 7px; border: 1px solid var(--border2); border-radius: 5px; flex: 1; min-width: 140px; font-family: sans-serif; }
+  .loop-hd select { font-size: 11px; padding: 5px 6px; border: 1px solid var(--border2); border-radius: 5px; font-family: sans-serif; }
+  .loop-item-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 5px; align-items: end; padding: 6px 0; border-top: 1px dashed var(--border); font-family: sans-serif; }
+  .loop-item-row:first-of-type { border-top: none; }
+  .loop-item-row select, .loop-item-row input { font-size: 11px; padding: 4px 6px; border: 1px solid var(--border2); border-radius: 5px; width: 100%; }
+  .loop-item-row label { font-size: 9px; color: var(--text3); text-transform: uppercase; display: block; margin-bottom: 2px; }
+  .loop-item-actions { display: flex; gap: 3px; }
+  .loop-current { font-size: 11px; color: var(--teal-dark); margin-top: 4px; font-style: italic; }
+  .loop-slot { font-size: 12px; color: var(--text); line-height: 1.8; font-family: sans-serif; padding-left: 4px; }
+  .loop-slot input[type=checkbox] { margin-right: 6px; }
+  .loop-slot .loop-name { font-weight: 700; color: var(--teal-dark); }
+  .tag-chip { display: inline-block; font-size: 9px; padding: 1px 6px; border-radius: 8px; background: #eee; color: #555; margin-left: 4px; font-family: sans-serif; }
   .migrate-banner { background: var(--amber-light); border: 1px solid #e0c79a; border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 1.5rem; font-family: sans-serif; }
   .migrate-banner h2 { font-size: 15px; color: #633806; margin-bottom: 6px; }
   .migrate-banner p { font-size: 13px; color: #633806; line-height: 1.6; margin-bottom: 10px; }
@@ -218,6 +234,7 @@
     <button class="tab" onclick="sw('cycles',this)">History cycles</button>
     <button class="tab" onclick="sw('cats',this)">Categories</button>
     <button class="tab" onclick="sw('sched',this)">Weekly schedule</button>
+    <button class="tab" onclick="sw('loops',this)">Loops &amp; Rhythm</button>
   </div>
 
   <div id="panel-setup" class="panel active">
@@ -285,6 +302,16 @@
     <div class="sched-toggles" id="sched-toggles"></div>
     <div id="sched-out"></div>
   </div>
+
+  <div id="panel-loops" class="panel">
+    <p class="fs-help">Loops control the daily rhythm: each loop is an ordered list of slots that points at a subcategory's book queue, a specific book, a task, or a custom item. Daily View pulls only the CURRENT item from each scheduled loop — not every book in the loop. Checking an item off advances both the book/subcategory queue and the loop itself.</p>
+    <div class="loop-template-row">
+      <select id="loop-template-select"></select>
+      <button class="add-btn" style="border-top:none;width:auto;padding:7px 13px;border:1px solid var(--border2);border-radius:6px;" onclick="applyTemplateUI()">Apply template</button>
+      <button class="add-btn" style="border-top:none;width:auto;padding:7px 13px;border:1px solid var(--border2);border-radius:6px;" onclick="addLoopUI()">+ Add loop</button>
+    </div>
+    <div id="loop-list"></div>
+  </div>
 </div>
 
 <div class="save-toast" id="save-toast">Saved</div>
@@ -297,7 +324,7 @@ window.L = L; // expose to inline onclick handlers below
 var openC = {}, behind = 0, term = 1, schedChild = 'all';
 var currentChildFilter = 'all';
 var APP; // top-level { version, familySetup, categories, uiState, overrides }
-var FAMILY, CATS, OVERRIDES; // shortcuts kept in sync with APP
+var FAMILY, CATS, OVERRIDES, LOOPS; // shortcuts kept in sync with APP
 
 // Schedule tab view state (session-only; not persisted)
 var schedView = 'subject'; // 'subject' | 'daily' | 'audit'
@@ -365,7 +392,7 @@ window.proceedToFreshSetup = function () {
   renderAll();
 };
 
-function syncShortcuts() { FAMILY = APP.familySetup; CATS = APP.categories; APP.overrides = APP.overrides || {}; OVERRIDES = APP.overrides; }
+function syncShortcuts() { FAMILY = APP.familySetup; CATS = APP.categories; APP.overrides = APP.overrides || {}; OVERRIDES = APP.overrides; APP.loops = APP.loops || []; LOOPS = APP.loops; }
 
 // ---------------------------------------------------------------------------
 // Export / import / reset
@@ -956,22 +983,67 @@ function renderWeeklyBySubjectView() {
   out.innerHTML = h;
 }
 
+function dailyViewDayCount() {
+  if (schedChild === 'all') return FAMILY.children.reduce(function (m, c) { return Math.max(m, c.schoolDaysPerWeek || 4); }, 1);
+  var c = FAMILY.children.find(function (x) { return x.id === schedChild; });
+  return c ? (c.schoolDaysPerWeek || 4) : 4;
+}
+
+function tagChips(tags) {
+  if (!tags) return '';
+  var h = '';
+  [tags.attention, tags.mode, tags.setting].forEach(function (t) { if (t) h += '<span class="tag-chip">' + escAttr(t) + '</span>'; });
+  return h;
+}
+
+function renderLoopSlotsHTML() {
+  var slots = L.buildLoopDailySlots(LOOPS, CATS, FAMILY.children, schedChild, schedWeek);
+  if (!slots.length) return '<div class="wi" style="color:#aaa;">No loops are scheduled for this child yet — set them up on the Loops &amp; Rhythm tab.</div>';
+  var h = '';
+  slots.forEach(function (s) {
+    h += '<div class="loop-slot"><label><input type="checkbox" onclick="checkOffLoopUI(\'' + s.loopId + '\')"> ' +
+      escAttr(s.text) + tagChips(s.tags) + '</label></div>';
+  });
+  return h;
+}
+
+window.checkOffLoopUI = function (loopId) {
+  var loop = LOOPS.find(function (l) { return l.id === loopId; });
+  if (!loop || !loop.items.length) return;
+  var item = loop.items[loop.cursor % loop.items.length];
+  L.advanceLoopAndQueue(loop, item, CATS, schedWeek);
+  saveApp(); renderSchedule();
+};
+
 function renderDailyViewUI() {
   var out = document.getElementById('sched-out'); if (!out) return;
   if (schedWeek == null) { out.innerHTML = ''; return; }
-  var contentWeekIndex = Math.max(0, schedWeek - 1 - behind);
-  var days = L.buildDailyView(CATS, FAMILY.children, FAMILY.schoolYear, schedWeek, contentWeekIndex, schedChild, schedOpts());
-  var h = '<div class="day-grid">';
-  days.forEach(function (d) {
-    h += '<div class="day-col"><div class="day-n">Day ' + d.day + '</div>';
-    if (!d.groups.length) h += '<div class="wi" style="color:#aaa;">Nothing scheduled</div>';
-    d.groups.forEach(function (g) {
-      h += '<div class="aud-block"><div class="aud-lbl" style="color:' + g.col + '">' + escAttr(g.grp) + '</div>' + renderItemsList(g.items) + '</div>';
-    });
+  if (LOOPS.length) {
+    var days = dailyViewDayCount();
+    var slotsHTML = renderLoopSlotsHTML();
+    var h = '<p class="fs-help">Generated from your Loops &amp; Rhythm setup — each loop shows only its current item. Check an item off to advance that loop and its book/subcategory queue.</p>';
+    h += '<div class="day-grid">';
+    for (var d = 1; d <= days; d++) {
+      h += '<div class="day-col"><div class="day-n">Day ' + d + '</div>' + slotsHTML + '</div>';
+    }
     h += '</div>';
+    out.innerHTML = h;
+    return;
+  }
+  var contentWeekIndex = Math.max(0, schedWeek - 1 - behind);
+  var days2 = L.buildDailyView(CATS, FAMILY.children, FAMILY.schoolYear, schedWeek, contentWeekIndex, schedChild, schedOpts());
+  var h2 = '<p class="fs-help">No loops set up yet — showing every active book by category instead. Set up loops on the Loops &amp; Rhythm tab for a calmer, rhythm-based Daily View.</p>';
+  h2 += '<div class="day-grid">';
+  days2.forEach(function (d) {
+    h2 += '<div class="day-col"><div class="day-n">Day ' + d.day + '</div>';
+    if (!d.groups.length) h2 += '<div class="wi" style="color:#aaa;">Nothing scheduled</div>';
+    d.groups.forEach(function (g) {
+      h2 += '<div class="aud-block"><div class="aud-lbl" style="color:' + g.col + '">' + escAttr(g.grp) + '</div>' + renderItemsList(g.items) + '</div>';
+    });
+    h2 += '</div>';
   });
-  h += '</div>';
-  out.innerHTML = h;
+  h2 += '</div>';
+  out.innerHTML = h2;
 }
 
 function renderPlanningAudit() {
@@ -1020,6 +1092,180 @@ function renderSchedule() {
   if (schedView === 'subject') renderWeeklyBySubjectView();
   else if (schedView === 'daily') renderDailyViewUI();
   else renderPlanningAudit();
+}
+
+// ---------------------------------------------------------------------------
+// Loops & Rhythm tab
+// ---------------------------------------------------------------------------
+function allSubcatOptionsHTML(selectedCatId) {
+  var h = '<option value="">— choose a subcategory —</option>';
+  CATS.forEach(function (grp) {
+    grp.items.forEach(function (cat) {
+      h += '<option value="' + escAttr(cat.id) + '"' + (selectedCatId === cat.id ? ' selected' : '') + '>' + escAttr(grp.grp) + ' — ' + escAttr(cat.name) + '</option>';
+    });
+  });
+  return h;
+}
+function allBookOptionsHTML(selectedCatId, selectedBookIndex) {
+  var h = '<option value="">— choose a book —</option>';
+  CATS.forEach(function (grp) {
+    grp.items.forEach(function (cat) {
+      cat.bks.forEach(function (b, i) {
+        var sel = (selectedCatId === cat.id && selectedBookIndex === i) ? ' selected' : '';
+        h += '<option value="' + escAttr(cat.id) + '|' + i + '"' + sel + '>' + escAttr(grp.grp) + ' — ' + escAttr(cat.name) + ' — ' + escAttr(b.t) + '</option>';
+      });
+    });
+  });
+  return h;
+}
+
+function renderLoopsTab() {
+  var tplSel = document.getElementById('loop-template-select');
+  if (tplSel) {
+    var h = '';
+    L.loopTemplates().forEach(function (t) { h += '<option value="' + t.id + '">' + escAttr(t.label) + '</option>'; });
+    tplSel.innerHTML = h;
+  }
+  renderLoopList();
+}
+
+window.applyTemplateUI = function () {
+  var tplId = document.getElementById('loop-template-select').value;
+  if (LOOPS.length && !confirm('This adds the template\'s loops alongside any you already have. Continue?')) return;
+  var newLoops = L.applyLoopTemplate(CATS, tplId);
+  newLoops.forEach(function (l) { LOOPS.push(l); });
+  saveApp(); renderLoopList();
+};
+window.addLoopUI = function () {
+  L.addLoop(LOOPS, { name: 'New Loop' });
+  saveApp(); renderLoopList();
+};
+window.renameLoopUI = function (loopId, val) { L.renameLoop(LOOPS, loopId, val); saveApp(); };
+window.deleteLoopUI = function (loopId) {
+  if (!confirm('Delete this loop? Its book/subcategory queues are unaffected.')) return;
+  LOOPS = L.deleteLoop(LOOPS, loopId); APP.loops = LOOPS;
+  saveApp(); renderLoopList();
+};
+window.moveLoopUI = function (loopId, dir) { L.moveLoop(LOOPS, loopId, dir); saveApp(); renderLoopList(); };
+window.setLoopAudienceTypeUI = function (loopId, type) {
+  var value = type === 'together' ? null : (type === 'form' ? L.FORMS[0].id : (type === 'child' ? (FAMILY.children[0] && FAMILY.children[0].id) : []));
+  L.setLoopAudience(LOOPS, loopId, { type: type, value: value });
+  saveApp(); renderLoopList();
+};
+window.setLoopAudienceValueUI = function (loopId, val) {
+  var loop = LOOPS.find(function (l) { return l.id === loopId; });
+  if (!loop) return;
+  if (loop.audience.type === 'custom-group') loop.audience.value = val.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  else loop.audience.value = val;
+  saveApp();
+};
+window.setLoopAdvanceModeUI = function (loopId, mode) { L.setLoopAdvanceMode(LOOPS, loopId, mode); saveApp(); };
+
+window.addLoopItemUI = function (loopId) {
+  L.addLoopItem(LOOPS, loopId, { targetType: 'custom', customText: 'New item' });
+  saveApp(); renderLoopList();
+};
+window.removeLoopItemUI = function (loopId, itemId) {
+  L.removeLoopItem(LOOPS, loopId, itemId);
+  saveApp(); renderLoopList();
+};
+window.moveLoopItemUI = function (loopId, itemId, dir) {
+  L.moveLoopItem(LOOPS, loopId, itemId, dir);
+  saveApp(); renderLoopList();
+};
+window.setLoopItemFieldUI = function (loopId, itemId, field, val) {
+  var patch = {};
+  if (field === 'targetType') patch.targetType = val;
+  else if (field === 'targetCatId') patch.targetCatId = val || null;
+  else if (field === 'targetBook') {
+    var parts = val.split('|');
+    patch.targetCatId = parts[0] || null;
+    patch.targetBookIndex = parts.length > 1 ? parseInt(parts[1], 10) : null;
+  } else if (field === 'taskLabel') patch.taskLabel = val;
+  else if (field === 'customText') patch.customText = val;
+  L.updateLoopItem(LOOPS, loopId, itemId, patch);
+  saveApp(); renderLoopList();
+};
+window.setLoopItemTagUI = function (loopId, itemId, tagKey, val) {
+  var patch = { tags: {} };
+  patch.tags[tagKey] = val || null;
+  L.updateLoopItem(LOOPS, loopId, itemId, patch);
+  saveApp();
+};
+
+function loopItemTargetFieldsHTML(loop, item) {
+  var h = '';
+  if (item.targetType === 'subcategory') {
+    h += '<div><label>Subcategory</label><select onchange="setLoopItemFieldUI(\'' + loop.id + '\',\'' + item.id + '\',\'targetCatId\',this.value)">' + allSubcatOptionsHTML(item.targetCatId) + '</select></div>';
+  } else if (item.targetType === 'book') {
+    h += '<div><label>Book</label><select onchange="setLoopItemFieldUI(\'' + loop.id + '\',\'' + item.id + '\',\'targetBook\',this.value)">' + allBookOptionsHTML(item.targetCatId, item.targetBookIndex) + '</select></div>';
+  } else if (item.targetType === 'task') {
+    h += '<div><label>Task label</label><input type="text" value="' + escAttr(item.taskLabel || '') + '" onchange="setLoopItemFieldUI(\'' + loop.id + '\',\'' + item.id + '\',\'taskLabel\',this.value)"></div>';
+  } else {
+    h += '<div><label>Custom item text</label><input type="text" value="' + escAttr(item.customText || '') + '" onchange="setLoopItemFieldUI(\'' + loop.id + '\',\'' + item.id + '\',\'customText\',this.value)"></div>';
+  }
+  return h;
+}
+
+function loopItemRowHTML(loop, item, idx) {
+  var h = '<div class="loop-item-row">';
+  h += '<div><label>Points to</label><select onchange="setLoopItemFieldUI(\'' + loop.id + '\',\'' + item.id + '\',\'targetType\',this.value)">';
+  L.LOOP_ITEM_TARGET_TYPES.forEach(function (t) { h += '<option value="' + t + '"' + (item.targetType === t ? ' selected' : '') + '>' + t + '</option>'; });
+  h += '</select></div>';
+  h += loopItemTargetFieldsHTML(loop, item);
+  h += '<div><label>Attention</label><select onchange="setLoopItemTagUI(\'' + loop.id + '\',\'' + item.id + '\',\'attention\',this.value)"><option value="">—</option>';
+  L.LOOP_ATTENTION_LEVELS.forEach(function (t) { h += '<option value="' + t + '"' + (item.tags.attention === t ? ' selected' : '') + '>' + t + '</option>'; });
+  h += '</select></div>';
+  h += '<div><label>Mode</label><select onchange="setLoopItemTagUI(\'' + loop.id + '\',\'' + item.id + '\',\'mode\',this.value)"><option value="">—</option>';
+  L.LOOP_MODES.forEach(function (t) { h += '<option value="' + t + '"' + (item.tags.mode === t ? ' selected' : '') + '>' + t + '</option>'; });
+  h += '</select></div>';
+  h += '<div class="loop-item-actions">';
+  h += '<button class="mini-btn" onclick="moveLoopItemUI(\'' + loop.id + '\',\'' + item.id + '\',-1)" ' + (idx === 0 ? 'disabled' : '') + '>↑</button>';
+  h += '<button class="mini-btn" onclick="moveLoopItemUI(\'' + loop.id + '\',\'' + item.id + '\',1)" ' + (idx === loop.items.length - 1 ? 'disabled' : '') + '>↓</button>';
+  h += '<button class="mini-btn" onclick="removeLoopItemUI(\'' + loop.id + '\',\'' + item.id + '\')">Remove</button>';
+  h += '</div></div>';
+  return h;
+}
+
+function loopCardHTML(loop, idx) {
+  var resolved = loop.items.length ? L.resolveLoopItemAssignment(loop.items[loop.cursor % loop.items.length], CATS, schedWeek || 1) : null;
+  var h = '<div class="loop-card">';
+  h += '<div class="loop-hd">';
+  h += '<input type="text" value="' + escAttr(loop.name) + '" onchange="renameLoopUI(\'' + loop.id + '\',this.value)">';
+  h += '<select onchange="setLoopAudienceTypeUI(\'' + loop.id + '\',this.value)">';
+  L.LOOP_AUDIENCE_TYPES.forEach(function (t) { h += '<option value="' + t + '"' + (loop.audience.type === t ? ' selected' : '') + '>' + t + '</option>'; });
+  h += '</select>';
+  if (loop.audience.type === 'form') {
+    h += '<select onchange="setLoopAudienceValueUI(\'' + loop.id + '\',this.value)">';
+    L.FORMS.forEach(function (f) { h += '<option value="' + f.id + '"' + (loop.audience.value === f.id ? ' selected' : '') + '>' + f.label + '</option>'; });
+    h += '</select>';
+  } else if (loop.audience.type === 'child') {
+    h += '<select onchange="setLoopAudienceValueUI(\'' + loop.id + '\',this.value)">';
+    FAMILY.children.forEach(function (c) { h += '<option value="' + c.id + '"' + (loop.audience.value === c.id ? ' selected' : '') + '>' + escAttr(c.name) + '</option>'; });
+    h += '</select>';
+  } else if (loop.audience.type === 'custom-group') {
+    h += '<input type="text" placeholder="child ids, comma-separated" value="' + escAttr((loop.audience.value || []).join(', ')) + '" onchange="setLoopAudienceValueUI(\'' + loop.id + '\',this.value)">';
+  }
+  h += '<select onchange="setLoopAdvanceModeUI(\'' + loop.id + '\',this.value)">';
+  L.LOOP_ADVANCE_MODES.forEach(function (m) { h += '<option value="' + m + '"' + (loop.advanceMode === m ? ' selected' : '') + '>' + m + '</option>'; });
+  h += '</select>';
+  h += '<button class="mini-btn" onclick="moveLoopUI(\'' + loop.id + '\',-1)" ' + (idx === 0 ? 'disabled' : '') + '>↑</button>';
+  h += '<button class="mini-btn" onclick="moveLoopUI(\'' + loop.id + '\',1)" ' + (idx === LOOPS.length - 1 ? 'disabled' : '') + '>↓</button>';
+  h += '<button class="mini-btn" onclick="deleteLoopUI(\'' + loop.id + '\')">Delete loop</button>';
+  h += '</div>';
+  if (resolved) h += '<div class="loop-current">Current item: ' + escAttr(resolved.text) + '</div>';
+  loop.items.forEach(function (item, i) { h += loopItemRowHTML(loop, item, i); });
+  h += '<button class="mini-btn" style="margin-top:6px;" onclick="addLoopItemUI(\'' + loop.id + '\')">+ Add item</button>';
+  h += '</div>';
+  return h;
+}
+
+function renderLoopList() {
+  var el = document.getElementById('loop-list'); if (!el) return;
+  if (!LOOPS.length) { el.innerHTML = '<div class="wi" style="color:#aaa;">No loops yet — apply a starter template above or add a blank loop.</div>'; return; }
+  var h = '';
+  LOOPS.forEach(function (loop, idx) { h += loopCardHTML(loop, idx); });
+  el.innerHTML = h;
 }
 
 function renderPrintTermPage(kid, t) {
@@ -1087,6 +1333,7 @@ window.sw = function (name, el) {
   if (name === 'forms') renderForms();
   if (name === 'cats') renderCats();
   if (name === 'setup') { renderChildren(); renderSchoolYearForm(); renderCycleSelect(); }
+  if (name === 'loops') renderLoopsTab();
 };
 
 function renderAll() {
