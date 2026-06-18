@@ -206,6 +206,16 @@ test('calc flags co-op categories distinctly', () => {
   assert.equal(result.sc, 'b');
 });
 
+test('calc does not flag a category as co-op-paced if only some applicable children are co-op', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  // 'bsp' (Personal Spiritual Reading) applies to lucy (not co-op) and jeremiah (co-op) —
+  // it should NOT show as co-op-paced overall, since lucy does it at home.
+  const cat = L.findCategory(cats, 'bsp');
+  const result = L.calc(cat, fs.children, fs.schoolYear);
+  assert.notEqual(result.sc, 'b');
+});
+
 test('calc marks empty-book categories as "z" (no books yet)', () => {
   const fs = L.demoFamilySetup();
   const cats = L.demoCategories();

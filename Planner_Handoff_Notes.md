@@ -1,40 +1,94 @@
 # DIY Charlotte Mason Blueprint Planner — Handoff Notes
 
-## Current state
-`CM_Blueprint_Planner_2026-27.html` is a working standalone HTML app (no build step, no dependencies — just open it in a browser). It uses localStorage to persist edits under the key `cm_blueprint_data_v2`.
+## Current state (post-refactor)
+`CM_Blueprint_Planner_2026-27.html` is a standalone HTML app (no build step,
+no dependencies — open it in a browser, or serve over local HTTP since it
+loads `lib/logic.mjs` as an ES module). It is now **generic** — driven
+entirely by a `FamilySetup` data model rather than hardcoded family data.
+Persistence is in `localStorage` under key `cm_blueprint_data_v3`.
 
-**Family this version reflects (2026–27 school year):**
-- Charis — 1st grade — Form 1
-- Kayla — 3rd grade — Form 1
-- Lucy — 7th grade — Form 3/4
-- Jeremiah — 10th grade — Form 5/6 (most academics at Greenhouse co-op)
+See `README.md` for how to run it, run the tests, and publish via GitHub
+Pages.
 
-**Form structure:** We collapse the traditional six PNEU Forms into four bands — Form 1 (gr.1–3), Form 2 (gr.4–6), Form 3/4 (gr.7–9), Form 5/6 (gr.10–12) — since Forms III/IV and V/VI were historically taught as combined programmes anyway.
+## Data model
+- `FamilySetup`: `{ children: [{id,name,gradeLabel,formId,schoolDaysPerWeek,notes}], schoolYear: {termsPerYear, weeksPerTerm, examWeekPattern: 'last-of-term'|'explicit', examWeeks?}, historyCycleId }`.
+- `categories`: array of groups `{grp, col, items: [...]}`. Each item
+  (subcategory) is `{id, name, forms: [formId...], childOverrides: [{childId, included}], freq, bks: [...]}`.
+  `forms` is the Form-level default; `childOverrides` refines it per child
+  (include a child not in the Form default, or exclude one who is).
+- Each book: `{t, who: 'all'|'specific', whoChildren: [childId...], tot, per, unitType}`.
+  `unitType` is one of `pages|chapters|lessons|entries|sittings`, used for
+  display/labeling in pacing math (`p.12-24`, `ch.3`, etc).
+- Forms (`f1/f2/f34/f56`) and Cycles are fixed CM-pedagogy reference lists
+  in `lib/logic.mjs` — not family-specific, so they aren't part of
+  `FamilySetup`, but *which* Forms are "in use" is derived from
+  `FamilySetup.children` at render time.
 
-**History cycle:** 4-year CM-aligned rotation (not 3-year/classical). Currently in Cycle 4: Modern Times.
+## Architecture
+- `lib/logic.mjs` — all pure logic: pacing math (`calc`), frequency-based
+  week-inclusion (`categoryAppliesToWeek`), schedule/print generation
+  (`buildWeekItems`, `buildPrintTermData`), Family Setup mutation helpers,
+  and migration/validation (`isOldShapeData`, `validateAppData`). No DOM,
+  no localStorage — fully unit-testable with plain Node.
+- `tests/logic.test.mjs` — Node-runnable test suite (`node tests/logic.test.mjs`),
+  custom runner on `assert`, no install required. 42 tests as of this
+  writing.
+- The HTML file's `<script type="module">` imports `lib/logic.mjs`, owns
+  all DOM rendering (still brute-force `innerHTML = h` string concatenation,
+  consistent with the original design), and owns `localStorage` read/write.
 
-**Four tabs:** Forms (reference), History Cycles (reference), Categories (the pacing calculator — 20 categories across 10 groups, each Form-tagged, with editable book rows and live sittings-available vs. sittings-needed math), 36-week Schedule (3 terms × 12 weeks, weeks 12/24/36 are exam weeks).
+## Frequency → schedule inclusion
+Categories have a `freq` field: `4` (daily), `3`, `2`, `1` (all show every
+week, differing only in how many sittings/year they're allotted), `0.5`
+(every other week), `0.25` (1x/term — shown only the first week of each
+term), `0.08` (a few times/year — currently also anchored to first week of
+term; this is a simplification documented in `categoryAppliesToWeek`'s
+comments — revisit if "a few times/year" needs sub-term-level spacing).
 
-## Resolved in this round
-- Print-per-child: when a specific child tab is selected on the Schedule tab and "Print this view" is clicked, a dedicated printable layout (one term per page, all 3 terms) is generated into a hidden `#print-area` and shown only during print.
-- Empty categories now appear in the schedule as placeholder lines ("Category name — not yet assigned") instead of being silently skipped, so the full subject list is visible even before books are chosen.
-- Schedule lines are now color-coded with a small dot matching each category's group color from the Categories tab.
-- Verified the weeks-behind shift math (`contentWeekIndex = Math.max(0, w-1-behind)`) at boundaries — clamps to week 1's content rather than going negative or crashing when very behind early in the year.
+## Pacing math
+`calc(category, children, schoolYear)` resolves the relevant children via
+Form match + `childOverrides`, takes the **max** `schoolDaysPerWeek` among
+them (busiest relevant schedule), and computes sittings available vs.
+needed. A category is only flagged "co-op paced" (`sc: 'b'`) if **every**
+applicable child has "co-op" in their notes — a category split across a
+co-op child and a home-taught child is NOT marked co-op-paced, since that
+was misleading in an earlier draft of this refactor (a mixed-pacing
+category looked "handled elsewhere" when really one kid needed it covered
+at home).
 
-## Known bugs / rough edges to check first
-- The schedule's `buildWeekItems` and `buildWeekItemsAll` functions cycle through each category's book list using `weekNum % cat.bks.length` — this is a simple rotation, not real pacing-aware scheduling. It works for categories with 1+ books but will look repetitive for categories with only one book (it'll show the same book every week, which is probably fine, but worth visually verifying).
+`assignmentRangeForSitting(book, sittingNumber)` produces a real
+unit-labeled range (`p.12-24`, `ch.3`) for a given 1-indexed sitting,
+clamping the final sitting to the book's total.
 
-## Punch list (remaining / future)
+## Migration & validation
+- Old `cm_blueprint_data_v2` data (a bare array of `{grp, items}`, no
+  FamilySetup wrapper) is detected via `isOldShapeData` and is **never**
+  silently discarded. The app shows a banner: export-old-data-as-backup,
+  then continue to fresh v3 setup.
+- Import validates structurally via `validateAppData` before accepting —
+  checks `familySetup.children`/`schoolYear` and `categories` shape: bad
+  imports show an error message inline rather than crashing or silently
+  corrupting state.
 
-**4b. Smarter "weeks behind" repacing — further refinement.**
-- The recovery message (`.rec` div) currently gives generic advice by behind-amount tier (≤2, ≤4, >4 weeks). Consider whether this should reference actual category data (e.g. name a real category that has buffer to cut) rather than generic suggestions.
-- Consider whether "weeks behind" should be per-child rather than global, since Jeremiah's 3-day home week paces differently than the girls' 4-day week.
-
-## Architecture notes for whoever picks this up
-- All category/book data lives in one big `DEFAULT_CATS` array at the top of the script — structured as groups → categories → books. Each category has a `forms` array (which Form IDs it applies to) used for filtering.
-- `calc(cat)` is the core pacing math: sittings available (based on frequency × days/week × 33 reading weeks) vs. sittings needed (sum of `ceil(book.total / book.per)` across all books in the category).
-- Everything persists via `localStorage` under `cm_blueprint_data_v2`. Export/Import buttons exist for backing up as JSON.
-- No build tooling, no framework — vanilla JS string-concatenation rendering (`innerHTML = h` pattern throughout). This was a deliberate choice to keep it a zero-dependency single file, but it does mean re-rendering is somewhat brute-force (entire sections re-rendered on every change rather than targeted DOM updates).
+## Known simplifications / decisions made where the spec was ambiguous
+- "A few times/year" (freq `0.08`) is treated the same as "1x/term" for
+  week-inclusion purposes (shows on the first week of each term) — there
+  was no spec for finer-grained scheduling within a term for that tier.
+- Reordering groups/subcategories uses simple up/down buttons rather than
+  drag-and-drop, per the spec's explicit suggestion that this is acceptable.
+- `resolveSchoolDaysForCategory` uses the **max** schoolDaysPerWeek among a
+  category's applicable children (rather than e.g. an average) so pacing
+  reflects the most demanding relevant schedule.
+- The original hardcoded family (Charis/Kayla/Lucy/Jeremiah) is preserved
+  as the default/demo `FamilySetup` + categories (`lib/logic.mjs`'s
+  `demoFamilySetup()`/`demoCategories()`), so the app is still useful out of
+  the box, but none of that data is baked into logic — deleting all
+  children and adding new ones via Family Setup works the same way.
 
 ## Strategic context (why this exists)
-This planner is currently being built for Danielle's own family use, but is also a working proof-of-concept for a potential future Chasing Wonder Co. product called the "DIY Charlotte Mason Blueprint" — a whole-family CM planning system. A written guide (digital PDF) is being drafted in parallel in a separate conversation; Part 2 (The Framework) is done. If this tool eventually becomes a sold product, it would likely need to move from a downloadable HTML file to a logged-in web app with server-side data storage (the current localStorage approach only persists per-browser, per-device, which isn't viable for a paying customer's actual product). That's a future decision, not an immediate one — for now, the priority is making this work well for Danielle's own 2026–27 planning.
+This planner was originally built for one family's own use, and is also a
+working proof-of-concept for a potential future Chasing Wonder Co. product
+("DIY Charlotte Mason Blueprint") — a whole-family CM planning system. If
+it eventually becomes a sold product, it would likely need to move from a
+downloadable HTML file with localStorage to a logged-in web app with
+server-side storage. That's a future decision, not an immediate one.

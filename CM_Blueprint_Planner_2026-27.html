@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DIY Charlotte Mason Blueprint — 2026–27</title>
+<title>DIY Charlotte Mason Blueprint</title>
 <style>
   :root {
     --teal: #17626d; --teal-light: #e1f5ee; --teal-dark: #0f6e56;
@@ -50,7 +50,7 @@
   .cycle-n { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text3); margin-bottom: 3px; font-family: sans-serif; }
   .cycle-era { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
   .cycle-dates { font-size: 12px; color: var(--text2); margin-bottom: 10px; font-family: sans-serif; }
-  .cur-badge { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 3px; background: var(--teal-light); color: var(--teal-dark); font-weight: 600; margin-left: 6px; font-family: sans-serif; vertical-align: middle; }
+  .cur-badge { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 3px; background: var(--teal-light); color: var(--teal-dark); font-weight: 600; margin-left: 6px; font-family: sans-serif; vertical-align: middle; cursor: pointer; }
   .spine-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text3); margin-bottom: 4px; font-family: sans-serif; }
   .spine-item { font-size: 12px; color: var(--text2); font-family: sans-serif; }
   .term-breakdown { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; font-size: 12px; color: var(--text2); line-height: 1.7; font-family: sans-serif; }
@@ -59,6 +59,8 @@
   .cf-btn { padding: 6px 13px; font-size: 12px; border: 1px solid var(--border2); border-radius: 20px; background: white; cursor: pointer; color: var(--text2); font-family: sans-serif; }
   .cf-btn.active { background: var(--teal); color: white; border-color: var(--teal); }
   .grp-title { font-size: 12px; font-weight: 600; color: var(--text2); padding: 6px 10px; background: var(--bg2); border-radius: var(--radius); margin: 1.25rem 0 6px; display: flex; align-items: center; gap: 7px; font-family: sans-serif; }
+  .grp-title .grp-actions { margin-left: auto; display: flex; gap: 4px; }
+  .grp-title .mini-btn { font-size: 11px; padding: 1px 6px; }
   .cc { border: 1px solid var(--border); border-radius: var(--radius); background: white; margin-bottom: 6px; overflow: hidden; }
   .cc-hd { display: flex; align-items: center; gap: 8px; padding: 10px 13px; cursor: pointer; user-select: none; }
   .cc-hd:hover { background: var(--bg2); }
@@ -82,17 +84,21 @@
   .prog { height: 7px; background: var(--bg2); border-radius: 4px; overflow: hidden; margin: 8px 0 3px; }
   .prog-fill { height: 100%; border-radius: 4px; transition: width .4s; }
   .prog-lbl { font-size: 11px; color: var(--text3); margin-bottom: 9px; font-family: sans-serif; }
-  .br-edit { display: grid; grid-template-columns: 1fr 70px 70px 90px 28px; gap: 6px; align-items: center; padding: 7px 0; border-top: 1px solid var(--border); }
-  .br-edit input { font-family: sans-serif; font-size: 12px; padding: 5px 6px; border: 1px solid var(--border2); border-radius: 5px; background: white; color: var(--text); width: 100%; }
+  .br-edit { display: grid; grid-template-columns: 1fr 60px 60px 90px 90px 28px; gap: 6px; align-items: center; padding: 7px 0; border-top: 1px solid var(--border); }
+  .br-edit input, .br-edit select { font-family: sans-serif; font-size: 12px; padding: 5px 6px; border: 1px solid var(--border2); border-radius: 5px; background: white; color: var(--text); width: 100%; }
   .br-edit input[type=number] { text-align: right; }
-  .br-head { display: grid; grid-template-columns: 1fr 70px 70px 90px 28px; gap: 6px; margin-top: 9px; }
+  .br-head { display: grid; grid-template-columns: 1fr 60px 60px 90px 90px 28px; gap: 6px; margin-top: 9px; }
   .br-head-lbl { font-size: 9px; color: var(--text3); font-family: sans-serif; text-transform: uppercase; letter-spacing: .04em; }
   .del-btn { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 15px; line-height: 1; padding: 4px; }
   .del-btn:hover { color: var(--red); }
+  .mini-btn { background: none; border: 1px solid var(--border2); border-radius: 5px; color: var(--text2); cursor: pointer; font-size: 12px; line-height: 1; padding: 3px 7px; font-family: sans-serif; }
+  .mini-btn:hover { background: var(--bg2); }
   .freq-inline { display: flex; align-items: center; gap: 7px; margin: 9px 0 4px; font-family: sans-serif; }
   .freq-inline select { font-size: 12px; padding: 4px 7px; border: 1px solid var(--border2); border-radius: 5px; background: white; }
   .forms-edit { display: flex; align-items: center; gap: 7px; margin: 9px 0 4px; font-family: sans-serif; flex-wrap: wrap; }
   .forms-edit label { font-size: 11px; color: var(--text2); display: flex; align-items: center; gap: 4px; }
+  .child-override-row { display: flex; align-items: center; gap: 7px; margin: 6px 0; font-family: sans-serif; flex-wrap: wrap; }
+  .child-override-row label { font-size: 11px; color: var(--text2); display: flex; align-items: center; gap: 4px; }
   .sug { font-size: 12px; padding: 8px 11px; border-radius: var(--radius); margin-top: 10px; line-height: 1.6; font-family: sans-serif; }
   .sg { background: var(--green-light); color: var(--green-dark); }
   .sy { background: var(--amber-light); color: #633806; }
@@ -126,6 +132,30 @@
   .wi-cat.ph { color: var(--text3); font-style: italic; }
   .rec { margin-top: 1.25rem; padding: 11px 13px; background: var(--amber-light); border-radius: var(--radius); font-size: 13px; color: #633806; font-family: sans-serif; line-height: 1.6; }
   #print-area { display: none; }
+
+  .fs-section { margin-bottom: 1.75rem; }
+  .fs-section h2 { font-size: 15px; color: var(--teal); margin-bottom: 0.75rem; font-family: sans-serif; }
+  .fs-help { font-size: 12px; color: var(--text2); font-family: sans-serif; margin-bottom: 0.9rem; line-height: 1.5; }
+  .child-card { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 13px 15px; background: white; margin-bottom: 10px; }
+  .child-fields { display: grid; grid-template-columns: 1.3fr 1fr 1fr 0.8fr; gap: 8px; margin-bottom: 8px; }
+  @media (max-width: 700px) { .child-fields { grid-template-columns: 1fr 1fr; } }
+  .child-fields label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .04em; font-family: sans-serif; display: block; margin-bottom: 3px; }
+  .child-fields input, .child-fields select { font-family: sans-serif; font-size: 12px; padding: 6px 7px; border: 1px solid var(--border2); border-radius: 5px; width: 100%; background: white; color: var(--text); }
+  .child-notes { font-family: sans-serif; font-size: 12px; padding: 6px 7px; border: 1px solid var(--border2); border-radius: 5px; width: 100%; background: white; color: var(--text); }
+  .child-card-foot { display: flex; justify-content: flex-end; margin-top: 6px; }
+  .sy-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 1rem; }
+  @media (max-width: 560px) { .sy-grid { grid-template-columns: 1fr; } }
+  .sy-field label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .04em; font-family: sans-serif; display: block; margin-bottom: 3px; }
+  .sy-field input, .sy-field select { font-family: sans-serif; font-size: 12px; padding: 6px 7px; border: 1px solid var(--border2); border-radius: 5px; width: 100%; background: white; color: var(--text); }
+  .migrate-banner { background: var(--amber-light); border: 1px solid #e0c79a; border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 1.5rem; font-family: sans-serif; }
+  .migrate-banner h2 { font-size: 15px; color: #633806; margin-bottom: 6px; }
+  .migrate-banner p { font-size: 13px; color: #633806; line-height: 1.6; margin-bottom: 10px; }
+  .migrate-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .import-error { background: var(--red-light); color: var(--red); border-radius: var(--radius); padding: 10px 13px; font-size: 12px; font-family: sans-serif; margin-top: 8px; line-height: 1.6; }
+  .new-group-row { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+  .new-group-row input[type=text] { font-family: sans-serif; font-size: 12px; padding: 6px 8px; border: 1px solid var(--border2); border-radius: 5px; }
+  .new-group-row input[type=color] { width: 36px; height: 30px; border: 1px solid var(--border2); border-radius: 5px; padding: 2px; }
+
   @media print {
     .top-bar, .tabs, .behind-row, .child-tabs, .term-btns { display: none !important; }
     .panel { display: block !important; }
@@ -146,36 +176,75 @@
 <div class="app">
   <div class="header">
     <h1>DIY Charlotte Mason Blueprint</h1>
-    <p>2026–27 · Cycle 4: Modern Times &nbsp;·&nbsp; Charis gr.1 (Form 1) &nbsp;·&nbsp; Kayla gr.3 (Form 1) &nbsp;·&nbsp; Lucy gr.7 (Form 3/4) &nbsp;·&nbsp; Jeremiah gr.10 (Form 5/6)</p>
+    <p id="header-sub"></p>
   </div>
+
+  <div id="migrate-banner-holder"></div>
 
   <div class="top-bar">
     <button class="util-btn" onclick="doPrint()">Print this view</button>
     <button class="util-btn" onclick="exportData()">Export backup (.json)</button>
     <button class="util-btn" onclick="importPrompt()">Import backup</button>
-    <button class="util-btn" onclick="resetAll()">Reset to starting plan</button>
+    <button class="util-btn" onclick="resetAll()">Reset to demo plan</button>
   </div>
 
   <div class="tabs">
-    <button class="tab active" onclick="sw('forms',this)">Forms</button>
+    <button class="tab active" onclick="sw('setup',this)">Family Setup</button>
+    <button class="tab" onclick="sw('forms',this)">Forms</button>
     <button class="tab" onclick="sw('cycles',this)">History cycles</button>
     <button class="tab" onclick="sw('cats',this)">Categories</button>
-    <button class="tab" onclick="sw('sched',this)">36-week schedule</button>
+    <button class="tab" onclick="sw('sched',this)">Weekly schedule</button>
   </div>
 
-  <div id="panel-forms" class="panel active">
-    <p style="font-size:13px;color:#4a4a4a;margin-bottom:1.25rem;font-family:sans-serif;">Forms are developmental stages, not strict grade levels. We collapse the traditional six PNEU Forms (I, II, III, IV, V, VI) into four bands for ease of planning — Form III/IV and Form V/VI are historically taught as combined programmes.</p>
+  <div id="panel-setup" class="panel active">
+    <div class="fs-section">
+      <h2>Children</h2>
+      <p class="fs-help">Add each child you're planning for. Their Form determines which categories apply to them by default (you can refine per-category on the Categories tab). School days/week drives the pacing math.</p>
+      <div id="children-list"></div>
+      <button class="add-btn" onclick="addChildUI()">+ Add a child</button>
+    </div>
+    <div class="fs-section">
+      <h2>School year</h2>
+      <p class="fs-help">Set how many terms and weeks per term your year has. Exam weeks default to the last week of each term, or you can list specific weeks.</p>
+      <div class="sy-grid">
+        <div class="sy-field"><label>Terms per year</label><input type="number" min="1" max="6" id="sy-terms" onchange="updateSchoolYear()"></div>
+        <div class="sy-field"><label>Weeks per term</label><input type="number" min="1" max="20" id="sy-weeks" onchange="updateSchoolYear()"></div>
+        <div class="sy-field"><label>Exam week pattern</label>
+          <select id="sy-pattern" onchange="updateSchoolYear()">
+            <option value="last-of-term">Last week of each term</option>
+            <option value="explicit">Specific weeks (list below)</option>
+          </select>
+        </div>
+      </div>
+      <div class="sy-grid" id="sy-explicit-row" style="display:none;">
+        <div class="sy-field" style="grid-column:1/-1;"><label>Exam weeks (comma-separated week numbers)</label><input type="text" id="sy-explicit" onchange="updateSchoolYear()"></div>
+      </div>
+    </div>
+    <div class="fs-section">
+      <h2>History cycle</h2>
+      <p class="fs-help">Pick which cycle year your family is in this year (see History Cycles tab for details).</p>
+      <select id="sy-cycle" onchange="updateHistoryCycle()" style="font-family:sans-serif;font-size:12px;padding:6px 8px;border:1px solid var(--border2);border-radius:5px;"></select>
+    </div>
+  </div>
+
+  <div id="panel-forms" class="panel">
+    <p style="font-size:13px;color:#4a4a4a;margin-bottom:1.25rem;font-family:sans-serif;">Forms are developmental stages, not strict grade levels. We collapse the traditional six PNEU Forms (I, II, III, IV, V, VI) into four bands for ease of planning — Form III/IV and Form V/VI are historically taught as combined programmes. Which Forms your family actually uses is determined by the children you add on the Family Setup tab.</p>
     <div class="form-grid" id="form-grid"></div>
   </div>
 
   <div id="panel-cycles" class="panel">
-    <p style="font-size:13px;color:#4a4a4a;margin-bottom:1.25rem;font-family:sans-serif;">4-year CM-aligned cycle. Spine options: Story of the World, Mystery of History, or Biblioplan. Your family is in <strong>Cycle 4</strong> this year.</p>
+    <p style="font-size:13px;color:#4a4a4a;margin-bottom:1.25rem;font-family:sans-serif;">4-year CM-aligned cycle. Spine options: Story of the World, Mystery of History, or Biblioplan. Set your current cycle on the Family Setup tab.</p>
     <div class="cycle-grid" id="cyc-grid"></div>
   </div>
 
   <div id="panel-cats" class="panel">
-    <p style="font-size:13px;color:#4a4a4a;margin-bottom:1rem;font-family:sans-serif;">33 reading weeks (36 minus 3 exam weeks). Filter by child to see only categories active for their Form. Open any category to edit books and pacing.</p>
+    <p style="font-size:13px;color:#4a4a4a;margin-bottom:1rem;font-family:sans-serif;" id="cats-help"></p>
     <div class="child-filter" id="child-filter"></div>
+    <div class="new-group-row">
+      <input type="text" id="new-grp-name" placeholder="New group name">
+      <input type="color" id="new-grp-color" value="#17626d">
+      <button class="add-btn" style="border-top:none;width:auto;padding:7px 13px;border:1px solid var(--border2);border-radius:6px;" onclick="addGroupUI()">+ Add group</button>
+    </div>
     <div id="cat-list"></div>
   </div>
 
@@ -186,11 +255,7 @@
       <span class="behind-n" id="bval">0</span>
     </div>
     <div class="child-tabs" id="sched-child-tabs"></div>
-    <div class="term-btns">
-      <button class="tb active" onclick="stm(1,this)">Term 1 — wks 1–12</button>
-      <button class="tb" onclick="stm(2,this)">Term 2 — wks 13–24</button>
-      <button class="tb" onclick="stm(3,this)">Term 3 — wks 25–36</button>
-    </div>
+    <div class="term-btns" id="term-btns"></div>
     <div id="sched-out"></div>
   </div>
 </div>
@@ -198,496 +263,611 @@
 <div class="save-toast" id="save-toast">Saved</div>
 <div id="print-area"></div>
 
-<script>
-var openC={}, behind=0, term=1, schedChild='all';
-var STORAGE_KEY='cm_blueprint_data_v2';
+<script type="module">
+import * as L from './lib/logic.mjs';
+window.L = L; // expose to inline onclick handlers below
 
-var KIDS=[
-  {id:'charis', name:'Charis', grade:'1st', form:'f1'},
-  {id:'kayla', name:'Kayla', grade:'3rd', form:'f1'},
-  {id:'lucy', name:'Lucy', grade:'7th', form:'f34'},
-  {id:'jeremiah', name:'Jeremiah', grade:'10th', form:'f56'}
-];
+var openC = {}, behind = 0, term = 1, schedChild = 'all';
+var currentChildFilter = 'all';
+var APP; // top-level { version, familySetup, categories, uiState }
+var FAMILY, CATS; // shortcuts kept in sync with APP
 
-var FORMS=[
-  {id:'f1', label:'Form 1', grades:'Grades 1–3', sub:'Early (gr.1–2): new reader, oral narration only. Later (gr.3): reading independently, occasional written narration.', who:'Charis (gr.1) · Kayla (gr.3)'},
-  {id:'f2', label:'Form 2', grades:'Grades 4–6', sub:'Written narration begins. Dictation, grammar, general science, citizenship, foreign language all begin here.', who:'—'},
-  {id:'f34', label:'Form 3/4', grades:'Grades 7–9', sub:'Historically combined PNEU Forms III and IV. Fuller composition, botany/geology/physiology, deeper citizenship and history spines.', who:'Lucy (gr.7)'},
-  {id:'f56', label:'Form 5/6', grades:'Grades 10–12', sub:'Historically combined PNEU Forms V and VI. Public speaking, astronomy, economics, government, independent research-level work.', who:'Jeremiah (gr.10)'}
-];
+function escAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 
-var CYCLES=[
-  {n:1,era:'Ancients',dates:'Creation through Fall of Rome (c.400 AD)',cur:false,
-   spines:['SOTW Vol. 1','Mystery of History Vol. 1','Biblioplan Ancients'],
-   t1:'Egypt, Mesopotamia, Israel',t2:'Greece, Persia, India',t3:'Rome — Republic to Empire'},
-  {n:2,era:'Medieval + Reformation',dates:'400 AD — 1600s',cur:false,
-   spines:['SOTW Vol. 2','Mystery of History Vol. 2','Biblioplan Medieval'],
-   t1:'Fall of Rome, Byzantium, Islam',t2:'Middle Ages, Vikings, Crusades',t3:'Renaissance, Reformation, Exploration'},
-  {n:3,era:'Early Modern',dates:'1600s — 1850s',cur:false,
-   spines:['SOTW Vol. 3','Mystery of History Vol. 3','Biblioplan Early Modern'],
-   t1:'Colonization, Scientific Revolution',t2:'Revolutions — American and French',t3:'Industrialization, Westward expansion'},
-  {n:4,era:'Modern Times',dates:'1850s — Present',cur:true,
-   spines:['SOTW Vol. 4','Mystery of History Vol. 4','Biblioplan Modern Times'],
-   t1:'WWI, Immigration, Interwar years',t2:'WWII, Cold War begins',t3:'Civil Rights, Space Race, Modern era'}
-];
-
-var DEFAULT_CATS=[
-  {grp:'Bible + Faith',col:'#d4537e',items:[
-    {id:'bf',name:'Bible — Family',forms:['f1','f2','f34','f56'],wl:'All',freq:4,bks:[
-      {t:'New Testament reading',w:'All',tot:260,per:2},
-      {t:'Psalms + Proverbs',w:'All',tot:66,per:1},
-      {t:'Hymn Study — rotating',w:'All',tot:36,per:1}]},
-    {id:'bsp',name:'Personal Spiritual Reading',forms:['f34','f56'],wl:'Lucy, Jeremiah',freq:2,bks:[
-      {t:'Spiritual reading (choose one)',w:'Lucy/Jeremiah',tot:30,per:1}]},
-    {id:'bch',name:'Theology / Church History',forms:['f56'],wl:'Jeremiah',freq:3,bks:[
-      {t:'Church History spine (choose one)',w:'Jeremiah',tot:30,per:1}]}
-  ]},
-  {grp:'Citizenship',col:'#17626d',items:[
-    {id:'ci-hab',name:'Habit Building (Citizenship, early)',forms:['f1'],wl:'Charis, Kayla',freq:1,bks:[
-      {t:'Family expectations + habit discussions',w:'Charis/Kayla',tot:33,per:1}]},
-    {id:'ci-civ',name:'Citizenship / Constitution',forms:['f2','f34'],wl:'Lucy',freq:1,bks:[
-      {t:'Constitution / Law text (choose one)',w:'Lucy',tot:30,per:1}]},
-    {id:'ci-plu',name:'Plutarch',forms:['f2','f34','f56'],wl:'Lucy, Jeremiah',freq:1,bks:[
-      {t:"Plutarch's Lives (choose one life)",w:'Lucy/Jeremiah',tot:20,per:1}]},
-    {id:'ci-gov',name:'Government + Economics',forms:['f56'],wl:'Jeremiah',freq:3,bks:[
-      {t:'Economics in One Lesson — Hazlitt (free)',w:'Jeremiah',tot:25,per:1}]},
-    {id:'ci-cur',name:'Current Events',forms:['f34','f56'],wl:'Lucy, Jeremiah',freq:1,bks:[
-      {t:'Weekly news discussion',w:'Lucy/Jeremiah',tot:33,per:1}]}
-  ]},
-  {grp:'History — American',col:'#993556',items:[
-    {id:'am-pic',name:'American Picture Books',forms:['f1'],wl:'Charis, Kayla',freq:1,bks:[
-      {t:'Modern Times picture book basket',w:'Charis/Kayla',tot:27,per:1}]},
-    {id:'am-story',name:'American History Story',forms:['f2','f34'],wl:'Lucy',freq:2,bks:[
-      {t:'American narrative spine (choose one)',w:'Lucy',tot:40,per:2}]},
-    {id:'am-spine',name:'American History — Independent',forms:['f56'],wl:'Jeremiah',freq:3,bks:[
-      {t:'Survey spine — independent study',w:'Jeremiah',tot:40,per:1}]}
-  ]},
-  {grp:'History — World',col:'#378add',items:[
-    {id:'wh-tales',name:'Ancient Tales (cycle-matched)',forms:['f2'],wl:'—',freq:1,bks:[]},
-    {id:'wh-spine',name:'World History spine',forms:['f34','f56'],wl:'Lucy, Jeremiah',freq:2,bks:[
-      {t:'Modern Times spine (SOTW / Biblioplan / MoH)',w:'Lucy/Jeremiah',tot:320,per:3}]},
-    {id:'nb',name:'Neighboring Lands',forms:['f2','f34'],wl:'Lucy',freq:1,bks:[
-      {t:'Britain / Mexico / Canada rotating',w:'Lucy',tot:30,per:1}]}
-  ]},
-  {grp:'Science + Nature',col:'#639922',items:[
-    {id:'nh',name:'Natural History',forms:['f1','f2','f34','f56'],wl:'All',freq:1,bks:[
-      {t:'Living books about nature (choose one)',w:'All',tot:50,per:2}]},
-    {id:'ns',name:'Nature Study',forms:['f1','f2','f34','f56'],wl:'All',freq:1,bks:[
-      {t:'Outdoor nature walks + journal',w:'All',tot:33,per:1}]},
-    {id:'sc-gen',name:'General Science',forms:['f2'],wl:'—',freq:1,bks:[]},
-    {id:'sc-adv',name:'Botany / Geology / Physiology',forms:['f34'],wl:'Lucy',freq:1,bks:[
-      {t:'Science living book (choose one)',w:'Lucy',tot:40,per:1}]},
-    {id:'sc-up',name:'Astronomy / Chemistry / Physics',forms:['f56'],wl:'Jeremiah (co-op)',freq:3,bks:[
-      {t:'Upper science text (handled at co-op)',w:'Jeremiah',tot:30,per:1}]}
-  ]},
-  {grp:'Language Arts',col:'#ba7517',items:[
-    {id:'la-oral',name:'Narration (oral)',forms:['f1'],wl:'Charis, Kayla',freq:4,bks:[]},
-    {id:'la-written',name:'Narration, Dictation + Composition',forms:['f2','f34','f56'],wl:'Lucy',freq:4,bks:[]},
-    {id:'gr',name:'Grammar',forms:['f2','f34','f56'],wl:'Lucy',freq:2,bks:[
-      {t:'Grammar text (choose one)',w:'Lucy',tot:30,per:1}]},
-    {id:'lit',name:'Literature (incl. Shakespeare)',forms:['f1','f2','f34','f56'],wl:'All',freq:2,bks:[
-      {t:'Family read-aloud (Shakespeare as story for littles)',w:'All',tot:20,per:1},
-      {t:'Independent literature (older kids)',w:'Lucy/Jeremiah',tot:200,per:8}]},
-    {id:'flang',name:'Foreign Language',forms:['f2','f34','f56'],wl:'Lucy, Jeremiah',freq:2,bks:[
-      {t:'Latin or modern language course',w:'Lucy/Jeremiah',tot:30,per:1}]}
-  ]},
-  {grp:'Math',col:'#555',items:[
-    {id:'math',name:'Math',forms:['f1','f2','f34','f56'],wl:'All — Personal',freq:4,bks:[
-      {t:'Math curriculum (individual pacing)',w:'All',tot:144,per:1}]}
-  ]},
-  {grp:'Beauty Loop',col:'#7f77dd',items:[
-    {id:'pic',name:'Picture Study',forms:['f1','f2','f34','f56'],wl:'All',freq:1,bks:[
-      {t:'Artist rotation — 3 per year',w:'All',tot:3,per:0.08}]},
-    {id:'comp',name:'Composer Study',forms:['f1','f2','f34','f56'],wl:'All',freq:1,bks:[
-      {t:'Composer rotation — 3 per year',w:'All',tot:3,per:0.08}]},
-    {id:'poet',name:'Poetry + Recitation',forms:['f1','f2','f34','f56'],wl:'All',freq:4,bks:[
-      {t:'Family Poetry — rotating poems',w:'All',tot:36,per:1}]},
-    {id:'hym',name:'Hymns + Folk Songs',forms:['f1','f2','f34','f56'],wl:'All',freq:1,bks:[
-      {t:'Hymn + folk song rotation',w:'All',tot:9,per:0.25}]}
-  ]},
-  {grp:'Hands + Body',col:'#2e9e6b',items:[
-    {id:'hand',name:'Handicrafts',forms:['f1','f2','f34','f56'],wl:'All',freq:1,bks:[]},
-    {id:'drill',name:'Drill / PE',forms:['f1','f2','f34','f56'],wl:'All',freq:1,bks:[]}
-  ]},
-  {grp:'Geography',col:'#1fb6b6',items:[
-    {id:'geo-fam',name:'Family Geography',forms:['f1'],wl:'Charis, Kayla',freq:1,bks:[]},
-    {id:'geo-map',name:'Mapping',forms:['f2','f34','f56'],wl:'Lucy, Jeremiah',freq:1,bks:[
-      {t:'Map work + atlas',w:'Lucy/Jeremiah',tot:33,per:1}]}
-  ]}
-];
-
-var CATS = loadData();
-
-function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
-function loadData(){
-  try{ var raw=localStorage.getItem(STORAGE_KEY); if(raw) return JSON.parse(raw); }catch(e){}
-  return deepClone(DEFAULT_CATS);
+// ---------------------------------------------------------------------------
+// Load / migration / persistence
+// ---------------------------------------------------------------------------
+function loadApp() {
+  try {
+    var rawV3 = localStorage.getItem(L.STORAGE_KEY_V3);
+    if (rawV3) return JSON.parse(rawV3);
+  } catch (e) {}
+  try {
+    var rawV2 = localStorage.getItem(L.STORAGE_KEY_V2);
+    if (rawV2) {
+      var parsed = JSON.parse(rawV2);
+      if (L.isOldShapeData(parsed)) {
+        return { needsMigration: true, oldData: parsed };
+      }
+    }
+  } catch (e) {}
+  return L.freshAppData();
 }
-function saveData(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(CATS)); showToast(); }catch(e){ console.error(e); }
+
+function saveApp() {
+  try { localStorage.setItem(L.STORAGE_KEY_V3, JSON.stringify(APP)); showToast(); } catch (e) { console.error(e); }
 }
-function showToast(){
-  var t=document.getElementById('save-toast'); if(!t) return;
+function showToast() {
+  var t = document.getElementById('save-toast'); if (!t) return;
   t.classList.add('show'); clearTimeout(window._tt);
-  window._tt=setTimeout(function(){ t.classList.remove('show'); }, 1400);
+  window._tt = setTimeout(function () { t.classList.remove('show'); }, 1400);
 }
-function resetAll(){
-  if(!confirm('Reset to the starting plan? This erases your added books and changes.')) return;
-  CATS=deepClone(DEFAULT_CATS); saveData(); renderCats();
+
+function renderMigrateBanner() {
+  var holder = document.getElementById('migrate-banner-holder');
+  if (!APP.needsMigration) { holder.innerHTML = ''; return; }
+  holder.innerHTML =
+    '<div class="migrate-banner"><h2>App structure has changed — please re-enter your setup</h2>' +
+    '<p>We found planner data saved in the older format. The new version needs your family’s setup ' +
+    '(children, school year, categories) re-entered through the new Family Setup tab. Your old data is still ' +
+    'safe in this browser — export it first as a backup, then continue to set up fresh.</p>' +
+    '<div class="migrate-actions">' +
+    '<button class="util-btn" onclick="exportOldData()">Export old data as backup (.json)</button>' +
+    '<button class="util-btn" onclick="proceedToFreshSetup()">Continue to fresh setup</button>' +
+    '</div></div>';
 }
-function exportData(){
-  var blob=new Blob([JSON.stringify(CATS,null,2)],{type:'application/json'});
-  var url=URL.createObjectURL(blob), a=document.createElement('a');
-  a.href=url; a.download='cm_blueprint_backup.json';
+window.exportOldData = function () {
+  var blob = new Blob([JSON.stringify(APP.oldData, null, 2)], { type: 'application/json' });
+  var url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = 'cm_blueprint_old_data_backup.json';
   document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-}
-function importPrompt(){
-  var inp=document.createElement('input'); inp.type='file'; inp.accept='application/json';
-  inp.onchange=function(e){
-    var f=e.target.files[0]; if(!f) return;
-    var r=new FileReader();
-    r.onload=function(ev){ try{ CATS=JSON.parse(ev.target.result); saveData(); renderCats(); alert('Imported.'); }catch(err){ alert('Could not read that file.'); } };
+};
+window.proceedToFreshSetup = function () {
+  APP = L.freshAppData();
+  syncShortcuts();
+  saveApp();
+  renderAll();
+};
+
+function syncShortcuts() { FAMILY = APP.familySetup; CATS = APP.categories; }
+
+// ---------------------------------------------------------------------------
+// Export / import / reset
+// ---------------------------------------------------------------------------
+window.resetAll = function () {
+  if (!confirm('Reset to the demo plan? This erases your added books and changes.')) return;
+  APP = L.freshAppData();
+  syncShortcuts();
+  saveApp();
+  renderAll();
+};
+window.exportData = function () {
+  var blob = new Blob([JSON.stringify(APP, null, 2)], { type: 'application/json' });
+  var url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = 'cm_blueprint_backup.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+};
+window.importPrompt = function () {
+  var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/json';
+  inp.onchange = function (e) {
+    var f = e.target.files[0]; if (!f) return;
+    var r = new FileReader();
+    r.onload = function (ev) {
+      var parsed;
+      try { parsed = JSON.parse(ev.target.result); } catch (err) { showImportError('That file is not valid JSON.'); return; }
+      var validation = L.validateAppData(parsed);
+      if (!validation.valid) { showImportError('That backup file is missing required data: ' + validation.errors.join(' ')); return; }
+      APP = parsed; APP.needsMigration = false;
+      syncShortcuts(); saveApp(); renderAll();
+      alert('Imported successfully.');
+    };
     r.readAsText(f);
   };
   inp.click();
+};
+function showImportError(msg) {
+  var holder = document.getElementById('migrate-banner-holder');
+  holder.innerHTML += '<div class="import-error">' + escAttr(msg) + '</div>';
 }
 
-function sits(freq,formId){
-  var kid=null;
-  for(var i=0;i<KIDS.length;i++){ if(KIDS[i].form===formId){ kid=KIDS[i]; break; } }
-  var days = (kid && kid.id==='jeremiah') ? 3 : 4;
-  return Math.floor((freq/4)*days*33);
+// ---------------------------------------------------------------------------
+// Family Setup tab
+// ---------------------------------------------------------------------------
+window.addChildUI = function () {
+  var n = FAMILY.children.length + 1;
+  var id = 'child' + Date.now();
+  L.addChild(FAMILY, { id: id, name: 'New Child ' + n, gradeLabel: '', formId: L.FORMS[0].id, schoolDaysPerWeek: 4, notes: '' });
+  saveApp(); renderAll();
+};
+window.editChildField = function (id, field, val) {
+  var patch = {};
+  patch[field] = (field === 'schoolDaysPerWeek') ? (parseInt(val, 10) || 1) : val;
+  L.editChild(FAMILY, id, patch);
+  saveApp(); renderAll();
+};
+window.deleteChildUI = function (id) {
+  if (!confirm('Remove this child from Family Setup?')) return;
+  L.deleteChild(FAMILY, id);
+  saveApp(); renderAll();
+};
+
+function renderChildren() {
+  var el = document.getElementById('children-list'); if (!el) return;
+  var h = '';
+  FAMILY.children.forEach(function (c) {
+    h += '<div class="child-card"><div class="child-fields">';
+    h += '<div><label>Name</label><input type="text" value="' + escAttr(c.name) + '" onchange="editChildField(\'' + c.id + '\',\'name\',this.value)"></div>';
+    h += '<div><label>Grade label</label><input type="text" value="' + escAttr(c.gradeLabel) + '" onchange="editChildField(\'' + c.id + '\',\'gradeLabel\',this.value)"></div>';
+    h += '<div><label>Form</label><select onchange="editChildField(\'' + c.id + '\',\'formId\',this.value)">';
+    L.FORMS.forEach(function (f) { h += '<option value="' + f.id + '"' + (c.formId === f.id ? ' selected' : '') + '>' + f.label + '</option>'; });
+    h += '</select></div>';
+    h += '<div><label>School days/wk</label><input type="number" min="1" max="7" value="' + c.schoolDaysPerWeek + '" onchange="editChildField(\'' + c.id + '\',\'schoolDaysPerWeek\',this.value)"></div>';
+    h += '</div>';
+    h += '<input type="text" class="child-notes" placeholder="Notes (e.g. co-op, special pacing)" value="' + escAttr(c.notes || '') + '" onchange="editChildField(\'' + c.id + '\',\'notes\',this.value)">';
+    h += '<div class="child-card-foot"><button class="mini-btn" onclick="deleteChildUI(\'' + c.id + '\')">Remove child</button></div>';
+    h += '</div>';
+  });
+  el.innerHTML = h;
 }
 
-function calc(cat){
-  var primaryForm = cat.forms[cat.forms.length-1];
-  var s=sits(cat.freq, primaryForm), bs=0, i;
-  for(i=0;i<cat.bks.length;i++) bs+=Math.ceil(cat.bks[i].tot/Math.max(0.01,cat.bks[i].per));
-  var pct = bs===0 ? (cat.bks.length===0?0:100) : Math.min(100,Math.round((s/Math.max(1,bs))*100));
-  var sc;
-  if(cat.bks.length===0) sc='z';
-  else if(cat.wl.indexOf('co-op')>-1) sc='b';
-  else if(pct>=95) sc='g';
-  else if(pct>=75) sc='y';
-  else sc='r';
-  var bc = sc==='g'?'#639922':sc==='y'?'#ef9f27':sc==='r'?'#e24b4a':sc==='b'?'#378add':'#aaa';
-  var st = sc==='g'?'Covered':sc==='y'?'Slightly short':sc==='r'?'Needs books':sc==='b'?'Co-op paced':'No books yet';
-  return {s:s,bs:bs,pct:pct,sur:s-bs,sc:sc,bc:bc,st:st};
-}
-
-function findCat(id){
-  for(var g=0;g<CATS.length;g++) for(var i=0;i<CATS[g].items.length;i++) if(CATS[g].items[i].id===id) return CATS[g].items[i];
-  return null;
-}
-function addBook(catId){
-  var cat=findCat(catId); if(!cat) return;
-  cat.bks.push({t:'New book',w:cat.wl,tot:100,per:5});
-  saveData(); renderCats();
-}
-function delBook(catId,idx){
-  var cat=findCat(catId); if(!cat) return;
-  cat.bks.splice(idx,1); saveData(); renderCats();
-}
-function updateBookField(catId,idx,field,val){
-  var cat=findCat(catId); if(!cat) return;
-  if(field==='tot'||field==='per') cat.bks[idx][field]=parseFloat(val)||0;
-  else cat.bks[idx][field]=val;
-  saveData(); renderCats();
-}
-function updateFreq(catId,val){
-  var cat=findCat(catId); if(!cat) return;
-  cat.freq=parseFloat(val); saveData(); renderCats();
-}
-function toggleFormTag(catId,formId){
-  var cat=findCat(catId); if(!cat) return;
-  var idx=cat.forms.indexOf(formId);
-  if(idx>-1) cat.forms.splice(idx,1); else cat.forms.push(formId);
-  saveData(); renderCats();
-}
-
-var currentChildFilter='all';
-function setChildFilter(id){ currentChildFilter=id; renderCats(); }
-
-function escAttr(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-
-function renderChildFilter(){
-  var el=document.getElementById('child-filter'); if(!el) return;
-  var h='<button class="cf-btn'+(currentChildFilter==='all'?' active':'')+'" onclick="setChildFilter(\'all\')">All categories</button>';
-  for(var i=0;i<KIDS.length;i++){
-    var k=KIDS[i];
-    h+='<button class="cf-btn'+(currentChildFilter===k.id?' active':'')+'" onclick="setChildFilter(\''+k.id+'\')">'+k.name+'</button>';
+window.updateSchoolYear = function () {
+  FAMILY.schoolYear.termsPerYear = parseInt(document.getElementById('sy-terms').value, 10) || 1;
+  FAMILY.schoolYear.weeksPerTerm = parseInt(document.getElementById('sy-weeks').value, 10) || 1;
+  FAMILY.schoolYear.examWeekPattern = document.getElementById('sy-pattern').value;
+  if (FAMILY.schoolYear.examWeekPattern === 'explicit') {
+    var raw = document.getElementById('sy-explicit').value;
+    FAMILY.schoolYear.examWeeks = raw.split(',').map(function (s) { return parseInt(s.trim(), 10); }).filter(function (n) { return !isNaN(n); });
   }
-  el.innerHTML=h;
+  saveApp();
+  renderSchoolYearForm();
+  if (document.getElementById('panel-sched').classList.contains('active')) { renderSchedChildTabs(); renderTermBtns(); renderSchedule(); }
+  if (document.getElementById('panel-cats').classList.contains('active')) renderCats();
+};
+
+function renderSchoolYearForm() {
+  document.getElementById('sy-terms').value = FAMILY.schoolYear.termsPerYear;
+  document.getElementById('sy-weeks').value = FAMILY.schoolYear.weeksPerTerm;
+  document.getElementById('sy-pattern').value = FAMILY.schoolYear.examWeekPattern;
+  var explicitRow = document.getElementById('sy-explicit-row');
+  explicitRow.style.display = FAMILY.schoolYear.examWeekPattern === 'explicit' ? 'grid' : 'none';
+  document.getElementById('sy-explicit').value = (FAMILY.schoolYear.examWeeks || []).join(', ');
 }
 
-function renderForms(){
-  var g=document.getElementById('form-grid'); if(!g) return;
-  var h='';
-  for(var i=0;i<FORMS.length;i++){
-    var f=FORMS[i];
-    var hasKid = f.who!=='—';
-    h+='<div class="form-card'+(hasKid?' mine':'')+'">';
-    h+='<div class="form-n">'+f.label+'</div>';
-    h+='<div class="form-grades">'+f.grades+'</div>';
-    h+='<div class="form-who">'+f.who+'</div>';
-    h+='<div class="form-desc">'+f.sub+'</div></div>';
-  }
-  g.innerHTML=h;
+window.updateHistoryCycle = function () {
+  FAMILY.historyCycleId = parseInt(document.getElementById('sy-cycle').value, 10);
+  saveApp();
+  renderCycles();
+};
+function renderCycleSelect() {
+  var sel = document.getElementById('sy-cycle'); if (!sel) return;
+  var h = '';
+  L.CYCLES.forEach(function (c) { h += '<option value="' + c.n + '"' + (FAMILY.historyCycleId === c.n ? ' selected' : '') + '>Cycle ' + c.n + ' — ' + c.era + '</option>'; });
+  sel.innerHTML = h;
 }
 
-function renderCycles(){
-  var g=document.getElementById('cyc-grid'); if(!g) return;
-  var h='';
-  for(var i=0;i<CYCLES.length;i++){
-    var c=CYCLES[i];
-    h+='<div class="cycle-card'+(c.cur?' cur':'')+'"><div class="cycle-n">Cycle '+c.n+(c.cur?' <span class="cur-badge">Current year</span>':'')+'</div>';
-    h+='<div class="cycle-era">'+c.era+'</div><div class="cycle-dates">'+c.dates+'</div>';
-    h+='<div class="spine-label">Spine options</div>';
-    for(var j=0;j<c.spines.length;j++) h+='<div class="spine-item">· '+c.spines[j]+'</div>';
-    h+='<div class="term-breakdown">T1: '+c.t1+'<br>T2: '+c.t2+'<br>T3: '+c.t3+'</div></div>';
-  }
-  g.innerHTML=h;
+// ---------------------------------------------------------------------------
+// Header
+// ---------------------------------------------------------------------------
+function renderHeader() {
+  var cycle = L.CYCLES.find(function (c) { return c.n === FAMILY.historyCycleId; });
+  var bits = [];
+  if (cycle) bits.push('Cycle ' + cycle.n + ': ' + cycle.era);
+  FAMILY.children.forEach(function (c) {
+    var f = L.FORMS.find(function (ff) { return ff.id === c.formId; });
+    bits.push(c.name + (c.gradeLabel ? ' gr.' + c.gradeLabel : '') + (f ? ' (' + f.label + ')' : ''));
+  });
+  document.getElementById('header-sub').textContent = bits.join(' · ');
 }
 
-function catAppliesToFilter(cat){
-  if(currentChildFilter==='all') return true;
-  var kid=null;
-  for(var i=0;i<KIDS.length;i++) if(KIDS[i].id===currentChildFilter){ kid=KIDS[i]; break; }
-  if(!kid) return true;
-  return cat.forms.indexOf(kid.form)>-1;
+// ---------------------------------------------------------------------------
+// Forms / Cycles reference tabs
+// ---------------------------------------------------------------------------
+function renderForms() {
+  var g = document.getElementById('form-grid'); if (!g) return;
+  var h = '';
+  L.FORMS.forEach(function (f) {
+    var kidsInForm = FAMILY.children.filter(function (c) { return c.formId === f.id; });
+    var who = kidsInForm.length ? kidsInForm.map(function (c) { return c.name + (c.gradeLabel ? ' (gr.' + c.gradeLabel + ')' : ''); }).join(' · ') : '—';
+    h += '<div class="form-card' + (kidsInForm.length ? ' mine' : '') + '">';
+    h += '<div class="form-n">' + f.label + '</div>';
+    h += '<div class="form-grades">' + f.grades + '</div>';
+    h += '<div class="form-who">' + who + '</div>';
+    h += '<div class="form-desc">' + f.sub + '</div></div>';
+  });
+  g.innerHTML = h;
 }
 
-function renderCats(){
+function renderCycles() {
+  var g = document.getElementById('cyc-grid'); if (!g) return;
+  var h = '';
+  L.CYCLES.forEach(function (c) {
+    var isCur = FAMILY.historyCycleId === c.n;
+    h += '<div class="cycle-card' + (isCur ? ' cur' : '') + '"><div class="cycle-n">Cycle ' + c.n + (isCur ? ' <span class="cur-badge">Current year</span>' : '<span class="cur-badge" onclick="setCycleQuick(' + c.n + ')">Set as current</span>') + '</div>';
+    h += '<div class="cycle-era">' + c.era + '</div><div class="cycle-dates">' + c.dates + '</div>';
+    h += '<div class="spine-label">Spine options</div>';
+    c.spines.forEach(function (s) { h += '<div class="spine-item">· ' + s + '</div>'; });
+    h += '<div class="term-breakdown">T1: ' + c.t1 + '<br>T2: ' + c.t2 + '<br>T3: ' + c.t3 + '</div></div>';
+  });
+  g.innerHTML = h;
+}
+window.setCycleQuick = function (n) { FAMILY.historyCycleId = n; saveApp(); renderCycles(); renderCycleSelect(); renderHeader(); };
+
+// ---------------------------------------------------------------------------
+// Categories tab
+// ---------------------------------------------------------------------------
+window.setChildFilter = function (id) { currentChildFilter = id; renderCats(); };
+
+function renderChildFilter() {
+  var el = document.getElementById('child-filter'); if (!el) return;
+  var h = '<button class="cf-btn' + (currentChildFilter === 'all' ? ' active' : '') + '" onclick="setChildFilter(\'all\')">All categories</button>';
+  FAMILY.children.forEach(function (k) {
+    h += '<button class="cf-btn' + (currentChildFilter === k.id ? ' active' : '') + '" onclick="setChildFilter(\'' + k.id + '\')">' + escAttr(k.name) + '</button>';
+  });
+  el.innerHTML = h;
+  document.getElementById('cats-help').textContent = L.readingWeeksCount(FAMILY.schoolYear) + ' reading weeks (' + L.totalWeeks(FAMILY.schoolYear) + ' total minus ' + L.examWeeksFor(FAMILY.schoolYear).length + ' exam weeks). Filter by child to see only categories active for them. Open any category to edit books, frequency, and Form/child assignment.';
+}
+
+function catAppliesToFilter(cat) {
+  if (currentChildFilter === 'all') return true;
+  var kid = FAMILY.children.find(function (c) { return c.id === currentChildFilter; });
+  if (!kid) return true;
+  return L.childrenForCategory(cat, FAMILY.children).indexOf(kid) > -1;
+}
+
+window.addGroupUI = function () {
+  var nameInput = document.getElementById('new-grp-name');
+  var colorInput = document.getElementById('new-grp-color');
+  var name = nameInput.value.trim();
+  if (!name) { alert('Give the new group a name first.'); return; }
+  L.addGroup(CATS, { grp: name, col: colorInput.value, items: [] });
+  nameInput.value = '';
+  saveApp(); renderCats();
+};
+window.deleteGroupUI = function (name) {
+  if (!confirm('Delete the "' + name + '" group and all its categories?')) return;
+  APP.categories = L.deleteGroup(CATS, name);
+  CATS = APP.categories;
+  saveApp(); renderCats();
+};
+window.moveGroupUI = function (name, dir) {
+  L.moveGroup(CATS, name, dir);
+  saveApp(); renderCats();
+};
+
+window.addSubcatUI = function (grpName) {
+  var grp = CATS.find(function (g) { return g.grp === grpName; }); if (!grp) return;
+  var id = 'cat' + Date.now();
+  L.addSubcategory(grp, { id: id, name: 'New category', forms: [], childOverrides: [], freq: 1, bks: [] });
+  saveApp(); renderCats();
+};
+window.deleteSubcatUI = function (grpName, catId) {
+  if (!confirm('Delete this category?')) return;
+  var grp = CATS.find(function (g) { return g.grp === grpName; }); if (!grp) return;
+  L.deleteSubcategory(grp, catId);
+  saveApp(); renderCats();
+};
+window.moveSubcatUI = function (grpName, catId, dir) {
+  var grp = CATS.find(function (g) { return g.grp === grpName; }); if (!grp) return;
+  L.moveSubcategory(grp, catId, dir);
+  saveApp(); renderCats();
+};
+window.renameSubcatUI = function (catId, val) {
+  var cat = L.findCategory(CATS, catId); if (!cat) return;
+  cat.name = val; saveApp(); renderCats();
+};
+
+window.addBook = function (catId) {
+  var cat = L.findCategory(CATS, catId); if (!cat) return;
+  cat.bks.push({ t: 'New book', who: 'all', whoChildren: [], tot: 100, per: 5, unitType: 'pages' });
+  saveApp(); renderCats();
+};
+window.delBook = function (catId, idx) {
+  var cat = L.findCategory(CATS, catId); if (!cat) return;
+  cat.bks.splice(idx, 1); saveApp(); renderCats();
+};
+window.updateBookField = function (catId, idx, field, val) {
+  var cat = L.findCategory(CATS, catId); if (!cat) return;
+  if (field === 'tot' || field === 'per') cat.bks[idx][field] = parseFloat(val) || 0;
+  else cat.bks[idx][field] = val;
+  saveApp(); renderCats();
+};
+window.updateBookWho = function (catId, idx, val) {
+  var cat = L.findCategory(CATS, catId); if (!cat) return;
+  cat.bks[idx].who = val;
+  if (val === 'all') cat.bks[idx].whoChildren = [];
+  saveApp(); renderCats();
+};
+window.toggleBookChild = function (catId, idx, childId) {
+  var cat = L.findCategory(CATS, catId); if (!cat) return;
+  var b = cat.bks[idx];
+  b.whoChildren = b.whoChildren || [];
+  var i = b.whoChildren.indexOf(childId);
+  if (i > -1) b.whoChildren.splice(i, 1); else b.whoChildren.push(childId);
+  saveApp(); renderCats();
+};
+window.updateFreq = function (catId, val) {
+  var cat = L.findCategory(CATS, catId); if (!cat) return;
+  cat.freq = parseFloat(val); saveApp(); renderCats();
+};
+window.toggleFormTag = function (catId, formId) {
+  var cat = L.findCategory(CATS, catId); if (!cat) return;
+  var idx = cat.forms.indexOf(formId);
+  if (idx > -1) cat.forms.splice(idx, 1); else cat.forms.push(formId);
+  saveApp(); renderCats();
+};
+window.toggleChildOverride = function (catId, childId, mode) {
+  // mode: 'default' (remove override), 'include', 'exclude'
+  var cat = L.findCategory(CATS, catId); if (!cat) return;
+  cat.childOverrides = cat.childOverrides || [];
+  cat.childOverrides = cat.childOverrides.filter(function (o) { return o.childId !== childId; });
+  if (mode === 'include') cat.childOverrides.push({ childId: childId, included: true });
+  if (mode === 'exclude') cat.childOverrides.push({ childId: childId, included: false });
+  saveApp(); renderCats();
+};
+
+window.tog = function (id) { openC[id] = !openC[id]; renderCats(); };
+
+function renderCats() {
   renderChildFilter();
-  var list=document.getElementById('cat-list'); if(!list) return;
-  var h='', g, ci, cat, c, bi, b, sugT, scc;
-  var FREQS=[[4,'Daily (4x/wk)'],[3,'3x/wk'],[2,'2x/wk'],[1,'1x/wk'],[0.5,'Every other wk'],[0.25,'1x/term'],[0.08,'A few times/yr']];
-  for(g=0;g<CATS.length;g++){
-    var grp=CATS[g];
-    var anyVisible=false;
-    for(ci=0;ci<grp.items.length;ci++) if(catAppliesToFilter(grp.items[ci])) anyVisible=true;
-    if(!anyVisible) continue;
-    h+='<div class="grp-title"><div style="width:10px;height:10px;border-radius:50%;background:'+grp.col+';flex-shrink:0;"></div>'+grp.grp+'</div>';
-    for(ci=0;ci<grp.items.length;ci++){
-      cat=grp.items[ci];
-      if(!catAppliesToFilter(cat)) continue;
-      c=calc(cat);
-      scc=c.sc;
-      var formLabels=[];
-      for(var fz=0; fz<cat.forms.length; fz++){
-        for(var k=0;k<FORMS.length;k++) if(FORMS[k].id===cat.forms[fz]) formLabels.push(FORMS[k].label);
-      }
-      formLabels=formLabels.join(', ');
-      h+='<div class="cc"><div class="cc-hd" onclick="tog(\''+cat.id+'\')">';
-      h+='<div class="dot" style="background:'+grp.col+'"></div>';
-      h+='<span class="cc-name">'+cat.name+'</span>';
-      h+='<span class="cc-forms">'+formLabels+'</span>';
-      h+='<span class="pill p'+scc+'">'+c.st+'</span>';
-      h+='<span class="chv'+(openC[cat.id]?' open':'')+'">&#8964;</span></div>';
-      h+='<div class="cc-bd'+(openC[cat.id]?' open':'')+'">';
+  renderCycleSelect();
+  var list = document.getElementById('cat-list'); if (!list) return;
+  var h = '';
+  CATS.forEach(function (grp, gIdx) {
+    var visibleItems = grp.items.filter(catAppliesToFilter);
+    h += '<div class="grp-title"><div style="width:10px;height:10px;border-radius:50%;background:' + grp.col + ';flex-shrink:0;"></div>' + escAttr(grp.grp) +
+      '<span class="grp-actions">' +
+      '<button class="mini-btn" onclick="moveGroupUI(\'' + escAttr(grp.grp) + '\',-1)" title="Move up">↑</button>' +
+      '<button class="mini-btn" onclick="moveGroupUI(\'' + escAttr(grp.grp) + '\',1)" title="Move down">↓</button>' +
+      '<button class="mini-btn" onclick="addSubcatUI(\'' + escAttr(grp.grp) + '\')" title="Add category">+ Category</button>' +
+      '<button class="mini-btn" onclick="deleteGroupUI(\'' + escAttr(grp.grp) + '\')" title="Delete group">Delete group</button>' +
+      '</span></div>';
+    if (!visibleItems.length) return;
+    grp.items.forEach(function (cat) {
+      if (!catAppliesToFilter(cat)) return;
+      var c = L.calc(cat, FAMILY.children, FAMILY.schoolYear);
+      var scc = c.sc;
+      var formLabels = cat.forms.map(function (fid) { var f = L.FORMS.find(function (ff) { return ff.id === fid; }); return f ? f.label : fid; }).join(', ');
+      h += '<div class="cc"><div class="cc-hd" onclick="tog(\'' + cat.id + '\')">';
+      h += '<div class="dot" style="background:' + grp.col + '"></div>';
+      h += '<span class="cc-name">' + escAttr(cat.name) + '</span>';
+      h += '<span class="cc-forms">' + (formLabels || 'no Forms set') + '</span>';
+      h += '<span class="pill p' + scc + '">' + c.st + '</span>';
+      h += '<span class="chv' + (openC[cat.id] ? ' open' : '') + '">&#8964;</span></div>';
+      h += '<div class="cc-bd' + (openC[cat.id] ? ' open' : '') + '">';
 
-      h+='<div class="freq-inline"><span style="font-size:11px;color:#888;">Frequency:</span><select onchange="updateFreq(\''+cat.id+'\',this.value)" onclick="event.stopPropagation()">';
-      for(var fi=0;fi<FREQS.length;fi++) h+='<option value="'+FREQS[fi][0]+'"'+(cat.freq===FREQS[fi][0]?' selected':'')+'>'+FREQS[fi][1]+'</option>';
-      h+='</select></div>';
+      h += '<div class="forms-edit" onclick="event.stopPropagation()"><span style="font-size:11px;color:#888;">Category name:</span> <input type="text" style="font-family:sans-serif;font-size:12px;padding:4px 6px;border:1px solid var(--border2);border-radius:5px;flex:1;min-width:140px;" value="' + escAttr(cat.name) + '" onchange="renameSubcatUI(\'' + cat.id + '\',this.value)"></div>';
 
-      h+='<div class="forms-edit"><span style="font-size:11px;color:#888;">Applies to:</span>';
-      for(var fx=0;fx<FORMS.length;fx++){
-        var checked = cat.forms.indexOf(FORMS[fx].id)>-1;
-        h+='<label onclick="event.stopPropagation()"><input type="checkbox" '+(checked?'checked':'')+' onchange="toggleFormTag(\''+cat.id+'\',\''+FORMS[fx].id+'\')"> '+FORMS[fx].label+'</label>';
-      }
-      h+='</div>';
+      h += '<div class="freq-inline"><span style="font-size:11px;color:#888;">Frequency:</span><select onchange="updateFreq(\'' + cat.id + '\',this.value)" onclick="event.stopPropagation()">';
+      L.FREQUENCIES.forEach(function (fr) { h += '<option value="' + fr.id + '"' + (cat.freq === fr.id ? ' selected' : '') + '>' + fr.label + '</option>'; });
+      h += '</select>';
+      h += '<button class="mini-btn" onclick="event.stopPropagation();moveSubcatUI(\'' + escAttr(grp.grp) + '\',\'' + cat.id + '\',-1)" title="Move up">↑</button>';
+      h += '<button class="mini-btn" onclick="event.stopPropagation();moveSubcatUI(\'' + escAttr(grp.grp) + '\',\'' + cat.id + '\',1)" title="Move down">↓</button>';
+      h += '<button class="mini-btn" onclick="event.stopPropagation();deleteSubcatUI(\'' + escAttr(grp.grp) + '\',\'' + cat.id + '\')" title="Delete category">Delete</button>';
+      h += '</div>';
 
-      h+='<div class="st-grid">';
-      h+='<div class="st"><div class="st-lbl">Sittings available</div><div class="st-val">'+c.s+'</div></div>';
-      h+='<div class="st"><div class="st-lbl">Sittings needed</div><div class="st-val">'+c.bs+'</div></div>';
-      h+='<div class="st"><div class="st-lbl">'+(c.sur>=0?'Buffer':'Gap')+'</div><div class="st-val" style="color:'+(c.sur>=0?'#3b6d11':'#a32d2d')+'">'+Math.abs(c.sur)+'</div></div>';
-      h+='</div><div class="prog"><div class="prog-fill" style="width:'+c.pct+'%;background:'+c.bc+'"></div></div>';
-      h+='<div class="prog-lbl">'+c.pct+'% of sittings filled</div>';
+      h += '<div class="forms-edit"><span style="font-size:11px;color:#888;">Applies to Forms:</span>';
+      L.FORMS.forEach(function (f) {
+        var checked = cat.forms.indexOf(f.id) > -1;
+        h += '<label onclick="event.stopPropagation()"><input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleFormTag(\'' + cat.id + '\',\'' + f.id + '\')"> ' + f.label + '</label>';
+      });
+      h += '</div>';
 
-      h+='<div class="br-head"><div class="br-head-lbl">Book / title</div><div class="br-head-lbl">Total</div><div class="br-head-lbl">Per sitting</div><div class="br-head-lbl">Who</div><div></div></div>';
-      for(bi=0;bi<cat.bks.length;bi++){
-        b=cat.bks[bi];
-        h+='<div class="br-edit">';
-        h+='<input type="text" value="'+escAttr(b.t)+'" onchange="updateBookField(\''+cat.id+'\','+bi+',\'t\',this.value)" onclick="event.stopPropagation()">';
-        h+='<input type="number" value="'+b.tot+'" min="1" onchange="updateBookField(\''+cat.id+'\','+bi+',\'tot\',this.value)" onclick="event.stopPropagation()">';
-        h+='<input type="number" value="'+b.per+'" min="0.1" step="0.1" onchange="updateBookField(\''+cat.id+'\','+bi+',\'per\',this.value)" onclick="event.stopPropagation()">';
-        h+='<input type="text" value="'+escAttr(b.w)+'" onchange="updateBookField(\''+cat.id+'\','+bi+',\'w\',this.value)" onclick="event.stopPropagation()">';
-        h+='<button class="del-btn" onclick="event.stopPropagation();delBook(\''+cat.id+'\','+bi+')" title="Remove">&times;</button>';
-        h+='</div>';
-      }
-      h+='<button class="add-btn" onclick="event.stopPropagation();addBook(\''+cat.id+'\')">+ Add a book to this category</button>';
-      sugT=c.sc==='g'?('Well-paced — '+c.sur+' sitting buffer across the year.'):c.sc==='y'?(Math.abs(c.sur)+' sittings short. Add one more book or increase frequency.'):c.sc==='r'?(Math.abs(c.sur)+' sittings unfilled. Add books to cover the year.'):c.sc==='b'?('Co-op paced: '+c.s+' sittings at '+cat.freq+'x/wk on home days.'):'No books assigned yet.';
-      h+='<div class="sug s'+scc+'">'+sugT+'</div></div></div>';
-    }
-  }
-  list.innerHTML=h;
+      h += '<div class="child-override-row"><span style="font-size:11px;color:#888;">Per-child override:</span>';
+      FAMILY.children.forEach(function (kid) {
+        var ov = (cat.childOverrides || []).find(function (o) { return o.childId === kid.id; });
+        var mode = ov ? (ov.included ? 'include' : 'exclude') : 'default';
+        h += '<label onclick="event.stopPropagation()">' + escAttr(kid.name) + ' <select onchange="toggleChildOverride(\'' + cat.id + '\',\'' + kid.id + '\',this.value)" onclick="event.stopPropagation()">' +
+          '<option value="default"' + (mode === 'default' ? ' selected' : '') + '>By Form</option>' +
+          '<option value="include"' + (mode === 'include' ? ' selected' : '') + '>Always include</option>' +
+          '<option value="exclude"' + (mode === 'exclude' ? ' selected' : '') + '>Always exclude</option>' +
+          '</select></label>';
+      });
+      h += '</div>';
+
+      h += '<div class="st-grid">';
+      h += '<div class="st"><div class="st-lbl">Sittings available</div><div class="st-val">' + c.s + '</div></div>';
+      h += '<div class="st"><div class="st-lbl">Sittings needed</div><div class="st-val">' + c.bs + '</div></div>';
+      h += '<div class="st"><div class="st-lbl">' + (c.sur >= 0 ? 'Buffer' : 'Gap') + '</div><div class="st-val" style="color:' + (c.sur >= 0 ? '#3b6d11' : '#a32d2d') + '">' + Math.abs(c.sur) + '</div></div>';
+      h += '</div><div class="prog"><div class="prog-fill" style="width:' + c.pct + '%;background:' + c.bc + '"></div></div>';
+      h += '<div class="prog-lbl">' + c.pct + '% of sittings filled (' + c.days + ' school days/wk, ' + c.readingWeeks + ' reading weeks)</div>';
+
+      h += '<div class="br-head"><div class="br-head-lbl">Book / title</div><div class="br-head-lbl">Total</div><div class="br-head-lbl">Per sitting</div><div class="br-head-lbl">Unit</div><div class="br-head-lbl">Assigned to</div><div></div></div>';
+      cat.bks.forEach(function (b, bi) {
+        h += '<div class="br-edit">';
+        h += '<input type="text" value="' + escAttr(b.t) + '" onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'t\',this.value)" onclick="event.stopPropagation()">';
+        h += '<input type="number" value="' + b.tot + '" min="1" onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'tot\',this.value)" onclick="event.stopPropagation()">';
+        h += '<input type="number" value="' + b.per + '" min="0.1" step="0.1" onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'per\',this.value)" onclick="event.stopPropagation()">';
+        h += '<select onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'unitType\',this.value)" onclick="event.stopPropagation()">';
+        L.UNIT_TYPES.forEach(function (u) { h += '<option value="' + u + '"' + (b.unitType === u ? ' selected' : '') + '>' + u + '</option>'; });
+        h += '</select>';
+        h += '<select onchange="updateBookWho(\'' + cat.id + '\',' + bi + ',this.value)" onclick="event.stopPropagation()">' +
+          '<option value="all"' + (b.who === 'all' ? ' selected' : '') + '>All</option>' +
+          '<option value="specific"' + (b.who === 'specific' ? ' selected' : '') + '>Specific</option>' +
+          '</select>';
+        h += '<button class="del-btn" onclick="event.stopPropagation();delBook(\'' + cat.id + '\',' + bi + ')" title="Remove">&times;</button>';
+        h += '</div>';
+        if (b.who === 'specific') {
+          h += '<div class="child-override-row" style="margin-top:-2px;margin-bottom:8px;">';
+          FAMILY.children.forEach(function (kid) {
+            var checked = (b.whoChildren || []).indexOf(kid.id) > -1;
+            h += '<label onclick="event.stopPropagation()"><input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleBookChild(\'' + cat.id + '\',' + bi + ',\'' + kid.id + '\')"> ' + escAttr(kid.name) + '</label>';
+          });
+          h += '</div>';
+        }
+      });
+      h += '<button class="add-btn" onclick="event.stopPropagation();addBook(\'' + cat.id + '\')">+ Add a book to this category</button>';
+      var sugT = c.sc === 'g' ? ('Well-paced — ' + c.sur + ' sitting buffer across the year.') :
+        c.sc === 'y' ? (Math.abs(c.sur) + ' sittings short. Add one more book or increase frequency.') :
+        c.sc === 'r' ? (Math.abs(c.sur) + ' sittings unfilled. Add books to cover the year.') :
+        c.sc === 'b' ? ('Co-op paced: ' + c.s + ' sittings at ' + cat.freq + 'x/wk on home days.') :
+        'No books assigned yet.';
+      h += '<div class="sug s' + scc + '">' + sugT + '</div></div></div>';
+    });
+  });
+  list.innerHTML = h;
 }
 
-function tog(id){ openC[id]=!openC[id]; renderCats(); }
+// ---------------------------------------------------------------------------
+// Schedule tab
+// ---------------------------------------------------------------------------
+window.setSchedChild = function (id) { schedChild = id; renderSchedChildTabs(); renderSchedule(); };
 
-function renderSchedChildTabs(){
-  var el=document.getElementById('sched-child-tabs'); if(!el) return;
-  var h='<button class="ct-btn'+(schedChild==='all'?' active':'')+'" onclick="setSchedChild(\'all\')">Whole family</button>';
-  for(var i=0;i<KIDS.length;i++){
-    var k=KIDS[i];
-    h+='<button class="ct-btn'+(schedChild===k.id?' active':'')+'" onclick="setSchedChild(\''+k.id+'\')">'+k.name+'</button>';
-  }
-  el.innerHTML=h;
-}
-function setSchedChild(id){ schedChild=id; renderSchedChildTabs(); renderSchedule(); }
-
-function formLabelFor(formId){
-  for(var i=0;i<FORMS.length;i++) if(FORMS[i].id===formId) return FORMS[i].label;
-  return formId;
+function renderSchedChildTabs() {
+  var el = document.getElementById('sched-child-tabs'); if (!el) return;
+  var h = '<button class="ct-btn' + (schedChild === 'all' ? ' active' : '') + '" onclick="setSchedChild(\'all\')">Whole family</button>';
+  FAMILY.children.forEach(function (k) {
+    h += '<button class="ct-btn' + (schedChild === k.id ? ' active' : '') + '" onclick="setSchedChild(\'' + k.id + '\')">' + escAttr(k.name) + '</button>';
+  });
+  el.innerHTML = h;
 }
 
-function buildWeekItems(kidId, weekNum){
-  var kid=null;
-  for(var i=0;i<KIDS.length;i++) if(KIDS[i].id===kidId){ kid=KIDS[i]; break; }
-  if(!kid) return [];
-  var items=[];
-  for(var g=0;g<CATS.length;g++){
-    var grp=CATS[g];
-    for(var ci=0;ci<grp.items.length;ci++){
-      var cat=grp.items[ci];
-      if(cat.forms.indexOf(kid.form)===-1) continue;
-      if(cat.bks.length===0){
-        items.push({col:grp.col, text:cat.name+' — not yet assigned', ph:true});
-      } else {
-        var b=cat.bks[weekNum % cat.bks.length];
-        items.push({col:grp.col, text:cat.name+': '+b.t, ph:false});
-      }
-    }
+function renderTermBtns() {
+  var el = document.getElementById('term-btns'); if (!el) return;
+  var ranges = L.termRanges(FAMILY.schoolYear);
+  var h = '';
+  for (var t = 1; t <= FAMILY.schoolYear.termsPerYear; t++) {
+    h += '<button class="tb' + (term === t ? ' active' : '') + '" onclick="stm(' + t + ',this)">Term ' + t + ' — wks ' + ranges[t][0] + '–' + ranges[t][1] + '</button>';
   }
-  return items;
+  el.innerHTML = h;
+  if (term > FAMILY.schoolYear.termsPerYear) term = 1;
 }
 
-function buildWeekItemsAll(weekNum){
-  var items=[]; var seen={};
-  for(var g=0;g<CATS.length;g++){
-    var grp=CATS[g];
-    for(var ci=0;ci<grp.items.length;ci++){
-      var cat=grp.items[ci];
-      if(seen[cat.id]) continue;
-      seen[cat.id]=true;
-      if(cat.bks.length===0){
-        items.push({col:grp.col, text:cat.name+' — not yet assigned', ph:true});
-      } else {
-        var b=cat.bks[weekNum % cat.bks.length];
-        items.push({col:grp.col, text:cat.name+': '+b.t, ph:false});
-      }
-    }
-  }
-  return items;
-}
-
-function renderWeekItemsHTML(items){
-  var h='';
-  for(var i=0;i<items.length;i++){
-    h+='<div class="wi-cat'+(items[i].ph?' ph':'')+'"><span class="wi-cat-dot" style="background:'+items[i].col+'"></span><span>'+items[i].text+'</span></div>';
-  }
+function renderWeekItemsHTML(items) {
+  var h = '';
+  items.forEach(function (it) {
+    h += '<div class="wi-cat' + (it.ph ? ' ph' : '') + '"><span class="wi-cat-dot" style="background:' + it.col + '"></span><span>' + escAttr(it.text) + '</span></div>';
+  });
   return h;
 }
 
-function renderSchedule(){
-  var out=document.getElementById('sched-out'); if(!out) return;
-  var examWeeks=[12,24,36];
-  var termRanges={1:[1,12],2:[13,24],3:[25,36]};
-  var range=termRanges[term];
-  var eff = 36-behind;
-  var h='<div class="wk-grid">';
-  for(var w=range[0]; w<=range[1]; w++){
-    var isExam = examWeeks.indexOf(w)>-1;
-    var contentWeekIndex = Math.max(0, w-1-behind);
-    if(isExam){
-      h+='<div class="wk exam"><div class="wk-n ex">Week '+w+' — Exam week</div>';
-      h+='<div class="wi ex">Oral narration — all subjects</div>';
-      h+='<div class="wi ex">Written narration F2+</div>';
-      h+='<div class="wi ex">Map quiz + nature journal sharing</div>';
-      h+='<div class="wi ex">No new reading assigned</div></div>';
+function renderSchedule() {
+  var out = document.getElementById('sched-out'); if (!out) return;
+  var sy = FAMILY.schoolYear;
+  var examWeeks = L.examWeeksFor(sy);
+  var ranges = L.termRanges(sy);
+  var range = ranges[term]; if (!range) { out.innerHTML = ''; return; }
+  var totalW = L.totalWeeks(sy);
+  var eff = totalW - behind;
+  var h = '<div class="wk-grid">';
+  for (var w = range[0]; w <= range[1]; w++) {
+    var isExam = examWeeks.indexOf(w) > -1;
+    var contentWeekIndex = Math.max(0, w - 1 - behind);
+    if (isExam) {
+      h += '<div class="wk exam"><div class="wk-n ex">Week ' + w + ' — Exam week</div>';
+      h += '<div class="wi ex">Oral narration — all subjects</div>';
+      h += '<div class="wi ex">Written narration F2+</div>';
+      h += '<div class="wi ex">Map quiz + nature journal sharing</div>';
+      h += '<div class="wi ex">No new reading assigned</div></div>';
     } else {
-      var items = schedChild==='all' ? buildWeekItemsAll(contentWeekIndex) : buildWeekItems(schedChild, contentWeekIndex);
+      var items = L.buildWeekItems(CATS, FAMILY.children, sy, schedChild, w, contentWeekIndex);
       var lateFlag = w > eff;
-      h+='<div class="wk"'+(lateFlag?' style="opacity:.55"':'')+'>';
-      h+='<div class="wk-n">Week '+w+(lateFlag?' ⚠ catch-up':'')+'</div>';
-      if(items.length===0){
-        h+='<div class="wi" style="color:#aaa;">No categories assigned to this view</div>';
+      h += '<div class="wk"' + (lateFlag ? ' style="opacity:.55"' : '') + '>';
+      h += '<div class="wk-n">Week ' + w + (lateFlag ? ' ⚠ catch-up' : '') + '</div>';
+      if (items.length === 0) {
+        h += '<div class="wi" style="color:#aaa;">No categories assigned to this view</div>';
       } else {
-        h+=renderWeekItemsHTML(items);
+        h += renderWeekItemsHTML(items);
       }
-      h+='</div>';
+      h += '</div>';
     }
   }
-  h+='</div>';
-  if(behind>0){
-    var msg = behind<=2 ? ('Each week below is now showing the content from '+behind+' week'+(behind>1?'s':'')+' ago — everything has shifted forward so you pick up exactly where you left off.') :
-              behind<=4 ? ('Content has shifted forward by '+behind+' weeks. Consider trimming one lighter category (Neighbors or a free-read slot) to help close the gap by year end.') :
-              ('Content has shifted forward by '+behind+' weeks — a significant gap. Consider dropping one full book from a lighter category and focusing remaining weeks on core spines (Bible, Math, World History).');
-    h+='<div class="rec">'+behind+' week'+(behind>1?'s':'')+' behind — '+msg+'</div>';
+  h += '</div>';
+  if (behind > 0) {
+    var msg = behind <= 2 ? ('Each week below is now showing the content from ' + behind + ' week' + (behind > 1 ? 's' : '') + ' ago — everything has shifted forward so you pick up exactly where you left off.') :
+      behind <= 4 ? ('Content has shifted forward by ' + behind + ' weeks. Consider trimming one lighter category to help close the gap by year end.') :
+      ('Content has shifted forward by ' + behind + ' weeks — a significant gap. Consider dropping one full book from a lighter category and focusing remaining weeks on core spines.');
+    h += '<div class="rec">' + behind + ' week' + (behind > 1 ? 's' : '') + ' behind — ' + msg + '</div>';
   }
-  out.innerHTML=h;
+  out.innerHTML = h;
 }
 
-function renderPrintTermPage(kid, t){
-  var examWeeks=[12,24,36];
-  var termRanges={1:[1,12],2:[13,24],3:[25,36]};
-  var range=termRanges[t];
-  var h='<div class="print-term">';
-  h+='<div class="print-term-hd">'+kid.name+' — '+kid.grade+' grade (Form '+formLabelFor(kid.form)+') · Term '+t+' · Weeks '+range[0]+'–'+range[1]+'</div>';
-  h+='<div class="print-wk-grid">';
-  for(var w=range[0]; w<=range[1]; w++){
-    var isExam = examWeeks.indexOf(w)>-1;
-    h+='<div class="print-wk'+(isExam?' exam':'')+'"><div class="print-wk-n">Week '+w+(isExam?' — Exam':'')+'</div>';
-    if(isExam){
-      h+='<div class="wi ex">Oral narration — all subjects</div><div class="wi ex">Written narration F2+</div><div class="wi ex">Map quiz + nature journal sharing</div>';
+function renderPrintTermPage(kid, t) {
+  var weeks = L.buildPrintTermData(CATS, FAMILY.children, FAMILY.schoolYear, kid.id, t, behind);
+  var f = L.FORMS.find(function (ff) { return ff.id === kid.formId; });
+  var h = '<div class="print-term">';
+  h += '<div class="print-term-hd">' + escAttr(kid.name) + (kid.gradeLabel ? ' — ' + escAttr(kid.gradeLabel) + ' grade' : '') + (f ? ' (' + f.label + ')' : '') + ' · Term ' + t + '</div>';
+  h += '<div class="print-wk-grid">';
+  weeks.forEach(function (wk) {
+    h += '<div class="print-wk' + (wk.isExam ? ' exam' : '') + '"><div class="print-wk-n">Week ' + wk.weekNum + (wk.isExam ? ' — Exam' : '') + '</div>';
+    if (wk.isExam) {
+      h += '<div class="wi ex">Oral narration — all subjects</div><div class="wi ex">Written narration F2+</div><div class="wi ex">Map quiz + nature journal sharing</div>';
     } else {
-      var contentWeekIndex = Math.max(0, w-1-behind);
-      h+=renderWeekItemsHTML(buildWeekItems(kid.id, contentWeekIndex));
+      h += renderWeekItemsHTML(wk.items);
     }
-    h+='</div>';
-  }
-  h+='</div></div>';
+    h += '</div>';
+  });
+  h += '</div></div>';
   return h;
 }
 
-function buildPrintSchedule(){
-  var area=document.getElementById('print-area'); if(!area) return;
-  var kid=null;
-  for(var i=0;i<KIDS.length;i++) if(KIDS[i].id===schedChild){ kid=KIDS[i]; break; }
-  if(!kid){ area.innerHTML=''; return; }
-  var h='';
-  for(var t=1;t<=3;t++) h+=renderPrintTermPage(kid,t);
-  area.innerHTML=h;
+function buildPrintSchedule() {
+  var area = document.getElementById('print-area'); if (!area) return;
+  var kid = FAMILY.children.find(function (c) { return c.id === schedChild; });
+  if (!kid) { area.innerHTML = ''; return; }
+  var h = '';
+  for (var t = 1; t <= FAMILY.schoolYear.termsPerYear; t++) h += renderPrintTermPage(kid, t);
+  area.innerHTML = h;
 }
 
-function doPrint(){
+window.doPrint = function () {
   var schedActive = document.getElementById('panel-sched').classList.contains('active');
-  if(schedActive && schedChild!=='all'){
+  if (schedActive && schedChild !== 'all') {
     buildPrintSchedule();
     document.body.classList.add('print-sched-mode');
     window.print();
   } else {
     window.print();
   }
-}
-window.onafterprint=function(){
+};
+window.onafterprint = function () {
   document.body.classList.remove('print-sched-mode');
-  var area=document.getElementById('print-area'); if(area) area.innerHTML='';
+  var area = document.getElementById('print-area'); if (area) area.innerHTML = '';
 };
 
-function ubehind(v){ behind=parseInt(v); document.getElementById('bval').textContent=v; renderSchedule(); }
-function stm(n,btn){ term=n; var b=document.querySelectorAll('.term-btns .tb'); for(var i=0;i<b.length;i++) b[i].classList.remove('active'); btn.classList.add('active'); renderSchedule(); }
-function sw(name,el){
-  var p=document.querySelectorAll('.panel'); for(var i=0;i<p.length;i++) p[i].classList.remove('active');
-  var t=document.querySelectorAll('.tab'); for(var i=0;i<t.length;i++) t[i].classList.remove('active');
-  document.getElementById('panel-'+name).classList.add('active'); el.classList.add('active');
-  if(name==='sched'){ renderSchedChildTabs(); renderSchedule(); }
-  if(name==='cycles') renderCycles();
-  if(name==='forms') renderForms();
-  if(name==='cats') renderCats();
+window.ubehind = function (v) { behind = parseInt(v, 10); document.getElementById('bval').textContent = v; renderSchedule(); };
+window.stm = function (n, btn) {
+  term = n;
+  document.querySelectorAll('.term-btns .tb').forEach(function (b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  renderSchedule();
+};
+
+// ---------------------------------------------------------------------------
+// Tab switching + boot
+// ---------------------------------------------------------------------------
+window.sw = function (name, el) {
+  document.querySelectorAll('.panel').forEach(function (p) { p.classList.remove('active'); });
+  document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
+  document.getElementById('panel-' + name).classList.add('active'); el.classList.add('active');
+  if (name === 'sched') { renderSchedChildTabs(); renderTermBtns(); renderSchedule(); }
+  if (name === 'cycles') renderCycles();
+  if (name === 'forms') renderForms();
+  if (name === 'cats') renderCats();
+  if (name === 'setup') { renderChildren(); renderSchoolYearForm(); renderCycleSelect(); }
+};
+
+function renderAll() {
+  renderMigrateBanner();
+  renderHeader();
+  renderChildren();
+  renderSchoolYearForm();
+  renderCycleSelect();
+  renderForms();
+  renderCycles();
+  renderCats();
 }
 
-renderForms(); renderCycles(); renderCats();
+APP = loadApp();
+if (!APP.needsMigration) {
+  syncShortcuts();
+} else {
+  // Still need an empty/demo shell so other tabs don't error while the
+  // migration banner is showing; user must click through to fresh setup
+  // (or import a valid v3 backup) before editing.
+  FAMILY = L.demoFamilySetup();
+  CATS = [];
+}
+renderAll();
 </script>
 </body>
 </html>
