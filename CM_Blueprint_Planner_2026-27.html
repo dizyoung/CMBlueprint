@@ -199,8 +199,7 @@
   .matrix-wrap { overflow-x: auto; }
   table.matrix-table, table.term-chart-table { border-collapse: collapse; width: 100%; font-family: sans-serif; font-size: 11px; }
   table.matrix-table th, table.matrix-table td, table.term-chart-table th, table.term-chart-table td { border: 1px solid var(--border2); padding: 5px 7px; vertical-align: top; text-align: left; }
-  .matrix-row-hd { font-weight: 700; white-space: nowrap; background: var(--panel-bg, #fafafa); }
-  .matrix-subj-hd { font-weight: 700; white-space: nowrap; }
+  .matrix-row-hd { font-weight: 700; white-space: nowrap; background: var(--panel-bg, #fafafa); }  .matrix-subj-hd { font-weight: 700; white-space: nowrap; }
   .matrix-cell ul { margin: 0; padding-left: 14px; }
   .matrix-cell.empty { color: #ccc; text-align: center; }
   .term-wk-hd { white-space: nowrap; font-weight: 700; text-align: center; }
@@ -208,6 +207,26 @@
   .term-wk-cell { min-width: 70px; }
   .term-wk-cell.exam { background: #eef5fc; color: #888; }
   .term-subj-hd { font-weight: 700; background: #f3f3f3; }
+
+  /* Progressive disclosure: advanced-only controls are hidden in Basic mode. */
+  .adv-only { display: none; }
+  body.advanced-mode .adv-only { display: revert; }
+  .mode-toggle { display: inline-flex; border: 1px solid var(--border2); border-radius: 6px; overflow: hidden; }
+  .mode-toggle button { font-family: sans-serif; font-size: 11px; padding: 6px 10px; border: none; background: #fff; cursor: pointer; }
+  .mode-toggle button.active { background: #17626d; color: #fff; }
+  details.adv-block { margin: 2px 0 8px; }
+  details.adv-block > summary { cursor: pointer; font-family: sans-serif; font-size: 11px; color: #888; padding: 2px 0; }
+
+  .start-here-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; margin-bottom: 1.25rem; }
+  @media (max-width: 640px) { .start-here-grid { grid-template-columns: 1fr; } }
+  .start-step { border: 1px solid var(--border2); border-radius: 8px; padding: 12px 14px; font-family: sans-serif; }
+  .start-step h3 { margin: 0 0 4px; font-size: 13px; }
+  .start-step p { margin: 0 0 8px; font-size: 12px; color: #666; }
+  .start-step.done { border-color: #639922; background: #f6faf0; }
+  .needs-decisions { border: 1px solid #ef9f27; background: #fff8ec; border-radius: 8px; padding: 12px 14px; font-family: sans-serif; margin-bottom: 1.25rem; }
+  .needs-decisions h3 { margin: 0 0 6px; font-size: 13px; color: #a3690f; }
+  .needs-decisions ul { margin: 0; padding-left: 18px; font-size: 12px; }
+  .needs-decisions.empty { border-color: #639922; background: #f6faf0; color: #3b6d11; }
 
   @media print {
     .top-bar, .tabs, .behind-row, .child-tabs, .term-btns { display: none !important; }
@@ -237,22 +256,30 @@
   <div id="migrate-banner-holder"></div>
 
   <div class="top-bar">
-    <button class="util-btn" onclick="doPrint()">Print this view</button>
+    <div class="mode-toggle" id="mode-toggle"></div>
     <button class="util-btn" onclick="exportData()">Export backup (.json)</button>
     <button class="util-btn" onclick="importPrompt()">Import backup</button>
     <button class="util-btn" onclick="resetAll()">Reset to demo plan</button>
   </div>
 
   <div class="tabs">
-    <button class="tab active" onclick="sw('setup',this)">Family Setup</button>
-    <button class="tab" onclick="sw('forms',this)">Forms</button>
-    <button class="tab" onclick="sw('cycles',this)">History cycles</button>
+    <button class="tab active" onclick="sw('start',this)">Start Here</button>
+    <button class="tab" onclick="sw('setup',this)">Family Setup</button>
+    <button class="tab adv-only" onclick="sw('forms',this)">Forms</button>
+    <button class="tab adv-only" onclick="sw('cycles',this)">History cycles</button>
     <button class="tab" onclick="sw('cats',this)">Categories</button>
+    <button class="tab" onclick="sw('whodoes',this)">Who Does What</button>
     <button class="tab" onclick="sw('sched',this)">Weekly schedule</button>
-    <button class="tab" onclick="sw('loops',this)">Loops &amp; Rhythm</button>
+    <button class="tab adv-only" onclick="sw('loops',this)">Loops &amp; Rhythm</button>
   </div>
 
-  <div id="panel-setup" class="panel active">
+  <div id="panel-start" class="panel active">
+    <div id="needs-decisions-start"></div>
+    <div class="start-here-grid" id="start-steps"></div>
+    <p class="fs-help">This planner has a lot under the hood — Loops &amp; Rhythm, per-book scheduling styles, daily load rules, and more. Everything stays available, but it's tucked behind "Advanced mode" (toggle in the top bar) so the basics stay simple while you're getting set up.</p>
+  </div>
+
+  <div id="panel-setup" class="panel">
     <div class="fs-section">
       <h2>Children</h2>
       <p class="fs-help">Add each child you're planning for. Their Form determines which categories apply to them by default (you can refine per-category on the Categories tab). School days/week drives the pacing math.</p>
@@ -304,6 +331,12 @@
     <div id="cat-list"></div>
   </div>
 
+  <div id="panel-whodoes" class="panel">
+    <p class="fs-help">Who does what, by subject — your planning hub. This is not week-based; it's the at-a-glance answer to "what is each person studying right now."</p>
+    <div id="needs-decisions-whodoes"></div>
+    <div id="whodoes-out"></div>
+  </div>
+
   <div id="panel-sched" class="panel">
     <div class="behind-row">
       <span class="behind-lbl">Weeks behind schedule</span>
@@ -337,6 +370,7 @@ import * as L from './lib/logic.mjs';
 window.L = L; // expose to inline onclick handlers below
 
 var openC = {}, behind = 0, term = 1, schedChild = 'all';
+var uiMode = 'basic'; // 'basic' | 'advanced' — progressive disclosure; persisted separately from app data
 var currentChildFilter = 'all';
 var APP; // top-level { version, familySetup, categories, uiState, overrides }
 var FAMILY, CATS, OVERRIDES, LOOPS; // shortcuts kept in sync with APP
@@ -758,7 +792,7 @@ function renderCats() {
       '<button class="mini-btn" onclick="addSubcatUI(\'' + escAttr(grp.grp) + '\')" title="Add category">+ Category</button>' +
       '<button class="mini-btn" onclick="deleteGroupUI(\'' + escAttr(grp.grp) + '\')" title="Delete group">Delete group</button>' +
       '</span></div>';
-    h += '<div class="freq-inline" style="margin:-4px 0 8px;"><span style="font-size:11px;color:#888;">Group default loop:</span><select onchange="updateGroupDefaultLoop(\'' + escAttr(grp.grp) + '\',this.value)">';
+    h += '<div class="freq-inline adv-only" style="margin:-4px 0 8px;"><span style="font-size:11px;color:#888;">Group default loop:</span><select onchange="updateGroupDefaultLoop(\'' + escAttr(grp.grp) + '\',this.value)">';
     h += '<option value="">— none —</option>';
     LOOPS.forEach(function (lp) { h += '<option value="' + lp.id + '"' + (grp.defaultLoopId === lp.id ? ' selected' : '') + '>' + escAttr(lp.name) + '</option>'; });
     h += '</select></div>';
@@ -786,7 +820,7 @@ function renderCats() {
       h += '<button class="mini-btn" onclick="event.stopPropagation();deleteSubcatUI(\'' + escAttr(grp.grp) + '\',\'' + cat.id + '\')" title="Delete category">Delete</button>';
       h += '</div>';
 
-      h += '<div class="freq-inline" onclick="event.stopPropagation()"><span style="font-size:11px;color:#888;">Default loop for loop-rotation books here:</span><select onchange="updateCatDefaultLoop(\'' + cat.id + '\',this.value)">';
+      h += '<div class="freq-inline adv-only" onclick="event.stopPropagation()"><span style="font-size:11px;color:#888;">Default loop for loop-rotation books here:</span><select onchange="updateCatDefaultLoop(\'' + cat.id + '\',this.value)">';
       h += '<option value="">— none —</option>';
       LOOPS.forEach(function (lp) { h += '<option value="' + lp.id + '"' + (cat.defaultLoopId === lp.id ? ' selected' : '') + '>' + escAttr(lp.name) + '</option>'; });
       h += '</select></div>';
@@ -841,7 +875,8 @@ function renderCats() {
           h += '</div>';
         }
         var nb = L.normalizeBook(b);
-        h += '<div class="book-fields2" onclick="event.stopPropagation()">';
+        h += '<details class="adv-block adv-only" onclick="event.stopPropagation()"><summary>Advanced options (scheduling style, status, pacing, loop, daily load)</summary>';
+        h += '<div class="book-fields2">';
         h += '<div><label>Audience</label><select onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'audienceType\',this.value)">';
         L.AUDIENCE_TYPES.forEach(function (a) { h += '<option value="' + a + '"' + (nb.audienceType === a ? ' selected' : '') + '>' + a + '</option>'; });
         h += '</select></div>';
@@ -870,8 +905,8 @@ function renderCats() {
         h += '<option value=""' + (!nb.conflictGroup ? ' selected' : '') + '>— none —</option>';
         L.CONFLICT_GROUPS.forEach(function (g) { h += '<option value="' + g + '"' + (nb.conflictGroup === g ? ' selected' : '') + '>' + g + '</option>'; });
         h += '</select></div>';
-        h += '</div>';
-        h += '<div class="book-actions">';
+        h += '</div></details>';
+        h += '<div class="book-actions adv-only">';
         h += '<button class="mini-btn" onclick="rebalanceBookUI(\'' + cat.id + '\',' + bi + ')" title="Rebalance remaining sittings from current progress to end week">Rebalance from here</button>';
         h += '<button class="mini-btn" onclick="pauseBookUI(\'' + cat.id + '\',' + bi + ')">Pause until week…</button>';
         h += '<button class="mini-btn" onclick="finishBookUI(\'' + cat.id + '\',' + bi + ')">Finish by week…</button>';
@@ -932,9 +967,9 @@ window.setSchedView = function (v) { schedView = v; renderTermBtns(); renderWeek
 
 function renderSchedViews() {
   var el = document.getElementById('sched-views'); if (!el) return;
-  var views = [['matrix', 'Family Coverage Matrix'], ['termchart', 'AO-style Term Chart'], ['daily', 'Daily Checklist'], ['cards', 'Week Cards (optional)']];
+  var views = [['matrix', 'Family Coverage Matrix', false], ['termchart', 'AO-style Term Chart', false], ['daily', 'Daily Checklist', false], ['cards', 'Week Cards (optional)', true]];
   var h = '';
-  views.forEach(function (v) { h += '<button class="sv-btn' + (schedView === v[0] ? ' active' : '') + '" onclick="setSchedView(\'' + v[0] + '\')">' + v[1] + '</button>'; });
+  views.forEach(function (v) { h += '<button class="sv-btn' + (schedView === v[0] ? ' active' : '') + (v[2] ? ' adv-only' : '') + '" onclick="setSchedView(\'' + v[0] + '\')">' + v[1] + '</button>'; });
   el.innerHTML = h;
 }
 
@@ -970,9 +1005,9 @@ function renderSchedToggles() {
     return;
   }
   var h = '';
-  h += '<label><input type="checkbox" ' + (schedToggle.showCoop ? 'checked' : '') + ' onchange="setSchedToggle(\'showCoop\',this.checked)"> Show co-op/outside work</label>';
-  h += '<label><input type="checkbox" ' + (schedToggle.showUnassigned ? 'checked' : '') + ' onchange="setSchedToggle(\'showUnassigned\',this.checked)"> Show unassigned items</label>';
-  h += '<label><input type="checkbox" ' + (schedToggle.hideOptionalLoop ? 'checked' : '') + ' onchange="setSchedToggle(\'hideOptionalLoop\',this.checked)"> Hide optional/loop subjects</label>';
+  h += '<label class="adv-only"><input type="checkbox" ' + (schedToggle.showCoop ? 'checked' : '') + ' onchange="setSchedToggle(\'showCoop\',this.checked)"> Show co-op/outside work</label>';
+  h += '<label class="adv-only"><input type="checkbox" ' + (schedToggle.showUnassigned ? 'checked' : '') + ' onchange="setSchedToggle(\'showUnassigned\',this.checked)"> Show unassigned items</label>';
+  h += '<label class="adv-only"><input type="checkbox" ' + (schedToggle.hideOptionalLoop ? 'checked' : '') + ' onchange="setSchedToggle(\'hideOptionalLoop\',this.checked)"> Hide optional/loop subjects</label>';
   h += '<label>Show: <select onchange="setSchedToggle(\'audience\',this.value)" style="font-family:sans-serif;font-size:11px;">' +
     '<option value="all"' + (schedToggle.audience === 'all' ? ' selected' : '') + '>All children</option>' +
     '<option value="together"' + (schedToggle.audience === 'together' ? ' selected' : '') + '>Together work only</option>' +
@@ -1045,6 +1080,7 @@ function renderWeeklyBySubjectView() {
     h += '</div></div>';
   });
   h += '<button class="util-btn" style="margin-top:10px;" onclick="resetOverridesUI()">Reset generated assignments</button>';
+  h += '<button class="util-btn" style="margin-top:10px;" onclick="doPrint()">Print' + (schedChild !== 'all' ? ' full-year term pages for this child' : ' this week') + '</button>';
   out.innerHTML = h;
 }
 
@@ -1092,6 +1128,7 @@ function renderDailyViewUI() {
       h += '<div class="day-col"><div class="day-n">Day ' + d + '</div>' + slotsHTML + '</div>';
     }
     h += '</div>';
+    h += '<button class="util-btn" style="margin-top:10px;" onclick="window.print()">Print today\'s checklist</button>';
     out.innerHTML = h;
     return;
   }
@@ -1108,6 +1145,7 @@ function renderDailyViewUI() {
     h2 += '</div>';
   });
   h2 += '</div>';
+  h2 += '<button class="util-btn" style="margin-top:10px;" onclick="window.print()">Print today\'s checklist</button>';
   out.innerHTML = h2;
 }
 
@@ -1463,6 +1501,109 @@ window.stm = function (n, btn) {
 };
 
 // ---------------------------------------------------------------------------
+// Basic / Advanced mode toggle — progressive disclosure. Advanced features
+// (Loops & Rhythm, per-book scheduling style/loop/pacing controls, Week
+// Cards, co-op/optional-loop filters) stay fully present in the data model
+// and CSS-hidden via .adv-only, not removed.
+// ---------------------------------------------------------------------------
+function loadUiMode() {
+  try { return localStorage.getItem('cm_blueprint_ui_mode') || 'basic'; } catch (e) { return 'basic'; }
+}
+function applyUiMode() {
+  document.body.classList.toggle('advanced-mode', uiMode === 'advanced');
+  var el = document.getElementById('mode-toggle'); if (!el) return;
+  el.innerHTML =
+    '<button class="' + (uiMode === 'basic' ? 'active' : '') + '" onclick="setUiMode(\'basic\')">Basic</button>' +
+    '<button class="' + (uiMode === 'advanced' ? 'active' : '') + '" onclick="setUiMode(\'advanced\')">Advanced</button>';
+}
+window.setUiMode = function (m) {
+  uiMode = m;
+  try { localStorage.setItem('cm_blueprint_ui_mode', m); } catch (e) {}
+  applyUiMode();
+  renderAll();
+  var schedPanel = document.getElementById('panel-sched');
+  if (schedPanel && schedPanel.classList.contains('active')) { renderSchedViews(); renderSchedToggles(); renderSchedule(); }
+};
+
+// ---------------------------------------------------------------------------
+// Needs Decisions — surfaces everything still waiting on a planning choice:
+// loop-rotation books with no resolvable loop, and categories with no books
+// assigned yet. Shown on Start Here and the Who Does What hub.
+// ---------------------------------------------------------------------------
+function buildNeedsDecisions() {
+  var out = [];
+  L.findBooksNeedingLoopAssignment(CATS).forEach(function (n) {
+    out.push({ text: n.grpName + ' — ' + n.catName + ': "' + n.title + '" needs a loop assigned.', tab: 'cats' });
+  });
+  CATS.forEach(function (grp) {
+    grp.items.forEach(function (cat) {
+      if (cat.bks.length === 0) out.push({ text: grp.grp + ' — ' + cat.name + ' has no books assigned yet.', tab: 'cats' });
+    });
+  });
+  return out;
+}
+function renderNeedsDecisionsInto(elId) {
+  var el = document.getElementById(elId); if (!el) return;
+  var items = buildNeedsDecisions();
+  if (!items.length) { el.innerHTML = '<div class="needs-decisions empty"><h3>Needs Decisions</h3>Nothing waiting on a decision right now.</div>'; return; }
+  var h = '<div class="needs-decisions"><h3>Needs Decisions (' + items.length + ')</h3><ul>';
+  items.forEach(function (it) { h += '<li>' + escAttr(it.text) + '</li>'; });
+  h += '</ul></div>';
+  el.innerHTML = h;
+}
+
+// ---------------------------------------------------------------------------
+// Start Here — a short onboarding checklist pointing at the rest of the app.
+// ---------------------------------------------------------------------------
+function renderStartHere() {
+  renderNeedsDecisionsInto('needs-decisions-start');
+  var el = document.getElementById('start-steps'); if (!el) return;
+  var steps = [
+    { done: FAMILY.children.length > 0, title: '1. Add your children', body: 'Set each child\'s name, Form, and school days/week.', tab: 'setup', label: 'Go to Family Setup' },
+    { done: CATS.some(function (g) { return g.items.some(function (c) { return c.bks.length > 0; }); }), title: '2. Set up subjects & books', body: 'Add the books/resources you\'re using for each subject category.', tab: 'cats', label: 'Go to Categories' },
+    { done: CATS.length > 0, title: '3. See who does what', body: 'Check the coverage matrix to confirm every subject is assigned to the right person.', tab: 'whodoes', label: 'Go to Who Does What' },
+    { done: false, title: '4. Check the daily checklist', body: 'Once books are assigned, the Daily Checklist tells you what to actually do today.', tab: 'sched', label: 'Go to Weekly schedule' }
+  ];
+  var h = '';
+  steps.forEach(function (s) {
+    h += '<div class="start-step' + (s.done ? ' done' : '') + '"><h3>' + escAttr(s.title) + (s.done ? ' ✓' : '') + '</h3><p>' + escAttr(s.body) + '</p>';
+    h += '<button class="util-btn" onclick="swByName(\'' + s.tab + '\')">' + escAttr(s.label) + '</button></div>';
+  });
+  el.innerHTML = h;
+}
+// Programmatic tab switch (no click event target available, e.g. from Start Here buttons).
+window.swByName = function (name) {
+  var btn = document.querySelector('.tabs .tab[onclick*="\'' + name + '\'"]');
+  if (btn) sw(name, btn);
+};
+
+// ---------------------------------------------------------------------------
+// Who Does What — the Family Coverage Matrix promoted to its own early tab,
+// so "who's doing what subject" doesn't require digging into the Schedule
+// tab's sub-views.
+// ---------------------------------------------------------------------------
+function renderWhoDoesWhat() {
+  renderNeedsDecisionsInto('needs-decisions-whodoes');
+  var out = document.getElementById('whodoes-out'); if (!out) return;
+  var m = L.buildFamilyCoverageMatrix(CATS, FAMILY.children, LOOPS);
+  var h = '<div class="matrix-wrap"><table class="matrix-table"><thead><tr><th class="matrix-row-hd">Audience</th>';
+  m.columns.forEach(function (c) { h += '<th class="matrix-subj-hd" style="border-bottom:3px solid ' + c.col + ';color:' + c.col + ';">' + escAttr(c.grp) + '</th>'; });
+  h += '</tr></thead><tbody>';
+  m.rows.forEach(function (row) {
+    h += '<tr><td class="matrix-row-hd">' + escAttr(row.label) + '</td>';
+    m.columns.forEach(function (c) {
+      var cell = row.cells[c.grp];
+      if (!cell || !cell.length) { h += '<td class="matrix-cell empty">&mdash;</td>'; return; }
+      h += '<td class="matrix-cell"><ul>' + cell.map(function (t) { return '<li>' + escAttr(t) + '</li>'; }).join('') + '</ul></td>';
+    });
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<button class="util-btn" style="margin-top:10px;" onclick="window.print()">Print this view</button>';
+  out.innerHTML = h;
+}
+
+// ---------------------------------------------------------------------------
 // Tab switching + boot
 // ---------------------------------------------------------------------------
 window.sw = function (name, el) {
@@ -1475,6 +1616,8 @@ window.sw = function (name, el) {
   if (name === 'cats') renderCats();
   if (name === 'setup') { renderChildren(); renderSchoolYearForm(); renderCycleSelect(); }
   if (name === 'loops') renderLoopsTab();
+  if (name === 'start') renderStartHere();
+  if (name === 'whodoes') renderWhoDoesWhat();
 };
 
 function renderAll() {
@@ -1486,7 +1629,12 @@ function renderAll() {
   renderForms();
   renderCycles();
   renderCats();
+  if (document.getElementById('panel-start').classList.contains('active')) renderStartHere();
+  if (document.getElementById('panel-whodoes').classList.contains('active')) renderWhoDoesWhat();
 }
+
+uiMode = loadUiMode();
+applyUiMode();
 
 APP = loadApp();
 if (!APP.needsMigration) {
