@@ -939,6 +939,160 @@ test('Together work and individual work are treated separately for load rules un
 });
 
 // ---------------------------------------------------------------------------
+// Needs Decisions v2 — grouping, statuses, and "leaves urgent once resolved"
+// ---------------------------------------------------------------------------
+test('A blank subcategory defaults to active and is urgent (Content) by default', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const d = L.buildNeedsDecisions(cats, fs);
+  const genSci = L.findCategory(cats, 'sc-gen');
+  assert.equal(L.resolveDecisionStatus(genSci), 'active');
+  assert.ok(d.content.some(x => x.catId === 'sc-gen'));
+});
+
+test('Marking a blank subcategory practice-no-book removes it from urgent Content', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const genSci = L.findCategory(cats, 'sc-gen');
+  L.setSubcategoryDecisionStatus(genSci, 'practice-no-book');
+  const d = L.buildNeedsDecisions(cats, fs);
+  assert.ok(!d.content.some(x => x.catId === 'sc-gen'));
+  assert.ok(d.optional.some(x => x.catId === 'sc-gen'));
+});
+
+test('Marking a blank subcategory "ignore this year" removes it from every bucket', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const genSci = L.findCategory(cats, 'sc-gen');
+  L.setSubcategoryDecisionStatus(genSci, 'ignored');
+  const d = L.buildNeedsDecisions(cats, fs);
+  assert.ok(!d.content.some(x => x.catId === 'sc-gen'));
+  assert.ok(!d.optional.some(x => x.catId === 'sc-gen'));
+});
+
+test('Loop-assignment gaps are grouped under Scheduling, not Content', () => {
+  const cats = L.demoCategories();
+  const grp = cats.find(g => g.grp === 'Math');
+  const cat = grp.items[0];
+  cat.bks.push(Object.assign({ t: 'Loop book' }, L.normalizeBook({ t: 'Loop book', tot: 10, per: 1, unitType: 'lessons' }), { scheduleStyle: 'loop-rotation', loopId: null }));
+  const fs = L.demoFamilySetup();
+  const d = L.buildNeedsDecisions(cats, fs);
+  assert.ok(d.scheduling.some(x => x.text.includes('Loop book')));
+  assert.ok(!d.content.some(x => x.text.includes('Loop book')));
+});
+
+test('Missing children/categories surface as Required setup decisions', () => {
+  const fs = { children: [] };
+  const d = L.buildNeedsDecisions([], fs);
+  assert.ok(d.requiredSetup.length >= 1);
+});
+
+test('countUrgentDecisions counts requiredSetup + scheduling + content, not optional', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const before = L.countUrgentDecisions(L.buildNeedsDecisions(cats, fs));
+  const genSci = L.findCategory(cats, 'sc-gen');
+  L.setSubcategoryDecisionStatus(genSci, 'co-op-external');
+  const after = L.countUrgentDecisions(L.buildNeedsDecisions(cats, fs));
+  assert.equal(after, before - 1);
+});
+
+// ---------------------------------------------------------------------------
+// Who Does What — editable audience reassignment
+// ---------------------------------------------------------------------------
+test('setCategoryAudience moves a subcategory to a custom shared group', () => {
+  const cats = L.demoCategories();
+  const cat = L.findCategory(cats, 'math');
+  L.setCategoryAudience(cat, { type: 'shared-group', sharedGroupLabel: 'Older Kids' });
+  assert.ok(cat.bks.every(b => b.audienceType === 'shared-group' && b.sharedGroupLabel === 'Older Kids'));
+});
+
+test('setCategoryAudience moves a subcategory to specific individual children', () => {
+  const cats = L.demoCategories();
+  const cat = L.findCategory(cats, 'math');
+  L.setCategoryAudience(cat, { type: 'individual', assignedChildren: ['lucy', 'jeremiah'] });
+  assert.ok(cat.bks.every(b => b.audienceType === 'individual' && b.assignedChildren.length === 2));
+  const fs = L.demoFamilySetup();
+  const aud = L.resolveBookAudience(cat.bks[0], cat, fs.children);
+  assert.deepEqual(aud.map(c => c.id).sort(), ['jeremiah', 'lucy']);
+});
+
+test('listCustomGroupLabels finds distinct shared-group labels in use', () => {
+  const cats = L.demoCategories();
+  L.setCategoryAudience(L.findCategory(cats, 'math'), { type: 'shared-group', sharedGroupLabel: 'Littles Together' });
+  L.setCategoryAudience(L.findCategory(cats, 'gr'), { type: 'shared-group', sharedGroupLabel: 'Littles Together' });
+  const labels = L.listCustomGroupLabels(cats);
+  assert.deepEqual(labels, ['Littles Together']);
+});
+
+// ---------------------------------------------------------------------------
+// CSV export
+// ---------------------------------------------------------------------------
+test('termChartToCSV produces a header row plus one row per book', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const chart = L.buildAOTermChart(cats, fs.children, fs.schoolYear, 1, 'all', {});
+  const csv = L.termChartToCSV(chart);
+  const lines = csv.split('\n');
+  assert.ok(lines[0].startsWith('Subject,Item,Wk'));
+  const totalRows = chart.groups.reduce((n, g) => n + g.rows.length, 0);
+  assert.equal(lines.length, totalRows + 1);
+});
+
+test('bookProgressToCSV escapes commas and reports % complete', () => {
+  const cats = L.demoCategories();
+  const cat = L.findCategory(cats, 'math');
+  cat.bks[0].currentUnit = 72; // half of tot:144
+  const csv = L.bookProgressToCSV(cats, [], {});
+  const lines = csv.split('\n');
+  const mathLine = lines.find(l => l.includes('Math curriculum'));
+  assert.ok(mathLine.endsWith(',50'));
+});
+
+// ---------------------------------------------------------------------------
+// Long-term year tools
+// ---------------------------------------------------------------------------
+test('duplicateYear resets progress/overrides but keeps setup and books', () => {
+  const app = L.freshAppData();
+  app.categories.find(g => g.grp === 'Math').items[0].bks[0].currentUnit = 50;
+  app.overrides['x|1'] = 'manual text';
+  const dup = L.duplicateYear(app);
+  assert.equal(dup.categories.find(g => g.grp === 'Math').items[0].bks[0].currentUnit, 0);
+  assert.deepEqual(dup.overrides, {});
+  assert.equal(dup.familySetup.children.length, app.familySetup.children.length);
+  assert.notEqual(dup, app);
+});
+
+test('archiveYear marks the copy archived without mutating the original', () => {
+  const app = L.freshAppData();
+  const archived = L.archiveYear(app, 'Year 2026-27');
+  assert.equal(archived.archived, true);
+  assert.equal(archived.archivedLabel, 'Year 2026-27');
+  assert.equal(app.archived, undefined);
+});
+
+test('resetProgress clears currentUnit/overrides but preserves dropped status', () => {
+  const app = L.freshAppData();
+  const book = app.categories.find(g => g.grp === 'Math').items[0].bks[0];
+  book.currentUnit = 80;
+  book.status = 'dropped';
+  app.overrides['x|1'] = 'manual';
+  const reset = L.resetProgress(app);
+  const rb = reset.categories.find(g => g.grp === 'Math').items[0].bks[0];
+  assert.equal(rb.currentUnit, 0);
+  assert.equal(rb.status, 'dropped');
+  assert.deepEqual(reset.overrides, {});
+});
+
+test('keepSetupChooseNewCycle changes only the history cycle id', () => {
+  const app = L.freshAppData();
+  const updated = L.keepSetupChooseNewCycle(app, 2);
+  assert.equal(updated.familySetup.historyCycleId, 2);
+  assert.equal(app.familySetup.historyCycleId, 4);
+  assert.equal(updated.categories.length, app.categories.length);
+});
+
+// ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
 let passed = 0, failed = 0;

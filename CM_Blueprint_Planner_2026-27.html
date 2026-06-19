@@ -228,11 +228,27 @@
   .needs-decisions ul { margin: 0; padding-left: 18px; font-size: 12px; }
   .needs-decisions.empty { border-color: #639922; background: #f6faf0; color: #3b6d11; }
 
+  .nd-group, .decision-group { margin: 8px 0; }
+  .nd-group h4, .decision-group h4 { margin: 0 0 4px; font-size: 12px; color: #a3690f; }
+  .nd-group ul, .decision-group ul { margin: 0; padding-left: 18px; font-size: 12px; }
+  .nd-group li, .decision-group li { margin-bottom: 6px; }
+  .decision-actions { margin: 3px 0 2px; }
+  .decision-actions .mini-btn { font-size: 11px; margin: 2px 4px 2px 0; }
+  .wdw-editor { margin-top: 14px; }
+  .wdw-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid #eee; font-family: sans-serif; font-size: 12px; }
+  .wdw-name { flex: 1 1 220px; min-width: 180px; }
+  .wdw-child-chk { font-size: 11px; white-space: nowrap; }
+  .year-tools-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; margin-top: 10px; }
+  @media (max-width: 640px) { .year-tools-grid { grid-template-columns: 1fr; } }
+  .year-tool { border: 1px solid var(--border2); border-radius: 8px; padding: 12px 14px; font-family: sans-serif; }
+  .year-tool h3 { margin: 0 0 4px; font-size: 13px; }
+  .year-tool p { margin: 0 0 8px; font-size: 12px; color: #666; }
+
   @media print {
     .top-bar, .tabs, .behind-row, .child-tabs, .term-btns { display: none !important; }
     .matrix-table, .term-chart-table { font-size: 9px; }
     .matrix-table th, .matrix-table td, .term-chart-table th, .term-chart-table td { padding: 3px 4px; }
-    .panel { display: block !important; }
+    .wdw-editor { display: none !important; }
     body { background: white; }
     body.print-sched-mode > *:not(#print-area) { display: none !important; }
     body.print-sched-mode #print-area { display: block !important; }
@@ -265,13 +281,16 @@
 
   <div class="tabs">
     <button class="tab active" onclick="sw('start',this)">Start Here</button>
-    <button class="tab" onclick="sw('setup',this)">Family Setup</button>
-    <button class="tab adv-only" onclick="sw('forms',this)">Forms</button>
-    <button class="tab adv-only" onclick="sw('cycles',this)">History cycles</button>
-    <button class="tab" onclick="sw('cats',this)">Categories</button>
+    <button class="tab" onclick="sw('setup',this)">Our Family</button>
     <button class="tab" onclick="sw('whodoes',this)">Who Does What</button>
-    <button class="tab" onclick="sw('sched',this)">Weekly schedule</button>
-    <button class="tab adv-only" onclick="sw('loops',this)">Loops &amp; Rhythm</button>
+    <button class="tab" onclick="sw('cats',this)">Subjects &amp; Books</button>
+    <button class="tab" onclick="swView('termchart',this)">Term Plan</button>
+    <button class="tab" onclick="swView('daily',this)">Today</button>
+    <button class="tab" onclick="swView('progress',this)">Progress</button>
+    <button class="tab adv-only" onclick="sw('loops',this)">Rhythm &amp; Loops</button>
+    <button class="tab adv-only" onclick="sw('schedrules',this)">Scheduling Rules</button>
+    <button class="tab adv-only" onclick="sw('reference',this)">Reference</button>
+    <button class="tab adv-only" onclick="sw('backup',this)">Backup / Restore</button>
   </div>
 
   <div id="panel-start" class="panel active">
@@ -311,14 +330,44 @@
     </div>
   </div>
 
-  <div id="panel-forms" class="panel">
-    <p style="font-size:13px;color:#4a4a4a;margin-bottom:1.25rem;font-family:sans-serif;">Forms are developmental stages, not strict grade levels. We collapse the traditional six PNEU Forms (I, II, III, IV, V, VI) into four bands for ease of planning — Form III/IV and Form V/VI are historically taught as combined programmes. Which Forms your family actually uses is determined by the children you add on the Family Setup tab.</p>
-    <div class="form-grid" id="form-grid"></div>
+  <div id="panel-reference" class="panel">
+    <div class="fs-section">
+      <h2>Forms</h2>
+      <p style="font-size:13px;color:#4a4a4a;margin-bottom:1.25rem;font-family:sans-serif;">Forms are developmental stages, not strict grade levels. We collapse the traditional six PNEU Forms (I, II, III, IV, V, VI) into four bands for ease of planning — Form III/IV and Form V/VI are historically taught as combined programmes. Which Forms your family actually uses is determined by the children you add on the Our Family tab.</p>
+      <div class="form-grid" id="form-grid"></div>
+    </div>
+    <div class="fs-section">
+      <h2>History cycle</h2>
+      <p style="font-size:13px;color:#4a4a4a;margin-bottom:1.25rem;font-family:sans-serif;">4-year cycle. Spine options: Story of the World, Mystery of History, or Biblioplan. Set your current cycle on the Our Family tab.</p>
+      <div class="cycle-grid" id="cyc-grid"></div>
+    </div>
   </div>
 
-  <div id="panel-cycles" class="panel">
-    <p style="font-size:13px;color:#4a4a4a;margin-bottom:1.25rem;font-family:sans-serif;">4-year CM-aligned cycle. Spine options: Story of the World, Mystery of History, or Biblioplan. Set your current cycle on the Family Setup tab.</p>
-    <div class="cycle-grid" id="cyc-grid"></div>
+  <div id="panel-schedrules" class="panel">
+    <p class="fs-help">Filters that shape what shows up on Term Plan and Today, without changing your books or assignments.</p>
+    <div class="sched-toggles" id="schedrules-toggles"></div>
+  </div>
+
+  <div id="panel-backup" class="panel">
+    <p class="fs-help">Backups and longer-term year management. Export a full backup before any of the reset/duplicate actions below — they can't be undone from inside the app.</p>
+    <div class="fs-section">
+      <h2>Backup</h2>
+      <button class="util-btn" onclick="exportData()">Export backup (.json)</button>
+      <button class="util-btn" onclick="importPrompt()">Import backup</button>
+      <button class="util-btn" onclick="resetAll()">Reset to demo plan</button>
+    </div>
+    <div class="fs-section">
+      <h2>Year tools</h2>
+      <div class="year-tools-grid">
+        <div class="year-tool"><h3>Duplicate this year</h3><p>Start a new year with the same setup and books, progress and overrides reset to fresh.</p><button class="util-btn" onclick="duplicateYearUI()">Duplicate into new year</button></div>
+        <div class="year-tool"><h3>Archive completed year</h3><p>Marks this saved plan as archived (a label only — export a backup to keep a permanent copy).</p><button class="util-btn" onclick="archiveYearUI()">Archive this year</button></div>
+        <div class="year-tool"><h3>Reset progress</h3><p>Clears book progress and manual schedule edits. Setup and books stay exactly as they are.</p><button class="util-btn" onclick="resetProgressUI()">Reset progress only</button></div>
+        <div class="year-tool"><h3>Keep setup, new cycle</h3><p>Keep children, school year, and books — just switch which history cycle you're in.</p>
+          <select id="backup-new-cycle" style="font-family:sans-serif;font-size:12px;padding:5px 7px;border:1px solid var(--border2);border-radius:5px;margin-bottom:8px;"></select>
+          <button class="util-btn" onclick="keepSetupNewCycleUI()">Apply new cycle</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="panel-cats" class="panel">
@@ -377,7 +426,7 @@ var APP; // top-level { version, familySetup, categories, uiState, overrides }
 var FAMILY, CATS, OVERRIDES, LOOPS; // shortcuts kept in sync with APP
 
 // Schedule tab view state (session-only; not persisted)
-var schedView = 'matrix'; // 'matrix' | 'termchart' | 'daily' | 'cards' | 'audit'
+var schedView = 'termchart'; // 'termchart' (Term Plan) | 'daily' (Today) | 'progress' | 'cards' (adv.) | 'audit'
 var schedWeek = null; // absolute week number selected within the term (subject/daily views)
 var openSubj = {}; // collapse state for Weekly-by-Subject group sections
 var schedToggle = { showCoop: false, hideOptionalLoop: false, showUnassigned: true, audience: 'all' }; // audience: 'all'|'together'|'togetherPlus'
@@ -968,7 +1017,9 @@ window.setSchedView = function (v) { schedView = v; renderTermBtns(); renderWeek
 
 function renderSchedViews() {
   var el = document.getElementById('sched-views'); if (!el) return;
-  var views = [['matrix', 'Family Coverage Matrix', false], ['termchart', 'AO-style Term Chart', false], ['daily', 'Daily Checklist', false], ['cards', 'Week Cards (optional)', true]];
+  // The Term Plan / Today / Progress tabs already control schedView; this row
+  // only offers the advanced-only Week Cards layout as an extra option.
+  var views = [['cards', 'Week Cards (optional)', true]];
   var h = '';
   views.forEach(function (v) { h += '<button class="sv-btn' + (schedView === v[0] ? ' active' : '') + (v[2] ? ' adv-only' : '') + '" onclick="setSchedView(\'' + v[0] + '\')">' + v[1] + '</button>'; });
   el.innerHTML = h;
@@ -976,7 +1027,7 @@ function renderSchedViews() {
 
 function renderWeekPicker() {
   var el = document.getElementById('week-picker'); if (!el) return;
-  if (schedView === 'matrix' || schedView === 'termchart') { el.innerHTML = ''; return; }
+  if (schedView === 'termchart' || schedView === 'progress') { el.innerHTML = ''; return; }
   var ranges = L.termRanges(FAMILY.schoolYear);
   var range = ranges[term]; if (!range) { el.innerHTML = ''; return; }
   if (schedWeek == null || schedWeek < range[0] || schedWeek > range[1]) schedWeek = range[0];
@@ -991,7 +1042,7 @@ window.setSchedWeek = function (v) { schedWeek = parseInt(v, 10); renderSchedule
 
 function renderSchedToggles() {
   var el = document.getElementById('sched-toggles'); if (!el) return;
-  if (schedView === 'matrix') { el.innerHTML = ''; return; }
+  if (schedView === 'progress') { el.innerHTML = ''; return; }
   if (schedView === 'termchart') {
     var h0 = '<label>Filter: <select onchange="setSchedToggle(\'termChartFilter\',this.value)" style="font-family:sans-serif;font-size:11px;">';
     h0 += '<option value="all"' + ((schedToggle.termChartFilter || 'all') === 'all' ? ' selected' : '') + '>Full family</option>';
@@ -1006,9 +1057,6 @@ function renderSchedToggles() {
     return;
   }
   var h = '';
-  h += '<label class="adv-only"><input type="checkbox" ' + (schedToggle.showCoop ? 'checked' : '') + ' onchange="setSchedToggle(\'showCoop\',this.checked)"> Show co-op/outside work</label>';
-  h += '<label class="adv-only"><input type="checkbox" ' + (schedToggle.showUnassigned ? 'checked' : '') + ' onchange="setSchedToggle(\'showUnassigned\',this.checked)"> Show unassigned items</label>';
-  h += '<label class="adv-only"><input type="checkbox" ' + (schedToggle.hideOptionalLoop ? 'checked' : '') + ' onchange="setSchedToggle(\'hideOptionalLoop\',this.checked)"> Hide optional/loop subjects</label>';
   h += '<label>Show: <select onchange="setSchedToggle(\'audience\',this.value)" style="font-family:sans-serif;font-size:11px;">' +
     '<option value="all"' + (schedToggle.audience === 'all' ? ' selected' : '') + '>All children</option>' +
     '<option value="together"' + (schedToggle.audience === 'together' ? ' selected' : '') + '>Together work only</option>' +
@@ -1151,36 +1199,32 @@ function renderDailyViewUI() {
 }
 
 // ---------------------------------------------------------------------------
-// View 1: Family Coverage Matrix — table, subjects as columns, audience as
-// rows. Compact, printable, not week-based. This is the default landing view
-// for Schedule/Planning: "what are we studying."
+// View: Progress — read-only summary of how far each book has gotten.
+// Not week-based; this is "how are we doing," distinct from Term Plan
+// ("where the plan says we should be").
 // ---------------------------------------------------------------------------
-function renderFamilyCoverageMatrix() {
+function renderProgressView() {
   var out = document.getElementById('sched-out'); if (!out) return;
-  var m = L.buildFamilyCoverageMatrix(CATS, FAMILY.children, LOOPS);
-  var needingLoop = L.findBooksNeedingLoopAssignment(CATS);
-  var h = '<p class="fs-help">Coverage overview — who does what, by subject. Not week-based; see the AO-style Term Chart for the week-by-week plan.</p>';
-  if (needingLoop.length) {
-    h += '<div class="rec" style="margin-bottom:10px;">Needs Loop Assignment:<ul style="margin:6px 0 0 18px;">';
-    needingLoop.forEach(function (n) { h += '<li>' + escAttr(n.grpName) + ' — ' + escAttr(n.catName) + ': ' + escAttr(n.title) + '</li>'; });
-    h += '</ul></div>';
-  }
-  h += '<div class="matrix-wrap"><table class="matrix-table"><thead><tr><th class="matrix-row-hd">Audience</th>';
-  m.columns.forEach(function (c) {
-    h += '<th class="matrix-subj-hd" style="border-bottom:3px solid ' + c.col + ';color:' + c.col + ';">' + escAttr(c.grp) + '</th>';
-  });
-  h += '</tr></thead><tbody>';
-  m.rows.forEach(function (row) {
-    h += '<tr><td class="matrix-row-hd">' + escAttr(row.label) + '</td>';
-    m.columns.forEach(function (c) {
-      var cell = row.cells[c.grp];
-      if (!cell || !cell.length) { h += '<td class="matrix-cell empty">&mdash;</td>'; return; }
-      h += '<td class="matrix-cell"><ul>' + cell.map(function (t) { return '<li>' + escAttr(t) + '</li>'; }).join('') + '</ul></td>';
+  var h = '<p class="fs-help">Progress overview — how far each book has gotten so far this year.</p>';
+  h += '<div class="matrix-wrap"><table class="matrix-table"><thead><tr><th class="matrix-row-hd">Subject</th><th class="matrix-row-hd">Book</th><th class="matrix-row-hd">Status</th><th class="matrix-row-hd">Progress</th></tr></thead><tbody>';
+  var any = false;
+  CATS.forEach(function (grp) {
+    grp.items.forEach(function (cat) {
+      cat.bks.forEach(function (b) {
+        any = true;
+        var nb = L.normalizeBook(b);
+        var pct = nb.tot > 0 ? Math.min(100, Math.round(((nb.currentUnit || 0) / nb.tot) * 100)) : 0;
+        h += '<tr><td class="matrix-row-hd">' + escAttr(grp.grp) + ' — ' + escAttr(cat.name) + '</td>';
+        h += '<td class="matrix-cell">' + escAttr(nb.t) + '</td>';
+        h += '<td class="matrix-cell">' + escAttr(nb.status) + '</td>';
+        h += '<td class="matrix-cell">' + (nb.tot > 0 ? (nb.currentUnit || 0) + ' / ' + nb.tot + ' (' + pct + '%)' : '&mdash;') + '</td></tr>';
+      });
     });
-    h += '</tr>';
   });
+  if (!any) h += '<tr><td class="matrix-row-hd" colspan="4" style="color:#aaa;">No books yet — add some under Subjects &amp; Books.</td></tr>';
   h += '</tbody></table></div>';
   h += '<button class="util-btn" style="margin-top:10px;" onclick="window.print()">Print this view</button>';
+  h += ' <button class="util-btn" onclick="window.exportProgressCSV()">Export CSV</button>';
   out.innerHTML = h;
 }
 
@@ -1193,7 +1237,7 @@ function renderAOTermChart() {
   var out = document.getElementById('sched-out'); if (!out) return;
   var filter = schedToggle.termChartFilter || 'all';
   var chart = L.buildAOTermChart(CATS, FAMILY.children, FAMILY.schoolYear, term, filter, { behindWeeks: behind });
-  var h = '<p class="fs-help">Term-by-term plan, AmblesideOnline-chart style. Use the filter above to view the full family, a specific child, or a Form.</p>';
+  var h = '<p class="fs-help">Term-by-term plan — week by week, by subject. Use the filter above to view the full family, a specific child, or a Form.</p>';
   h += '<div class="matrix-wrap"><table class="term-chart-table"><thead><tr><th class="matrix-row-hd">Subject / Book</th>';
   chart.weeks.forEach(function (w) {
     h += '<th class="term-wk-hd' + (chart.examWeeks.indexOf(w) > -1 ? ' exam' : '') + '">Wk ' + w + '</th>';
@@ -1214,7 +1258,8 @@ function renderAOTermChart() {
     });
   });
   h += '</tbody></table></div>';
-  h += '<button class="util-btn" style="margin-top:10px;" onclick="window.print()">Print / export this term</button>';
+  h += '<button class="util-btn" style="margin-top:10px;" onclick="window.printTermPlan()">Print this view (landscape)</button>';
+  h += ' <button class="util-btn" onclick="window.exportTermPlanCSV()">Export CSV</button>';
   out.innerHTML = h;
 }
 
@@ -1267,9 +1312,9 @@ function renderPlanningAudit() {
 }
 
 function renderSchedule() {
-  if (schedView === 'matrix') renderFamilyCoverageMatrix();
-  else if (schedView === 'termchart') renderAOTermChart();
+  if (schedView === 'termchart') renderAOTermChart();
   else if (schedView === 'daily') renderDailyViewUI();
+  else if (schedView === 'progress') renderProgressView();
   else if (schedView === 'cards') renderWeeklyBySubjectView();
   else renderPlanningAudit();
 }
@@ -1489,6 +1534,79 @@ window.doPrint = function () {
 window.onafterprint = function () {
   document.body.classList.remove('print-sched-mode');
   var area = document.getElementById('print-area'); if (area) area.innerHTML = '';
+  var ls = document.getElementById('print-landscape-style'); if (ls) ls.remove();
+};
+
+// ---------------------------------------------------------------------------
+// Scheduling Rules tab (advanced) — filters that used to live inline on the
+// Today/Week Cards toolbar, centralized so Today stays uncluttered.
+// ---------------------------------------------------------------------------
+function renderSchedRulesTab() {
+  var el = document.getElementById('schedrules-toggles'); if (!el) return;
+  var h = '';
+  h += '<label><input type="checkbox" ' + (schedToggle.showCoop ? 'checked' : '') + ' onchange="setSchedToggle(\'showCoop\',this.checked)"> Show co-op/outside work</label>';
+  h += '<label><input type="checkbox" ' + (schedToggle.showUnassigned ? 'checked' : '') + ' onchange="setSchedToggle(\'showUnassigned\',this.checked)"> Show unassigned items</label>';
+  h += '<label><input type="checkbox" ' + (schedToggle.hideOptionalLoop ? 'checked' : '') + ' onchange="setSchedToggle(\'hideOptionalLoop\',this.checked)"> Hide optional/loop subjects</label>';
+  el.innerHTML = h;
+}
+
+// ---------------------------------------------------------------------------
+// Backup / Restore tab (advanced) — export/import/reset plus long-term year
+// tools. All year tools operate on a deep-cloned copy of APP (see logic.mjs),
+// so a mistaken click never silently destroys the in-memory state before the
+// user has a chance to back out via re-import.
+// ---------------------------------------------------------------------------
+function renderBackupTab() {
+  var sel = document.getElementById('backup-new-cycle'); if (!sel) return;
+  var h = '';
+  L.CYCLES.forEach(function (c) { h += '<option value="' + c.n + '"' + (FAMILY.historyCycleId === c.n ? ' selected' : '') + '>Cycle ' + c.n + ' — ' + escAttr(c.era) + '</option>'; });
+  sel.innerHTML = h;
+}
+window.duplicateYearUI = function () {
+  if (!confirm('Duplicate this year into a fresh copy? Progress and overrides reset; setup and books are kept. Export a backup first if you want to keep the current year exactly as it is now.')) return;
+  APP = L.duplicateYear(APP);
+  syncShortcuts(); saveApp(); renderAll();
+  alert('Duplicated. This is now a fresh copy of your setup with progress reset.');
+};
+window.archiveYearUI = function () {
+  var label = prompt('Label for this archived year:', 'Archived ' + new Date().toISOString().slice(0, 10));
+  if (label == null) return;
+  APP = L.archiveYear(APP, label);
+  saveApp();
+  alert('Marked archived. Export a backup to keep a permanent copy of this year.');
+};
+window.resetProgressUI = function () {
+  if (!confirm('Reset all book progress and manual schedule edits? Setup and books stay exactly as they are.')) return;
+  APP = L.resetProgress(APP);
+  syncShortcuts(); saveApp(); renderAll();
+};
+window.keepSetupNewCycleUI = function () {
+  var sel = document.getElementById('backup-new-cycle'); if (!sel) return;
+  APP = L.keepSetupChooseNewCycle(APP, parseInt(sel.value, 10));
+  syncShortcuts(); saveApp(); renderAll();
+  alert('History cycle updated; everything else kept.');
+};
+
+function downloadText(filename, text, mime) {
+  var blob = new Blob([text], { type: mime || 'text/csv' });
+  var url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+window.exportTermPlanCSV = function () {
+  var filter = schedToggle.termChartFilter || 'all';
+  var chart = L.buildAOTermChart(CATS, FAMILY.children, FAMILY.schoolYear, term, filter, { behindWeeks: behind });
+  downloadText('term_' + term + '_plan.csv', L.termChartToCSV(chart));
+};
+window.exportProgressCSV = function () {
+  downloadText('book_progress.csv', L.bookProgressToCSV(CATS, FAMILY.children, FAMILY.schoolYear));
+};
+window.printTermPlan = function () {
+  var style = document.createElement('style');
+  style.id = 'print-landscape-style';
+  style.textContent = '@page { size: landscape; }';
+  document.head.appendChild(style);
+  window.print();
 };
 
 window.ubehind = function (v) { behind = parseInt(v, 10); document.getElementById('bval').textContent = v; renderSchedule(); };
@@ -1531,27 +1649,62 @@ window.setUiMode = function (m) {
 // loop-rotation books with no resolvable loop, and categories with no books
 // assigned yet. Shown on Start Here and the Who Does What hub.
 // ---------------------------------------------------------------------------
-function buildNeedsDecisions() {
-  var out = [];
-  L.findBooksNeedingLoopAssignment(CATS).forEach(function (n) {
-    out.push({ text: n.grpName + ' — ' + n.catName + ': "' + n.title + '" needs a loop assigned.', tab: 'cats' });
+var DECISION_ACTION_LABELS = {
+  addBook: 'Add book', chooseLoop: 'Choose loop', markPractice: 'Mark practice / no book needed',
+  markManual: 'Mark manual only', markCoop: 'Mark co-op / external', ignoreYear: 'Ignore this year',
+  goSetup: 'Go to Our Family', goCats: 'Go to Subjects & Books'
+};
+function decisionEntryActionsHTML(it) {
+  var h = '';
+  (it.actions || []).forEach(function (a) {
+    if (!DECISION_ACTION_LABELS[a]) return;
+    h += '<button class="mini-btn" onclick="window.decisionAction(\'' + a + '\',\'' + escAttr(it.catId || '') + '\',\'' + escAttr(it.bookKey || '') + '\')">' + DECISION_ACTION_LABELS[a] + '</button> ';
   });
-  CATS.forEach(function (grp) {
-    grp.items.forEach(function (cat) {
-      if (cat.bks.length === 0) out.push({ text: grp.grp + ' — ' + cat.name + ' has no books assigned yet.', tab: 'cats' });
-    });
+  if (it.status && it.status !== 'active') {
+    h += '<button class="mini-btn" onclick="window.decisionAction(\'reactivate\',\'' + escAttr(it.catId || '') + '\',\'\')">Reactivate</button>';
+  }
+  return h;
+}
+function decisionGroupHTML(title, items) {
+  if (!items.length) return '';
+  var h = '<div class="decision-group"><h4>' + escAttr(title) + ' (' + items.length + ')</h4><ul>';
+  items.forEach(function (it) {
+    h += '<li>' + escAttr(it.text) + '<div class="decision-actions">' + decisionEntryActionsHTML(it) + '</div></li>';
   });
-  return out;
+  h += '</ul></div>';
+  return h;
 }
 function renderNeedsDecisionsInto(elId) {
   var el = document.getElementById(elId); if (!el) return;
-  var items = buildNeedsDecisions();
-  if (!items.length) { el.innerHTML = '<div class="needs-decisions empty"><h3>Needs Decisions</h3>Nothing waiting on a decision right now.</div>'; return; }
-  var h = '<div class="needs-decisions"><h3>Needs Decisions (' + items.length + ')</h3><ul>';
-  items.forEach(function (it) { h += '<li>' + escAttr(it.text) + '</li>'; });
-  h += '</ul></div>';
+  var d = L.buildNeedsDecisions(CATS, FAMILY);
+  var urgent = L.countUrgentDecisions(d);
+  if (urgent === 0 && d.optional.length === 0) {
+    el.innerHTML = '<div class="needs-decisions empty"><h3>Needs Decisions</h3>Nothing waiting on a decision right now.</div>';
+    return;
+  }
+  var h = '<div class="needs-decisions"><h3>Needs Decisions (' + urgent + ')</h3>';
+  h += decisionGroupHTML('Required setup', d.requiredSetup);
+  h += decisionGroupHTML('Scheduling', d.scheduling);
+  h += decisionGroupHTML('Content', d.content);
+  h += decisionGroupHTML('Optional / marked', d.optional);
+  h += '</div>';
   el.innerHTML = h;
 }
+window.decisionAction = function (action, catId, bookKey) {
+  var cat = null;
+  CATS.forEach(function (grp) { grp.items.forEach(function (c) { if (c.id === catId) cat = c; }); });
+  if (action === 'goSetup') { swByName('setup'); return; }
+  if (action === 'goCats') { swByName('cats'); return; }
+  if (action === 'chooseLoop' || action === 'addBook') { swByName('cats'); return; }
+  if (!cat) return;
+  if (action === 'markPractice') L.setSubcategoryDecisionStatus(cat, 'practice-no-book');
+  else if (action === 'markManual') L.setSubcategoryDecisionStatus(cat, 'manual-only');
+  else if (action === 'markCoop') L.setSubcategoryDecisionStatus(cat, 'co-op-external');
+  else if (action === 'ignoreYear') L.setSubcategoryDecisionStatus(cat, 'ignored');
+  else if (action === 'reactivate') L.setSubcategoryDecisionStatus(cat, 'active');
+  else return;
+  saveApp(); renderAll();
+};
 
 // ---------------------------------------------------------------------------
 // Start Here — a short onboarding checklist pointing at the rest of the app.
@@ -1560,10 +1713,10 @@ function renderStartHere() {
   renderNeedsDecisionsInto('needs-decisions-start');
   var el = document.getElementById('start-steps'); if (!el) return;
   var steps = [
-    { done: FAMILY.children.length > 0, title: '1. Add your children', body: 'Set each child\'s name, Form, and school days/week.', tab: 'setup', label: 'Go to Family Setup' },
-    { done: CATS.some(function (g) { return g.items.some(function (c) { return c.bks.length > 0; }); }), title: '2. Set up subjects & books', body: 'Add the books/resources you\'re using for each subject category.', tab: 'cats', label: 'Go to Categories' },
+    { done: FAMILY.children.length > 0, title: '1. Add your children', body: 'Set each child\'s name, Form, and school days/week.', tab: 'setup', label: 'Go to Our Family' },
+    { done: CATS.some(function (g) { return g.items.some(function (c) { return c.bks.length > 0; }); }), title: '2. Set up subjects & books', body: 'Add the books/resources you\'re using for each subject category.', tab: 'cats', label: 'Go to Subjects & Books' },
     { done: CATS.length > 0, title: '3. See who does what', body: 'Check the coverage matrix to confirm every subject is assigned to the right person.', tab: 'whodoes', label: 'Go to Who Does What' },
-    { done: false, title: '4. Check the daily checklist', body: 'Once books are assigned, the Daily Checklist tells you what to actually do today.', tab: 'sched', label: 'Go to Weekly schedule' }
+    { done: false, title: '4. Check today\'s checklist', body: 'Once books are assigned, Today tells you what to actually do.', tab: 'today', label: 'Go to Today' }
   ];
   var h = '';
   steps.forEach(function (s) {
@@ -1574,8 +1727,24 @@ function renderStartHere() {
 }
 // Programmatic tab switch (no click event target available, e.g. from Start Here buttons).
 window.swByName = function (name) {
+  var viewMap = { today: 'daily', termplan: 'termchart', progress: 'progress' };
+  if (viewMap[name]) {
+    var vbtn = document.querySelector('.tabs .tab[onclick*="swView(\'' + viewMap[name] + '\'"]');
+    swView(viewMap[name], vbtn);
+    return;
+  }
   var btn = document.querySelector('.tabs .tab[onclick*="\'' + name + '\'"]');
   if (btn) sw(name, btn);
+};
+// Switching among the Term Plan / Today / Progress views, which all share
+// panel-sched but are presented as their own top-level tabs.
+window.swView = function (view, el) {
+  schedView = view;
+  document.querySelectorAll('.panel').forEach(function (p) { p.classList.remove('active'); });
+  document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
+  document.getElementById('panel-sched').classList.add('active');
+  if (el) el.classList.add('active');
+  renderSchedViews(); renderSchedChildTabs(); renderTermBtns(); renderWeekPicker(); renderSchedToggles(); renderSchedule();
 };
 
 // ---------------------------------------------------------------------------
@@ -1583,6 +1752,67 @@ window.swByName = function (name) {
 // so "who's doing what subject" doesn't require digging into the Schedule
 // tab's sub-views.
 // ---------------------------------------------------------------------------
+function whoDoesWhatEditorHTML() {
+  var customGroups = L.listCustomGroupLabels(CATS);
+  var h = '<div class="wdw-editor"><h4>Move a subject</h4><table class="matrix-table"><thead><tr>';
+  h += '<th class="matrix-row-hd">Subject</th><th class="matrix-row-hd">Assign to</th><th class="matrix-row-hd">Group / children</th></tr></thead><tbody>';
+  CATS.forEach(function (grp) {
+    grp.items.forEach(function (cat) {
+      if (!cat.bks.length) return;
+      var nb = L.normalizeBook(cat.bks[0]);
+      h += '<tr><td class="matrix-row-hd">' + escAttr(grp.grp) + ' — ' + escAttr(cat.name) + '</td>';
+      h += '<td class="matrix-cell"><select onchange="window.wdwSetAudience(\'' + cat.id + '\',this.value)">';
+      [['together', 'Together'], ['shared-group', 'A group'], ['individual', 'Individual child(ren)'], ['co-op-outside', 'Co-op / outside'], ['independent', 'Independent']].forEach(function (o) {
+        h += '<option value="' + o[0] + '"' + (nb.audienceType === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+      });
+      h += '</select></td><td class="matrix-cell">';
+      if (nb.audienceType === 'shared-group') {
+        h += '<input type="text" list="wdw-group-labels" value="' + escAttr(nb.sharedGroupLabel || '') + '" placeholder="e.g. Littles Together" onchange="window.wdwSetGroupLabel(\'' + cat.id + '\',this.value)">';
+      } else if (nb.audienceType === 'individual') {
+        FAMILY.children.forEach(function (c) {
+          var checked = (nb.assignedChildren || []).indexOf(c.id) > -1;
+          h += '<label style="margin-right:8px;"><input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="window.wdwToggleChild(\'' + cat.id + '\',\'' + c.id + '\',this.checked)"> ' + escAttr(c.name) + '</label>';
+        });
+      } else {
+        h += '&mdash;';
+      }
+      h += '</td></tr>';
+    });
+  });
+  h += '</tbody></table>';
+  h += '<datalist id="wdw-group-labels">';
+  customGroups.forEach(function (g) { h += '<option value="' + escAttr(g) + '">'; });
+  ['Littles Together', 'Older Kids', 'All Girls', 'Co-op'].forEach(function (g) { if (customGroups.indexOf(g) === -1) h += '<option value="' + escAttr(g) + '">'; });
+  h += '</datalist></div>';
+  return h;
+}
+window.wdwSetAudience = function (catId, type) {
+  var cat = null;
+  CATS.forEach(function (grp) { grp.items.forEach(function (c) { if (c.id === catId) cat = c; }); });
+  if (!cat) return;
+  var nb = cat.bks.length ? L.normalizeBook(cat.bks[0]) : {};
+  L.setCategoryAudience(cat, { type: type, sharedGroupLabel: nb.sharedGroupLabel, assignedChildren: nb.assignedChildren });
+  saveApp(); renderWhoDoesWhat();
+};
+window.wdwSetGroupLabel = function (catId, label) {
+  var cat = null;
+  CATS.forEach(function (grp) { grp.items.forEach(function (c) { if (c.id === catId) cat = c; }); });
+  if (!cat) return;
+  L.setCategoryAudience(cat, { type: 'shared-group', sharedGroupLabel: label });
+  saveApp(); renderWhoDoesWhat();
+};
+window.wdwToggleChild = function (catId, childId, checked) {
+  var cat = null;
+  CATS.forEach(function (grp) { grp.items.forEach(function (c) { if (c.id === catId) cat = c; }); });
+  if (!cat) return;
+  var nb = cat.bks.length ? L.normalizeBook(cat.bks[0]) : {};
+  var ids = (nb.assignedChildren || []).slice();
+  var i = ids.indexOf(childId);
+  if (checked && i === -1) ids.push(childId);
+  else if (!checked && i > -1) ids.splice(i, 1);
+  L.setCategoryAudience(cat, { type: 'individual', assignedChildren: ids });
+  saveApp(); renderWhoDoesWhat();
+};
 function renderWhoDoesWhat() {
   renderNeedsDecisionsInto('needs-decisions-whodoes');
   var out = document.getElementById('whodoes-out'); if (!out) return;
@@ -1600,6 +1830,7 @@ function renderWhoDoesWhat() {
     h += '</tr>';
   });
   h += '</tbody></table></div>';
+  h += whoDoesWhatEditorHTML();
   h += '<button class="util-btn" style="margin-top:10px;" onclick="window.print()">Print this view</button>';
   out.innerHTML = h;
 }
@@ -1611,12 +1842,12 @@ window.sw = function (name, el) {
   document.querySelectorAll('.panel').forEach(function (p) { p.classList.remove('active'); });
   document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
   document.getElementById('panel-' + name).classList.add('active'); el.classList.add('active');
-  if (name === 'sched') { renderSchedViews(); renderSchedChildTabs(); renderTermBtns(); renderWeekPicker(); renderSchedToggles(); renderSchedule(); }
-  if (name === 'cycles') renderCycles();
-  if (name === 'forms') renderForms();
+  if (name === 'reference') { renderForms(); renderCycles(); }
   if (name === 'cats') renderCats();
   if (name === 'setup') { renderChildren(); renderSchoolYearForm(); renderCycleSelect(); }
   if (name === 'loops') renderLoopsTab();
+  if (name === 'schedrules') renderSchedRulesTab();
+  if (name === 'backup') renderBackupTab();
   if (name === 'start') renderStartHere();
   if (name === 'whodoes') renderWhoDoesWhat();
 };
