@@ -855,7 +855,7 @@ test('Loop-rotation items appear in Needs Loop Assignment only when no loop reso
 });
 
 // ---------------------------------------------------------------------------
-// Family Coverage Matrix, AO-style Term Chart, multi-loop subject families,
+// Family Coverage Matrix, Term Chart, multi-loop subject families,
 // and daily conflict-group load rules.
 // ---------------------------------------------------------------------------
 test('Family Coverage Matrix places assignments in correct subject column and audience row', () => {
@@ -869,10 +869,10 @@ test('Family Coverage Matrix places assignments in correct subject column and au
   assert.ok(lucyRow.cells['Language Arts'].some(text => /Independent literature/.test(text)));
 });
 
-test('AO-style Term Chart creates rows by subject/book and columns by week', () => {
+test('Term Chart creates rows by subject/book and columns by week', () => {
   const fs = L.demoFamilySetup();
   const cats = L.demoCategories();
-  const chart = L.buildAOTermChart(cats, fs.children, fs.schoolYear, 1, 'all', {});
+  const chart = L.buildTermChart(cats, fs.children, fs.schoolYear, 1, 'all', {});
   assert.equal(chart.weeks.length, fs.schoolYear.weeksPerTerm);
   const mathGroup = chart.groups.find(g => g.grp === 'Math');
   assert.ok(mathGroup.rows.length > 0);
@@ -939,62 +939,130 @@ test('Together work and individual work are treated separately for load rules un
 });
 
 // ---------------------------------------------------------------------------
-// Needs Decisions v2 — grouping, statuses, and "leaves urgent once resolved"
+// Review Center (formerly "Needs Decisions") — grouping, statuses, and
+// "leaves the urgent groups once resolved"
 // ---------------------------------------------------------------------------
-test('A blank subcategory defaults to active and is urgent (Content) by default', () => {
+test('A blank subcategory defaults to active and is urgent (Helpful) by default', () => {
   const fs = L.demoFamilySetup();
   const cats = L.demoCategories();
-  const d = L.buildNeedsDecisions(cats, fs);
+  const d = L.buildReviewCenter(cats, fs);
   const genSci = L.findCategory(cats, 'sc-gen');
   assert.equal(L.resolveDecisionStatus(genSci), 'active');
-  assert.ok(d.content.some(x => x.catId === 'sc-gen'));
+  assert.ok(d.helpful.some(x => x.catId === 'sc-gen'));
 });
 
-test('Marking a blank subcategory practice-no-book removes it from urgent Content', () => {
+test('Marking a blank subcategory practice-no-book removes it from urgent Helpful', () => {
   const fs = L.demoFamilySetup();
   const cats = L.demoCategories();
   const genSci = L.findCategory(cats, 'sc-gen');
   L.setSubcategoryDecisionStatus(genSci, 'practice-no-book');
-  const d = L.buildNeedsDecisions(cats, fs);
-  assert.ok(!d.content.some(x => x.catId === 'sc-gen'));
+  const d = L.buildReviewCenter(cats, fs);
+  assert.ok(!d.helpful.some(x => x.catId === 'sc-gen'));
   assert.ok(d.optional.some(x => x.catId === 'sc-gen'));
 });
 
-test('Marking a blank subcategory "ignore this year" removes it from every bucket', () => {
+test('Marking a blank subcategory "ignore this year" moves it to Hidden, not urgent or optional', () => {
   const fs = L.demoFamilySetup();
   const cats = L.demoCategories();
   const genSci = L.findCategory(cats, 'sc-gen');
   L.setSubcategoryDecisionStatus(genSci, 'ignored');
-  const d = L.buildNeedsDecisions(cats, fs);
-  assert.ok(!d.content.some(x => x.catId === 'sc-gen'));
+  const d = L.buildReviewCenter(cats, fs);
+  assert.ok(!d.helpful.some(x => x.catId === 'sc-gen'));
   assert.ok(!d.optional.some(x => x.catId === 'sc-gen'));
+  assert.ok(d.hidden.some(x => x.catId === 'sc-gen'));
 });
 
-test('Loop-assignment gaps are grouped under Scheduling, not Content', () => {
+test('Loop-assignment gaps are grouped under Required, not Helpful', () => {
   const cats = L.demoCategories();
   const grp = cats.find(g => g.grp === 'Math');
   const cat = grp.items[0];
   cat.bks.push(Object.assign({ t: 'Loop book' }, L.normalizeBook({ t: 'Loop book', tot: 10, per: 1, unitType: 'lessons' }), { scheduleStyle: 'loop-rotation', loopId: null }));
   const fs = L.demoFamilySetup();
-  const d = L.buildNeedsDecisions(cats, fs);
-  assert.ok(d.scheduling.some(x => x.text.includes('Loop book')));
-  assert.ok(!d.content.some(x => x.text.includes('Loop book')));
+  const d = L.buildReviewCenter(cats, fs);
+  assert.ok(d.required.some(x => x.text.includes('Loop book')));
+  assert.ok(!d.helpful.some(x => x.text.includes('Loop book')));
 });
 
-test('Missing children/categories surface as Required setup decisions', () => {
+test('Missing children/categories surface as Required decisions', () => {
   const fs = { children: [] };
-  const d = L.buildNeedsDecisions([], fs);
-  assert.ok(d.requiredSetup.length >= 1);
+  const d = L.buildReviewCenter([], fs);
+  assert.ok(d.required.length >= 1);
 });
 
-test('countUrgentDecisions counts requiredSetup + scheduling + content, not optional', () => {
+test('countUrgentDecisions counts required + helpful, not optional or hidden', () => {
   const fs = L.demoFamilySetup();
   const cats = L.demoCategories();
-  const before = L.countUrgentDecisions(L.buildNeedsDecisions(cats, fs));
+  const before = L.countUrgentDecisions(L.buildReviewCenter(cats, fs));
   const genSci = L.findCategory(cats, 'sc-gen');
   L.setSubcategoryDecisionStatus(genSci, 'co-op-external');
-  const after = L.countUrgentDecisions(L.buildNeedsDecisions(cats, fs));
+  const after = L.countUrgentDecisions(L.buildReviewCenter(cats, fs));
   assert.equal(after, before - 1);
+});
+
+test('Practice/no-book items never appear as urgent missing-book decisions', () => {
+  const fs = L.demoFamilySetup();
+  const cats = L.demoCategories();
+  const oral = L.findCategory(cats, 'sc-gen');
+  L.setSubcategoryDecisionStatus(oral, 'practice-no-book');
+  const d = L.buildReviewCenter(cats, fs);
+  assert.ok(!d.required.some(x => x.catId === 'sc-gen'));
+  assert.ok(!d.helpful.some(x => x.catId === 'sc-gen'));
+});
+
+// ---------------------------------------------------------------------------
+// Plan Workspace lanes — smarter defaults, "Needs placement", custom groups
+// ---------------------------------------------------------------------------
+test('A subcategory with no audience or "who" choice at all goes to Needs placement, not Together', () => {
+  const cats = L.demoCategories();
+  const grp = cats.find(g => g.grp === 'Math');
+  const cat = grp.items[0];
+  cat.bks = [{ t: 'Brand new book', tot: 10, per: 1, unitType: 'lessons' }];
+  assert.equal(L.categoryAudienceLane(cat), 'needs-placement');
+});
+
+test('Demo data with an explicit legacy "who" choice resolves to Together, not Needs placement', () => {
+  const cats = L.demoCategories();
+  const grp = cats.find(g => g.grp === 'Bible + Faith');
+  const cat = grp.items[0];
+  assert.equal(L.categoryAudienceLane(cat), 'together');
+});
+
+test('Form-specific (individual) items do not default to Together', () => {
+  const cats = L.demoCategories();
+  const grp = cats.find(g => g.grp === 'Math');
+  const cat = grp.items[0];
+  cat.bks = [{ t: 'Upper-form independent text', who: 'specific', whoChildren: ['lucy', 'jeremiah'], tot: 100, per: 2, unitType: 'pages' }];
+  assert.equal(L.categoryAudienceLane(cat), 'individual');
+});
+
+test('setCategoryAudience marks the subcategory as placement-resolved going forward', () => {
+  const cats = L.demoCategories();
+  const grp = cats.find(g => g.grp === 'Math');
+  const cat = grp.items[0];
+  cat.bks = [{ t: 'Brand new book', tot: 10, per: 1, unitType: 'lessons' }];
+  assert.equal(L.categoryAudienceLane(cat), 'needs-placement');
+  L.setCategoryAudience(cat, { type: 'together' });
+  assert.equal(L.categoryAudienceLane(cat), 'together');
+});
+
+test('Ignored/optional subcategories land in the Optional lane, not Needs placement', () => {
+  const cats = L.demoCategories();
+  const grp = cats.find(g => g.grp === 'Math');
+  const cat = grp.items[0];
+  cat.bks = [{ t: 'Brand new book', tot: 10, per: 1, unitType: 'lessons' }];
+  L.setSubcategoryDecisionStatus(cat, 'optional');
+  assert.equal(L.categoryAudienceLane(cat), 'optional');
+});
+
+test('buildPlanWorkspaceLanes groups a custom shared-group label into its own lane', () => {
+  const cats = L.demoCategories();
+  const grp = cats.find(g => g.grp === 'Math');
+  const cat = grp.items[0];
+  L.setCategoryAudience(cat, { type: 'shared-group', sharedGroupLabel: 'Littles Together' });
+  const lanes = L.buildPlanWorkspaceLanes(cats, L.demoFamilySetup());
+  const lane = lanes.find(l => l.label === 'Littles Together');
+  assert.ok(lane);
+  assert.ok(lane.chips.some(c => c.catId === cat.id));
 });
 
 // ---------------------------------------------------------------------------
@@ -1031,7 +1099,7 @@ test('listCustomGroupLabels finds distinct shared-group labels in use', () => {
 test('termChartToCSV produces a header row plus one row per book', () => {
   const fs = L.demoFamilySetup();
   const cats = L.demoCategories();
-  const chart = L.buildAOTermChart(cats, fs.children, fs.schoolYear, 1, 'all', {});
+  const chart = L.buildTermChart(cats, fs.children, fs.schoolYear, 1, 'all', {});
   const csv = L.termChartToCSV(chart);
   const lines = csv.split('\n');
   assert.ok(lines[0].startsWith('Subject,Item,Wk'));
@@ -1090,6 +1158,19 @@ test('keepSetupChooseNewCycle changes only the history cycle id', () => {
   assert.equal(updated.familySetup.historyCycleId, 2);
   assert.equal(app.familySetup.historyCycleId, 4);
   assert.equal(updated.categories.length, app.categories.length);
+});
+
+test('freshAppData is marked as demo data', () => {
+  const app = L.freshAppData();
+  assert.equal(app.isDemo, true);
+  assert.ok(app.familySetup.children.length > 0);
+});
+
+test('blankAppData starts with no children, no categories, and is not demo', () => {
+  const app = L.blankAppData();
+  assert.equal(app.isDemo, false);
+  assert.deepEqual(app.familySetup.children, []);
+  assert.deepEqual(app.categories, []);
 });
 
 // ---------------------------------------------------------------------------

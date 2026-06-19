@@ -24,7 +24,9 @@
   .header { margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 1.25rem; }
   .header h1 { font-size: 22px; font-weight: 700; color: var(--teal); margin-bottom: 4px; }
   .header p { font-size: 14px; color: var(--text2); font-family: sans-serif; }
-  .top-bar { display: flex; justify-content: flex-end; margin-bottom: 1rem; gap: 8px; flex-wrap: wrap; }
+  .top-bar { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 1rem; gap: 8px; flex-wrap: wrap; }
+  .about-link { font-family: sans-serif; font-size: 11px; color: var(--text2); text-decoration: none; margin-left: 4px; }
+  .about-link:hover { text-decoration: underline; }
   .util-btn { font-size: 11px; padding: 5px 11px; border: 1px solid var(--border2); border-radius: 6px; background: white; color: var(--text2); cursor: pointer; font-family: sans-serif; }
   .util-btn:hover { background: var(--bg2); }
   .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 1.75rem; overflow-x: auto; }
@@ -223,6 +225,14 @@
   .start-step h3 { margin: 0 0 4px; font-size: 13px; }
   .start-step p { margin: 0 0 8px; font-size: 12px; color: #666; }
   .start-step.done { border-color: #639922; background: #f6faf0; }
+  .start-step.status-complete { border-color: #639922; background: #f6faf0; }
+  .start-step.status-good-enough { border-color: #4a90a4; background: #f0f7f9; }
+  .start-step.status-needs-attention { border-color: #d4a017; background: #fdf8ec; }
+  .start-step.status-not-started { border-color: var(--border2); }
+  .start-step.skipped { opacity: 0.5; }
+  .start-status-tag { margin-left: 0; margin-bottom: 6px; }
+  .start-step-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .ghost-btn { background: none; border: 1px solid var(--border2); color: #666; }
   .needs-decisions { border: 1px solid #ef9f27; background: #fff8ec; border-radius: 8px; padding: 12px 14px; font-family: sans-serif; margin-bottom: 1.25rem; }
   .needs-decisions h3 { margin: 0 0 6px; font-size: 13px; color: #a3690f; }
   .needs-decisions ul { margin: 0; padding-left: 18px; font-size: 12px; }
@@ -238,6 +248,41 @@
   .wdw-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid #eee; font-family: sans-serif; font-size: 12px; }
   .wdw-name { flex: 1 1 220px; min-width: 180px; }
   .wdw-child-chk { font-size: 11px; white-space: nowrap; }
+
+  .wdw-stepper { display: flex; gap: 14px; flex-wrap: wrap; font-family: sans-serif; font-size: 11px; color: #888; margin-bottom: 10px; }
+  .wdw-mode-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
+  .wdw-toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .wdw-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+  .wdw-filters .mini-btn.active, .sv-btn.active { background: var(--teal); color: #fff; }
+  #wdw-search { font-family: sans-serif; font-size: 12px; padding: 4px 8px; border: 1px solid var(--border2); border-radius: 5px; }
+  .wdw-lanes { display: flex; flex-direction: column; gap: 14px; }
+  .wdw-lane { border: 1px solid var(--border2); border-radius: 8px; padding: 10px 12px; font-family: sans-serif; }
+  .wdw-lane h4 { margin: 0 0 8px; font-size: 12px; color: #555; text-transform: uppercase; letter-spacing: .03em; }
+  .wdw-lane-attn { border-color: #ef9f27; background: #fff8ec; }
+  .wdw-lane-attn h4 { color: #a3690f; }
+  .wdw-lane-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .wdw-chip { border: 1px solid var(--border2); border-left-width: 4px; border-radius: 6px; padding: 6px 8px; background: #fff; font-size: 12px; min-width: 160px; }
+  .wdw-chip-main { cursor: pointer; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .wdw-chip-name { font-weight: 600; }
+  .wdw-chip-count { color: #999; font-size: 11px; }
+  .wdw-chip-move { margin-top: 4px; }
+  .wdw-chip-move select { font-size: 11px; padding: 2px 4px; }
+  .wdw-detail-panel { border: 1px solid var(--teal); border-radius: 8px; padding: 12px 14px; font-family: sans-serif; font-size: 12px; margin-bottom: 12px; background: #f3fafb; }
+  .wdw-detail-panel h4 { margin: 0 0 8px; }
+  .wdw-detail-row { margin-bottom: 8px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .wdw-detail-row label { font-weight: 600; min-width: 90px; }
+  .wdw-compact-chip { display: inline-block; background: #eef3f4; border-radius: 4px; padding: 1px 6px; margin: 1px 3px 1px 0; font-size: 11px; }
+  .wdw-matrix-toolbar { font-family: sans-serif; margin-bottom: 8px; }
+
+  .welcome-screen { max-width: 760px; margin: 40px auto; text-align: center; font-family: sans-serif; }
+  .welcome-screen h1 { color: var(--teal); font-size: 24px; margin-bottom: 8px; }
+  .welcome-choices { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-top: 24px; text-align: left; }
+  @media (max-width: 720px) { .welcome-choices { grid-template-columns: 1fr; } }
+  .welcome-choice { border: 1px solid var(--border2); border-radius: 10px; padding: 16px; }
+  .welcome-choice h3 { margin: 0 0 8px; font-size: 14px; color: var(--teal); }
+  .welcome-choice p { font-size: 12px; color: #666; margin: 0 0 12px; }
+  .demo-banner { border: 1px solid #d4537e; background: #fdf2f6; border-radius: 8px; padding: 10px 14px; font-family: sans-serif; font-size: 13px; margin-bottom: 1rem; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .demo-banner strong { color: #a3275a; }
   .year-tools-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; margin-top: 10px; }
   @media (max-width: 640px) { .year-tools-grid { grid-template-columns: 1fr; } }
   .year-tool { border: 1px solid var(--border2); border-radius: 8px; padding: 12px 14px; font-family: sans-serif; }
@@ -248,7 +293,8 @@
     .top-bar, .tabs, .behind-row, .child-tabs, .term-btns { display: none !important; }
     .matrix-table, .term-chart-table { font-size: 9px; }
     .matrix-table th, .matrix-table td, .term-chart-table th, .term-chart-table td { padding: 3px 4px; }
-    .wdw-editor { display: none !important; }
+    .wdw-editor, .wdw-toolbar, .wdw-mode-toggle, .wdw-stepper, .wdw-chip-move, #wdw-detail, .wdw-matrix-toolbar { display: none !important; }
+    .wdw-lane-attn { border-color: #ccc; background: none; }
     body { background: white; }
     body.print-sched-mode > *:not(#print-area) { display: none !important; }
     body.print-sched-mode #print-area { display: block !important; }
@@ -264,12 +310,35 @@
 </head>
 <body>
 <div class="app">
+  <div id="welcome-screen" class="welcome-screen" style="display:none;">
+    <h1>Welcome to the DIY Charlotte Mason Blueprint</h1>
+    <p class="fs-help">A planner you can keep using year after year, at your own pace. How would you like to start?</p>
+    <div class="welcome-choices">
+      <div class="welcome-choice">
+        <h3>Start a blank plan</h3>
+        <p>No preloaded family or books — you'll walk through setup step by step.</p>
+        <button class="util-btn" onclick="window.startBlank()">Start blank</button>
+      </div>
+      <div class="welcome-choice">
+        <h3>Try the demo plan</h3>
+        <p>See a full example family/plan filled in, clearly marked as a demo, that you can keep or clear later.</p>
+        <button class="util-btn" onclick="window.startDemo()">Try the demo</button>
+      </div>
+      <div class="welcome-choice">
+        <h3>Import a backup</h3>
+        <p>Already have a CM Blueprint backup file? Bring it in and pick up where you left off.</p>
+        <button class="util-btn" onclick="window.startImport()">Import backup</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="main-app" style="display:none;">
   <div class="header">
     <h1>DIY Charlotte Mason Blueprint</h1>
     <p id="header-sub"></p>
-    <p id="build-stamp-header" style="font-family:sans-serif;font-size:10px;color:#aaa;margin:-6px 0 0;">v1.1.0 &middot; build 805e557 &middot; 2026-06-19</p>
   </div>
 
+  <div id="demo-banner-holder"></div>
   <div id="migrate-banner-holder"></div>
 
   <div class="top-bar">
@@ -277,6 +346,7 @@
     <button class="util-btn" onclick="exportData()">Export backup (.json)</button>
     <button class="util-btn" onclick="importPrompt()">Import backup</button>
     <button class="util-btn" onclick="resetAll()">Reset to demo plan</button>
+    <a href="#" class="about-link" onclick="window.showAbout();return false;">About / version</a>
   </div>
 
   <div class="tabs">
@@ -302,7 +372,7 @@
   <div id="panel-setup" class="panel">
     <div class="fs-section">
       <h2>Children</h2>
-      <p class="fs-help">Add each child you're planning for. Their Form determines which categories apply to them by default (you can refine per-category on the Categories tab). School days/week drives the pacing math.</p>
+      <p class="fs-help">Add each child you're planning for. Their Form determines which subjects apply to them by default (you can refine this on the Subjects &amp; Books tab). School days/week drives the pacing math.</p>
       <div id="children-list"></div>
       <button class="add-btn" onclick="addChildUI()">+ Add a child</button>
     </div>
@@ -410,6 +480,7 @@
     </div>
     <div id="loop-list"></div>
   </div>
+  </div>
 </div>
 
 <div class="save-toast" id="save-toast">Saved</div>
@@ -439,6 +510,8 @@ function escJs(s) { return escAttr(s).replace(/'/g, '&#39;'); }
 // ---------------------------------------------------------------------------
 // Load / migration / persistence
 // ---------------------------------------------------------------------------
+// Returns null when there is truly no prior data — the signal to show the
+// first-time welcome flow instead of jumping straight to a dashboard.
 function loadApp() {
   try {
     var rawV3 = localStorage.getItem(L.STORAGE_KEY_V3);
@@ -453,7 +526,7 @@ function loadApp() {
       }
     }
   } catch (e) {}
-  return L.freshAppData();
+  return null;
 }
 
 function saveApp() {
@@ -493,6 +566,43 @@ window.proceedToFreshSetup = function () {
 
 function syncShortcuts() { FAMILY = APP.familySetup; CATS = APP.categories; APP.overrides = APP.overrides || {}; OVERRIDES = APP.overrides; APP.loops = APP.loops || []; LOOPS = APP.loops; }
 
+function showWelcome() {
+  document.getElementById('welcome-screen').style.display = '';
+  document.getElementById('main-app').style.display = 'none';
+}
+function showMainApp() {
+  document.getElementById('welcome-screen').style.display = 'none';
+  document.getElementById('main-app').style.display = '';
+}
+window.startBlank = function () {
+  APP = L.blankAppData();
+  syncShortcuts(); saveApp(); showMainApp(); renderAll();
+};
+window.startDemo = function () {
+  APP = L.freshAppData();
+  syncShortcuts(); saveApp(); showMainApp(); renderAll();
+};
+window.startImport = function () {
+  window.importPrompt();
+};
+function renderDemoBanner() {
+  var holder = document.getElementById('demo-banner-holder'); if (!holder) return;
+  if (!APP.isDemo) { holder.innerHTML = ''; return; }
+  holder.innerHTML =
+    '<div class="demo-banner"><strong>Demo plan</strong> — this is sample data so you can explore the app. ' +
+    '<button class="util-btn" onclick="window.startMyOwnFromDemo()">Start my own plan from this demo</button>' +
+    '<button class="util-btn" onclick="window.clearDemoStartBlank()">Clear demo and start blank</button></div>';
+}
+window.startMyOwnFromDemo = function () {
+  APP.isDemo = false;
+  saveApp(); renderAll();
+};
+window.clearDemoStartBlank = function () {
+  if (!confirm('Clear the demo data and start a blank plan?')) return;
+  APP = L.blankAppData();
+  syncShortcuts(); saveApp(); renderAll();
+};
+
 // ---------------------------------------------------------------------------
 // Export / import / reset
 // ---------------------------------------------------------------------------
@@ -520,7 +630,7 @@ window.importPrompt = function () {
       var validation = L.validateAppData(parsed);
       if (!validation.valid) { showImportError('That backup file is missing required data: ' + validation.errors.join(' ')); return; }
       APP = parsed; APP.needsMigration = false;
-      syncShortcuts(); saveApp(); renderAll();
+      syncShortcuts(); saveApp(); showMainApp(); renderAll();
       alert('Imported successfully.');
     };
     r.readAsText(f);
@@ -939,12 +1049,12 @@ function renderCats() {
         h += '<div><label>Start week</label><input type="number" min="1" value="' + (nb.startWeek || '') + '" placeholder="any" onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'startWeek\',this.value)"></div>';
         h += '<div><label>End/finish week</label><input type="number" min="1" value="' + (nb.endWeek || '') + '" placeholder="any" onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'endWeek\',this.value)"></div>';
         h += '<div><label>Currently at</label><input type="number" min="0" value="' + (nb.currentUnit || 0) + '" onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'currentUnit\',this.value)"></div>';
-        h += '<div><label>Schedule style</label><select onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'scheduleStyle\',this.value)">';
-        L.SCHEDULE_STYLES.forEach(function (s) { h += '<option value="' + s + '"' + (nb.scheduleStyle === s ? ' selected' : '') + '>' + s + '</option>'; });
+        h += '<div><label>How should this be scheduled?</label><select onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'scheduleStyle\',this.value)">';
+        L.SCHEDULE_STYLES.forEach(function (s) { h += '<option value="' + s + '"' + (nb.scheduleStyle === s ? ' selected' : '') + '>' + escAttr(SCHEDULE_STYLE_LABELS[s] || s) + '</option>'; });
         h += '</select></div>';
         if (nb.scheduleStyle === 'loop-rotation') {
           var resolvedLoopId = L.resolveBookLoopId(nb, cat, grp);
-          h += '<div><label>Loop' + (resolvedLoopId ? '' : ' — Needs Loop Assignment') + '</label><select onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'loopId\',this.value)">';
+          h += '<div><label>Loop' + (resolvedLoopId ? '' : ' — choose a loop for this item') + '</label><select onchange="updateBookField(\'' + cat.id + '\',' + bi + ',\'loopId\',this.value)">';
           h += '<option value="">— inherit / none —</option>';
           LOOPS.forEach(function (lp) { h += '<option value="' + lp.id + '"' + (nb.loopId === lp.id ? ' selected' : '') + '>' + escAttr(lp.name) + '</option>'; });
           h += '</select></div>';
@@ -1229,14 +1339,14 @@ function renderProgressView() {
 }
 
 // ---------------------------------------------------------------------------
-// View 2: AO-style Term Chart — table, rows = subject/book grouped under
+// View 2: Term Chart — table, rows = subject/book grouped under
 // subject headers, columns = weeks of the selected term. "Where the plan
 // says we are going." Filterable by full family / child / Form.
 // ---------------------------------------------------------------------------
 function renderAOTermChart() {
   var out = document.getElementById('sched-out'); if (!out) return;
   var filter = schedToggle.termChartFilter || 'all';
-  var chart = L.buildAOTermChart(CATS, FAMILY.children, FAMILY.schoolYear, term, filter, { behindWeeks: behind });
+  var chart = L.buildTermChart(CATS, FAMILY.children, FAMILY.schoolYear, term, filter, { behindWeeks: behind });
   var h = '<p class="fs-help">Term-by-term plan — week by week, by subject. Use the filter above to view the full family, a specific child, or a Form.</p>';
   h += '<div class="matrix-wrap"><table class="term-chart-table"><thead><tr><th class="matrix-row-hd">Subject / Book</th>';
   chart.weeks.forEach(function (w) {
@@ -1274,7 +1384,7 @@ function renderPlanningAudit() {
   var h = '<p class="fs-help">Full year-planning detail: every category regardless of this week\'s frequency, pacing math, and book coverage. This is not the parent-facing weekly view — see Weekly by Subject or Daily View for that.</p>';
   var needingLoop = L.findBooksNeedingLoopAssignment(CATS);
   if (needingLoop.length) {
-    h += '<div class="rec" style="margin-bottom:14px;">Needs Loop Assignment — these books are set to "loop-rotation" but aren\'t in any loop yet:<ul style="margin:6px 0 0 18px;">';
+    h += '<div class="rec" style="margin-bottom:14px;">Choose a loop for these items — they\'re set to rotate through a loop but aren\'t in one yet:<ul style="margin:6px 0 0 18px;">';
     needingLoop.forEach(function (n) { h += '<li>' + escAttr(n.grpName) + ' — ' + escAttr(n.catName) + ': ' + escAttr(n.title) + '</li>'; });
     h += '</ul></div>';
   }
@@ -1587,6 +1697,9 @@ window.keepSetupNewCycleUI = function () {
   alert('History cycle updated; everything else kept.');
 };
 
+window.showAbout = function () {
+  alert('CM Blueprint Planner\nv1.1.0 · build 805e557 · 2026-06-19');
+};
 function downloadText(filename, text, mime) {
   var blob = new Blob([text], { type: mime || 'text/csv' });
   var url = URL.createObjectURL(blob), a = document.createElement('a');
@@ -1595,7 +1708,7 @@ function downloadText(filename, text, mime) {
 }
 window.exportTermPlanCSV = function () {
   var filter = schedToggle.termChartFilter || 'all';
-  var chart = L.buildAOTermChart(CATS, FAMILY.children, FAMILY.schoolYear, term, filter, { behindWeeks: behind });
+  var chart = L.buildTermChart(CATS, FAMILY.children, FAMILY.schoolYear, term, filter, { behindWeeks: behind });
   downloadText('term_' + term + '_plan.csv', L.termChartToCSV(chart));
 };
 window.exportProgressCSV = function () {
@@ -1645,13 +1758,20 @@ window.setUiMode = function (m) {
 };
 
 // ---------------------------------------------------------------------------
-// Needs Decisions — surfaces everything still waiting on a planning choice:
-// loop-rotation books with no resolvable loop, and categories with no books
-// assigned yet. Shown on Start Here and the Who Does What hub.
+// Review Center (was "Needs Decisions") — surfaces everything still waiting
+// on a planning choice, grouped by how urgent it actually is. Not every
+// blank subcategory is a problem. Shown on Start Here and Who Does What.
 // ---------------------------------------------------------------------------
+var SCHEDULE_STYLE_LABELS = {
+  'direct-frequency': 'On its own weekly rhythm',
+  'loop-rotation': 'Part of a loop',
+  'fixed-days': 'On chosen days',
+  'manual-only': 'Track only, don\'t schedule'
+};
 var DECISION_ACTION_LABELS = {
-  addBook: 'Add book', chooseLoop: 'Choose loop', markPractice: 'Mark practice / no book needed',
-  markManual: 'Mark manual only', markCoop: 'Mark co-op / external', ignoreYear: 'Ignore this year',
+  addBook: 'Add book', chooseRhythm: 'Choose rhythm/schedule', assignAudience: 'Assign audience',
+  markPractice: 'Mark practice / no book needed', markManual: 'Mark manual only', markCoop: 'Mark co-op / external',
+  makeOptional: 'Make optional', ignoreYear: 'Ignore this year',
   goSetup: 'Go to Our Family', goCats: 'Go to Subjects & Books'
 };
 function decisionEntryActionsHTML(it) {
@@ -1676,17 +1796,17 @@ function decisionGroupHTML(title, items) {
 }
 function renderNeedsDecisionsInto(elId) {
   var el = document.getElementById(elId); if (!el) return;
-  var d = L.buildNeedsDecisions(CATS, FAMILY);
+  var d = L.buildReviewCenter(CATS, FAMILY);
   var urgent = L.countUrgentDecisions(d);
-  if (urgent === 0 && d.optional.length === 0) {
-    el.innerHTML = '<div class="needs-decisions empty"><h3>Needs Decisions</h3>Nothing waiting on a decision right now.</div>';
+  if (urgent === 0 && d.optional.length === 0 && d.hidden.length === 0) {
+    el.innerHTML = '<div class="needs-decisions empty"><h3>Review Center</h3>Nothing waiting on a decision right now.</div>';
     return;
   }
-  var h = '<div class="needs-decisions"><h3>Needs Decisions (' + urgent + ')</h3>';
-  h += decisionGroupHTML('Required setup', d.requiredSetup);
-  h += decisionGroupHTML('Scheduling', d.scheduling);
-  h += decisionGroupHTML('Content', d.content);
-  h += decisionGroupHTML('Optional / marked', d.optional);
+  var h = '<div class="needs-decisions"><h3>Review Center' + (urgent ? ' (' + urgent + ')' : '') + '</h3>';
+  h += decisionGroupHTML('Required before scheduling', d.required);
+  h += decisionGroupHTML('Helpful next steps', d.helpful);
+  h += decisionGroupHTML('Optional choices', d.optional);
+  h += decisionGroupHTML('Already handled / hidden', d.hidden);
   h += '</div>';
   el.innerHTML = h;
 }
@@ -1694,12 +1814,14 @@ window.decisionAction = function (action, catId, bookKey) {
   var cat = null;
   CATS.forEach(function (grp) { grp.items.forEach(function (c) { if (c.id === catId) cat = c; }); });
   if (action === 'goSetup') { swByName('setup'); return; }
-  if (action === 'goCats') { swByName('cats'); return; }
-  if (action === 'chooseLoop' || action === 'addBook') { swByName('cats'); return; }
+  if (action === 'goCats' || action === 'addBook') { swByName('cats'); return; }
+  if (action === 'chooseRhythm') { swByName('loops'); return; }
+  if (action === 'assignAudience') { swByName('whodoes'); return; }
   if (!cat) return;
   if (action === 'markPractice') L.setSubcategoryDecisionStatus(cat, 'practice-no-book');
   else if (action === 'markManual') L.setSubcategoryDecisionStatus(cat, 'manual-only');
   else if (action === 'markCoop') L.setSubcategoryDecisionStatus(cat, 'co-op-external');
+  else if (action === 'makeOptional') L.setSubcategoryDecisionStatus(cat, 'optional');
   else if (action === 'ignoreYear') L.setSubcategoryDecisionStatus(cat, 'ignored');
   else if (action === 'reactivate') L.setSubcategoryDecisionStatus(cat, 'active');
   else return;
@@ -1709,19 +1831,66 @@ window.decisionAction = function (action, catId, bookKey) {
 // ---------------------------------------------------------------------------
 // Start Here — a short onboarding checklist pointing at the rest of the app.
 // ---------------------------------------------------------------------------
+var START_STATUS_TAGS = {
+  'not-started': 'Not started', 'needs-attention': 'Needs attention', 'good-enough': 'Good enough', 'complete': 'Complete'
+};
 function renderStartHere() {
   renderNeedsDecisionsInto('needs-decisions-start');
   var el = document.getElementById('start-steps'); if (!el) return;
+
+  var hasChildren = FAMILY.children.length > 0;
+  var hasCatsWithBooks = CATS.some(function (g) { return g.items.some(function (c) { return c.bks.length > 0; }); });
+  var anyNeedsPlacement = CATS.some(function (g) { return g.items.some(function (c) { return L.categoryNeedsPlacement(c); }); });
+  var anyLoopGaps = L.findBooksNeedingLoopAssignment(CATS).length > 0;
+
   var steps = [
-    { done: FAMILY.children.length > 0, title: '1. Add your children', body: 'Set each child\'s name, Form, and school days/week.', tab: 'setup', label: 'Go to Our Family' },
-    { done: CATS.some(function (g) { return g.items.some(function (c) { return c.bks.length > 0; }); }), title: '2. Set up subjects & books', body: 'Add the books/resources you\'re using for each subject category.', tab: 'cats', label: 'Go to Subjects & Books' },
-    { done: CATS.length > 0, title: '3. See who does what', body: 'Check the coverage matrix to confirm every subject is assigned to the right person.', tab: 'whodoes', label: 'Go to Who Does What' },
-    { done: false, title: '4. Check today\'s checklist', body: 'Once books are assigned, Today tells you what to actually do.', tab: 'today', label: 'Go to Today' }
+    {
+      title: '1. Our Family', tab: 'setup', label: 'Go to Our Family',
+      status: hasChildren ? 'complete' : 'not-started',
+      help: 'Add each child, their Form, and school days per week.'
+    },
+    {
+      title: '2. Who Does What', tab: 'whodoes', label: 'Go to Who Does What',
+      status: !hasCatsWithBooks ? 'not-started' : (anyNeedsPlacement ? 'needs-attention' : 'good-enough'),
+      help: 'Sort subjects into who they\'re for — Together, a group, a child, or co-op.',
+      skippable: true
+    },
+    {
+      title: '3. Rhythm', tab: 'loops', label: 'Go to Rhythm & Loops',
+      status: anyLoopGaps ? 'needs-attention' : 'good-enough',
+      help: 'Set up loops for subjects that rotate instead of happening every week.',
+      skippable: true
+    },
+    {
+      title: '4. Subjects & Books', tab: 'cats', label: 'Go to Subjects & Books',
+      status: hasCatsWithBooks ? 'complete' : 'not-started',
+      help: 'Add the books and resources you\'re using for each subject.'
+    },
+    {
+      title: '5. Review Term Plan', tab: 'termplan', label: 'Go to Term Plan',
+      status: !hasCatsWithBooks ? 'not-started' : 'good-enough',
+      help: 'See the whole term laid out week by week before you start.'
+    },
+    {
+      title: '6. Use Today', tab: 'today', label: 'Go to Today',
+      status: !hasCatsWithBooks ? 'not-started' : 'good-enough',
+      help: 'Once books are assigned, Today tells you what to actually do each day.'
+    },
+    {
+      title: '7. Track Progress', tab: 'progress', label: 'Go to Progress',
+      status: !hasCatsWithBooks ? 'not-started' : 'good-enough',
+      help: 'Check how far along each book is and mark units complete as you go.',
+      skippable: true
+    }
   ];
   var h = '';
   steps.forEach(function (s) {
-    h += '<div class="start-step' + (s.done ? ' done' : '') + '"><h3>' + escAttr(s.title) + (s.done ? ' ✓' : '') + '</h3><p>' + escAttr(s.body) + '</p>';
-    h += '<button class="util-btn" onclick="swByName(\'' + s.tab + '\')">' + escAttr(s.label) + '</button></div>';
+    h += '<div class="start-step status-' + s.status + '"><h3>' + escAttr(s.title) + '</h3>';
+    h += '<span class="tag-chip start-status-tag">' + START_STATUS_TAGS[s.status] + '</span>';
+    h += '<p>' + escAttr(s.help) + '</p>';
+    h += '<div class="start-step-actions"><button class="util-btn" onclick="swByName(\'' + s.tab + '\')">' + escAttr(s.label) + '</button>';
+    if (s.skippable) h += '<button class="util-btn ghost-btn" onclick="this.closest(\'.start-step\').classList.add(\'skipped\')">Skip for now</button>';
+    h += '</div></div>';
   });
   el.innerHTML = h;
 }
@@ -1748,76 +1917,146 @@ window.swView = function (view, el) {
 };
 
 // ---------------------------------------------------------------------------
-// Who Does What — the Family Coverage Matrix promoted to its own early tab,
-// so "who's doing what subject" doesn't require digging into the Schedule
-// tab's sub-views.
+// Who Does What — a planning workspace, not a database table. Two modes:
+//  A. Plan Workspace (default): subjects shown as chips sorted into
+//     audience "lanes" (Together / a group / individual children / co-op /
+//     optional / needs placement). Each chip has an inline "Move to..."
+//     control instead of one giant table.
+//  B. Printable Summary Matrix: the original read-only grid, for printing.
 // ---------------------------------------------------------------------------
-function whoDoesWhatEditorHTML() {
+var wdwMode = 'workspace'; // 'workspace' | 'matrix'
+var wdwMatrixDetail = 'compact'; // 'compact' | 'detailed'
+var wdwFilter = 'all'; // 'all' | 'needs-placement' | 'together' | 'individual' | 'co-op' | 'optional'
+
+function findCatById(catId) {
+  var found = null;
+  CATS.forEach(function (grp) { grp.items.forEach(function (c) { if (c.id === catId) found = c; }); });
+  return found;
+}
+
+var WDW_STATUS_TAGS = {
+  optional: 'Optional', 'practice-no-book': 'Practice / no book needed', 'manual-only': 'Manual only',
+  'co-op-external': 'Co-op / external', ignored: 'Ignored this year'
+};
+
+function wdwMoveOptionsHTML(cat) {
   var customGroups = L.listCustomGroupLabels(CATS);
-  var h = '<div class="wdw-editor"><h4>Move a subject</h4><table class="matrix-table"><thead><tr>';
-  h += '<th class="matrix-row-hd">Subject</th><th class="matrix-row-hd">Assign to</th><th class="matrix-row-hd">Group / children</th></tr></thead><tbody>';
-  CATS.forEach(function (grp) {
-    grp.items.forEach(function (cat) {
-      if (!cat.bks.length) return;
-      var nb = L.normalizeBook(cat.bks[0]);
-      h += '<tr><td class="matrix-row-hd">' + escAttr(grp.grp) + ' — ' + escAttr(cat.name) + '</td>';
-      h += '<td class="matrix-cell"><select onchange="window.wdwSetAudience(\'' + cat.id + '\',this.value)">';
-      [['together', 'Together'], ['shared-group', 'A group'], ['individual', 'Individual child(ren)'], ['co-op-outside', 'Co-op / outside'], ['independent', 'Independent']].forEach(function (o) {
-        h += '<option value="' + o[0] + '"' + (nb.audienceType === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
-      });
-      h += '</select></td><td class="matrix-cell">';
-      if (nb.audienceType === 'shared-group') {
-        h += '<input type="text" list="wdw-group-labels" value="' + escAttr(nb.sharedGroupLabel || '') + '" placeholder="e.g. Littles Together" onchange="window.wdwSetGroupLabel(\'' + cat.id + '\',this.value)">';
-      } else if (nb.audienceType === 'individual') {
-        FAMILY.children.forEach(function (c) {
-          var checked = (nb.assignedChildren || []).indexOf(c.id) > -1;
-          h += '<label style="margin-right:8px;"><input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="window.wdwToggleChild(\'' + cat.id + '\',\'' + c.id + '\',this.checked)"> ' + escAttr(c.name) + '</label>';
-        });
-      } else {
-        h += '&mdash;';
-      }
-      h += '</td></tr>';
-    });
-  });
-  h += '</tbody></table>';
-  h += '<datalist id="wdw-group-labels">';
-  customGroups.forEach(function (g) { h += '<option value="' + escAttr(g) + '">'; });
-  ['Littles Together', 'Older Kids', 'All Girls', 'Co-op'].forEach(function (g) { if (customGroups.indexOf(g) === -1) h += '<option value="' + escAttr(g) + '">'; });
-  h += '</datalist></div>';
+  var h = '<select onchange="if(this.value)window.wdwMoveTo(\'' + cat.id + '\',this.value)"><option value="">Move to…</option>';
+  h += '<option value="together">All Together / Family</option>';
+  customGroups.forEach(function (g) { h += '<option value="group:' + escAttr(g) + '">' + escAttr(g) + '</option>'; });
+  h += '<option value="group:__new">+ New custom group…</option>';
+  h += '<option value="individual">Individual child(ren)</option>';
+  h += '<option value="co-op">Co-op / Outside</option>';
+  h += '<option value="independent">Independent Work</option>';
+  h += '<option value="optional">Optional / Not this year</option>';
+  h += '</select>';
   return h;
 }
-window.wdwSetAudience = function (catId, type) {
-  var cat = null;
-  CATS.forEach(function (grp) { grp.items.forEach(function (c) { if (c.id === catId) cat = c; }); });
-  if (!cat) return;
-  var nb = cat.bks.length ? L.normalizeBook(cat.bks[0]) : {};
-  L.setCategoryAudience(cat, { type: type, sharedGroupLabel: nb.sharedGroupLabel, assignedChildren: nb.assignedChildren });
+function wdwChipHTML(chip) {
+  var cat = findCatById(chip.catId);
+  var h = '<div class="wdw-chip" style="border-left:4px solid ' + chip.color + ';">';
+  h += '<div class="wdw-chip-main" onclick="window.wdwOpenDetail(\'' + chip.catId + '\')">';
+  h += '<span class="wdw-chip-name">' + escAttr(chip.grpName) + ' — ' + escAttr(chip.catName) + '</span>';
+  if (chip.status !== 'active' && WDW_STATUS_TAGS[chip.status]) h += '<span class="tag-chip">' + WDW_STATUS_TAGS[chip.status] + '</span>';
+  h += '<span class="wdw-chip-count">' + chip.bookCount + ' book' + (chip.bookCount === 1 ? '' : 's') + '</span>';
+  h += '</div>';
+  h += '<div class="wdw-chip-move">' + wdwMoveOptionsHTML(cat) + '</div>';
+  h += '</div>';
+  return h;
+}
+window.wdwMoveTo = function (catId, dest) {
+  var cat = findCatById(catId); if (!cat) return;
+  if (dest === 'together') L.setCategoryAudience(cat, { type: 'together' });
+  else if (dest === 'individual') L.setCategoryAudience(cat, { type: 'individual', assignedChildren: [] });
+  else if (dest === 'co-op') L.setCategoryAudience(cat, { type: 'co-op-outside' });
+  else if (dest === 'independent') L.setCategoryAudience(cat, { type: 'independent' });
+  else if (dest === 'optional') L.setSubcategoryDecisionStatus(cat, 'optional');
+  else if (dest.indexOf('group:') === 0) {
+    var label = dest.slice(6);
+    if (label === '__new') {
+      label = prompt('Name this custom group (e.g. Littles Together, Older Kids, All Girls, Co-op):', '');
+      if (!label) return;
+    }
+    L.setCategoryAudience(cat, { type: 'shared-group', sharedGroupLabel: label });
+  } else return;
   saveApp(); renderWhoDoesWhat();
 };
-window.wdwSetGroupLabel = function (catId, label) {
-  var cat = null;
-  CATS.forEach(function (grp) { grp.items.forEach(function (c) { if (c.id === catId) cat = c; }); });
-  if (!cat) return;
-  L.setCategoryAudience(cat, { type: 'shared-group', sharedGroupLabel: label });
-  saveApp(); renderWhoDoesWhat();
+window.wdwOpenDetail = function (catId) {
+  var el = document.getElementById('wdw-detail'); if (!el) return;
+  var cat = findCatById(catId); if (!cat) { el.innerHTML = ''; return; }
+  var grpName = ''; CATS.forEach(function (g) { if (g.items.indexOf(cat) > -1) grpName = g.grp; });
+  var nb = cat.bks.length ? L.normalizeBook(cat.bks[0]) : {};
+  var h = '<div class="wdw-detail-panel"><h4>' + escAttr(grpName) + ' — ' + escAttr(cat.name) + '</h4>';
+  h += '<div class="wdw-detail-row"><label>Audience</label>' + wdwMoveOptionsHTML(cat) + '</div>';
+  if (nb.audienceType === 'individual') {
+    h += '<div class="wdw-detail-row"><label>Which children</label>';
+    FAMILY.children.forEach(function (c) {
+      var checked = (nb.assignedChildren || []).indexOf(c.id) > -1;
+      h += '<label style="margin-right:8px;font-weight:normal;"><input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="window.wdwToggleChild(\'' + cat.id + '\',\'' + c.id + '\',this.checked)"> ' + escAttr(c.name) + '</label>';
+    });
+    h += '</div>';
+  }
+  h += '<div class="wdw-detail-row"><label>Status</label>';
+  h += '<button class="mini-btn" onclick="window.decisionAction(\'markPractice\',\'' + cat.id + '\',\'\')">Practice / no book needed</button> ';
+  h += '<button class="mini-btn" onclick="window.decisionAction(\'markManual\',\'' + cat.id + '\',\'\')">Manual only</button> ';
+  h += '<button class="mini-btn" onclick="window.decisionAction(\'markCoop\',\'' + cat.id + '\',\'\')">Co-op / external</button> ';
+  h += '<button class="mini-btn" onclick="window.decisionAction(\'ignoreYear\',\'' + cat.id + '\',\'\')">Ignore this year</button> ';
+  if (L.resolveDecisionStatus(cat) !== 'active') h += '<button class="mini-btn" onclick="window.decisionAction(\'reactivate\',\'' + cat.id + '\',\'\')">Reactivate</button>';
+  h += '</div>';
+  h += '<div class="wdw-detail-row"><button class="util-btn" onclick="swByName(\'cats\')">Add / edit books for this subject</button></div>';
+  h += '<button class="mini-btn" onclick="document.getElementById(\'wdw-detail\').innerHTML=\'\'">Close</button>';
+  h += '</div>';
+  el.innerHTML = h;
 };
 window.wdwToggleChild = function (catId, childId, checked) {
-  var cat = null;
-  CATS.forEach(function (grp) { grp.items.forEach(function (c) { if (c.id === catId) cat = c; }); });
-  if (!cat) return;
+  var cat = findCatById(catId); if (!cat) return;
   var nb = cat.bks.length ? L.normalizeBook(cat.bks[0]) : {};
   var ids = (nb.assignedChildren || []).slice();
   var i = ids.indexOf(childId);
   if (checked && i === -1) ids.push(childId);
   else if (!checked && i > -1) ids.splice(i, 1);
   L.setCategoryAudience(cat, { type: 'individual', assignedChildren: ids });
-  saveApp(); renderWhoDoesWhat();
+  saveApp(); renderWhoDoesWhat(); window.wdwOpenDetail(catId);
 };
-function renderWhoDoesWhat() {
-  renderNeedsDecisionsInto('needs-decisions-whodoes');
-  var out = document.getElementById('whodoes-out'); if (!out) return;
+window.wdwSetMode = function (mode) { wdwMode = mode; renderWhoDoesWhat(); };
+window.wdwSetMatrixDetail = function (d) { wdwMatrixDetail = d; renderWhoDoesWhat(); };
+window.wdwSetFilter = function (f) { wdwFilter = f; renderWhoDoesWhat(); };
+
+function wdwWorkspaceHTML() {
+  var lanes = L.buildPlanWorkspaceLanes(CATS, FAMILY);
+  var h = '<div class="wdw-toolbar">';
+  h += '<div class="wdw-filters">';
+  [['all', 'Show all'], ['needs-placement', 'Needs placement'], ['together', 'Together'], ['individual', 'Individual'], ['co-op', 'Co-op'], ['optional', 'Optional']].forEach(function (f) {
+    h += '<button class="mini-btn' + (wdwFilter === f[0] ? ' active' : '') + '" onclick="window.wdwSetFilter(\'' + f[0] + '\')">' + f[1] + '</button>';
+  });
+  h += '</div>';
+  h += '<input type="text" id="wdw-search" placeholder="Search subjects…" oninput="window.renderWhoDoesWhat()" style="margin-left:auto;">';
+  h += '</div>';
+  h += '<div id="wdw-detail"></div>';
+  var search = (document.getElementById('wdw-search') && document.getElementById('wdw-search').value || '').toLowerCase();
+  h += '<div class="wdw-lanes">';
+  lanes.forEach(function (lane) {
+    var chips = lane.chips;
+    if (wdwFilter !== 'all') {
+      if (wdwFilter === 'individual' && lane.id !== 'individual') return;
+      if (wdwFilter === 'co-op' && lane.id !== 'co-op') return;
+      if ((wdwFilter === 'needs-placement' || wdwFilter === 'together' || wdwFilter === 'optional') && lane.id !== wdwFilter) return;
+    }
+    if (search) chips = chips.filter(function (c) { return (c.grpName + ' ' + c.catName).toLowerCase().indexOf(search) > -1; });
+    if (!chips.length) return;
+    h += '<div class="wdw-lane' + (lane.id === 'needs-placement' ? ' wdw-lane-attn' : '') + '"><h4>' + escAttr(lane.label) + ' (' + chips.length + ')</h4><div class="wdw-lane-chips">';
+    chips.forEach(function (chip) { h += wdwChipHTML(chip); });
+    h += '</div></div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+function wdwMatrixHTML() {
   var m = L.buildFamilyCoverageMatrix(CATS, FAMILY.children, LOOPS);
-  var h = '<div class="matrix-wrap"><table class="matrix-table"><thead><tr><th class="matrix-row-hd">Audience</th>';
+  var h = '<div class="wdw-matrix-toolbar adv-only-not"><label style="font-size:12px;font-family:sans-serif;">';
+  h += '<input type="checkbox" ' + (wdwMatrixDetail === 'detailed' ? 'checked' : '') + ' onchange="window.wdwSetMatrixDetail(this.checked?\'detailed\':\'compact\')"> Show book/resource detail</label></div>';
+  h += '<div class="matrix-wrap"><table class="matrix-table"><thead><tr><th class="matrix-row-hd">Audience</th>';
   m.columns.forEach(function (c) { h += '<th class="matrix-subj-hd" style="border-bottom:3px solid ' + c.col + ';color:' + c.col + ';">' + escAttr(c.grp) + '</th>'; });
   h += '</tr></thead><tbody>';
   m.rows.forEach(function (row) {
@@ -1825,15 +2064,34 @@ function renderWhoDoesWhat() {
     m.columns.forEach(function (c) {
       var cell = row.cells[c.grp];
       if (!cell || !cell.length) { h += '<td class="matrix-cell empty">&mdash;</td>'; return; }
-      h += '<td class="matrix-cell"><ul>' + cell.map(function (t) { return '<li>' + escAttr(t) + '</li>'; }).join('') + '</ul></td>';
+      if (wdwMatrixDetail === 'detailed') {
+        h += '<td class="matrix-cell"><ul>' + cell.map(function (t) { return '<li>' + escAttr(t) + '</li>'; }).join('') + '</ul></td>';
+      } else {
+        var names = cell.map(function (t) { return escAttr(t.split(':')[0]); });
+        h += '<td class="matrix-cell"><span class="wdw-compact-chip">' + names.join('</span><span class="wdw-compact-chip">') + '</span></td>';
+      }
     });
     h += '</tr>';
   });
   h += '</tbody></table></div>';
-  h += whoDoesWhatEditorHTML();
+  return h;
+}
+
+function renderWhoDoesWhat() {
+  renderNeedsDecisionsInto('needs-decisions-whodoes');
+  var out = document.getElementById('whodoes-out'); if (!out) return;
+  var h = '<div class="wdw-stepper">';
+  h += '<span>1. Create groups</span><span>2. Place subjects</span><span>3. Mark practice/co-op/optional</span><span>4. Review summary</span>';
+  h += '</div>';
+  h += '<div class="wdw-mode-toggle">';
+  h += '<button class="sv-btn' + (wdwMode === 'workspace' ? ' active' : '') + '" onclick="window.wdwSetMode(\'workspace\')">Plan Workspace</button>';
+  h += '<button class="sv-btn' + (wdwMode === 'matrix' ? ' active' : '') + '" onclick="window.wdwSetMode(\'matrix\')">Printable Summary Matrix</button>';
+  h += '</div>';
+  h += (wdwMode === 'matrix') ? wdwMatrixHTML() : wdwWorkspaceHTML();
   h += '<button class="util-btn" style="margin-top:10px;" onclick="window.print()">Print this view</button>';
   out.innerHTML = h;
 }
+window.renderWhoDoesWhat = renderWhoDoesWhat;
 
 // ---------------------------------------------------------------------------
 // Tab switching + boot
@@ -1854,6 +2112,7 @@ window.sw = function (name, el) {
 
 function renderAll() {
   renderMigrateBanner();
+  renderDemoBanner();
   renderHeader();
   renderChildren();
   renderSchoolYearForm();
@@ -1869,16 +2128,21 @@ uiMode = loadUiMode();
 applyUiMode();
 
 APP = loadApp();
-if (!APP.needsMigration) {
-  syncShortcuts();
+if (APP === null) {
+  showWelcome();
 } else {
-  // Still need an empty/demo shell so other tabs don't error while the
-  // migration banner is showing; user must click through to fresh setup
-  // (or import a valid v3 backup) before editing.
-  FAMILY = L.demoFamilySetup();
-  CATS = [];
+  showMainApp();
+  if (!APP.needsMigration) {
+    syncShortcuts();
+  } else {
+    // Still need an empty/demo shell so other tabs don't error while the
+    // migration banner is showing; user must click through to fresh setup
+    // (or import a valid v3 backup) before editing.
+    FAMILY = L.demoFamilySetup();
+    CATS = [];
+  }
+  renderAll();
 }
-renderAll();
 </script>
 <!--
   BUILD STAMP (raw HTML, not JS-rendered, so it's visible to curl/view-source
