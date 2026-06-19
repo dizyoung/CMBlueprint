@@ -251,6 +251,7 @@
   <div class="header">
     <h1>DIY Charlotte Mason Blueprint</h1>
     <p id="header-sub"></p>
+    <p id="build-stamp-header" style="font-family:sans-serif;font-size:10px;color:#aaa;margin:-6px 0 0;">v1.1.0 &middot; build 805e557 &middot; 2026-06-19</p>
   </div>
 
   <div id="migrate-banner-holder"></div>
@@ -1648,5 +1649,16 @@ if (!APP.needsMigration) {
 }
 renderAll();
 </script>
+<!--
+  BUILD STAMP (raw HTML, not JS-rendered, so it's visible to curl/view-source
+  and other tools that don't execute scripts). Update these three values as
+  part of every commit that ships to the deployed branch.
+  cm-blueprint-version: 1.1.0
+  cm-blueprint-commit: 805e557
+  cm-blueprint-build-date: 2026-06-19
+-->
+<footer id="build-stamp" style="font-family:sans-serif;font-size:10px;color:#999;text-align:center;padding:10px 0 18px;">
+  CM Blueprint Planner v1.1.0 &middot; build 805e557 &middot; 2026-06-19
+</footer>
 </body>
 </html>
