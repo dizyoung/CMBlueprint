@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Family School Map — Static Prototype (hardcoded data, not wired to app)</title>
+<style>
+  :root {
+    --bible: #b5404f; --la: #e0b23c; --lit: #c97b6a; --hist: #7a8fae;
+    --sci: #5c9e8f; --math: #3f7a82; --beauty: #8a6fae; --geo: #2f6b5e;
+    --border: #d8d8d8; --ink: #2c2c2c; --muted: #777;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, sans-serif; margin: 0; padding: 20px; background: #f7f7f5; color: var(--ink); }
+  .proto-banner { background: #fff3cd; border: 1px solid #e0c25c; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+
+  .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .toggle-group { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .toggle-group button { border: none; background: #fff; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+  .toggle-group button.active { background: var(--ink); color: #fff; }
+  .legend { display: flex; gap: 12px; font-size: 11px; color: var(--muted); flex-wrap: wrap; margin-left: auto; }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot.book { background: #4a9b5e; }
+  .dot.needbook { background: #d9534f; }
+  .dot.practice { background: #888; }
+  .dot.coop { background: #5c8fc9; }
+  .dot.optional { background: #c9a45c; }
+  .dot.unplaced { background: #d9534f; border: 1px dashed #a33; }
+
+  .print-btn { margin-left: 8px; font-size: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }
+
+  table.map { border-collapse: collapse; width: 100%; background: #fff; table-layout: fixed; }
+  table.map th, table.map td { border: 1px solid var(--border); vertical-align: top; }
+  table.map thead th { padding: 8px 6px; font-size: 12px; color: #fff; text-align: center; }
+  table.map th.row-head { background: #eee; color: var(--ink); text-align: left; padding: 8px; font-size: 12px; font-weight: 600; width: 110px; }
+  table.map td { padding: 6px; min-height: 40px; }
+  table.map td.unplaced-row { background: #fff7f6; }
+  table.map td.empty-cell { background: #fafafa; }
+
+  th.col-bible { background: var(--bible); } th.col-la { background: var(--la); color:#3a2f00; }
+  th.col-lit { background: var(--lit); } th.col-hist { background: var(--hist); }
+  th.col-sci { background: var(--sci); } th.col-math { background: var(--math); }
+  th.col-beauty { background: var(--beauty); } th.col-geo { background: var(--geo); }
+
+  .chip { border-radius: 6px; padding: 4px 6px; margin-bottom: 4px; font-size: 11px; line-height: 1.3; cursor: pointer; position: relative; }
+  .chip:last-child { margin-bottom: 0; }
+  .chip-bible { background: #f7e3e5; border-left: 3px solid var(--bible); }
+  .chip-la { background: #fbf3da; border-left: 3px solid var(--la); }
+  .chip-lit { background: #f7e7e2; border-left: 3px solid var(--lit); }
+  .chip-hist { background: #e9edf3; border-left: 3px solid var(--hist); }
+  .chip-sci { background: #e4f1ec; border-left: 3px solid var(--sci); }
+  .chip-math { background: #e1eef0; border-left: 3px solid var(--math); }
+  .chip-beauty { background: #ece6f5; border-left: 3px solid var(--beauty); }
+  .chip-geo { background: #e1ede8; border-left: 3px solid var(--geo); }
+
+  .chip-title { font-weight: 600; display: flex; align-items: center; gap: 4px; }
+  .chip-sub { color: var(--muted); font-size: 10px; margin-top: 1px; }
+  .chip-tag { font-size: 9px; background: rgba(0,0,0,0.08); border-radius: 6px; padding: 0 5px; margin-left: auto; }
+  .strand-badge { font-size: 9px; background: rgba(0,0,0,0.55); color: #fff; border-radius: 6px; padding: 0 5px; }
+
+  .chip-detail { display: none; margin-top: 4px; padding-top: 4px; border-top: 1px dashed rgba(0,0,0,0.15); font-size: 10px; }
+  .chip.expanded .chip-detail { display: block; }
+  .seq-item { display: flex; justify-content: space-between; padding: 1px 0; }
+  .seq-item.current { font-weight: 600; }
+  .seq-item.done { color: var(--muted); text-decoration: line-through; }
+  .seq-item.upnext { color: var(--muted); }
+
+  .compact .chip-sub { display: none; }
+  .compact .chip { padding: 3px 5px; }
+
+  .editor-mock { position: fixed; right: 20px; bottom: 20px; width: 250px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); display: none; }
+  .editor-mock.show { display: block; }
+  .editor-mock h4 { margin: 0 0 6px; font-size: 12px; }
+  .editor-mock label { display: block; font-size: 10px; color: var(--muted); margin-top: 8px; }
+  .editor-mock select, .editor-mock input { width: 100%; font-size: 11px; padding: 3px; margin-top: 2px; }
+  .editor-mock .close { position: absolute; top: 6px; right: 8px; cursor: pointer; color: var(--muted); }
+  .editor-note { font-size: 10px; color: var(--muted); margin-top: 8px; font-style: italic; }
+
+  @media print {
+    body { background: #fff; padding: 0; }
+    .proto-banner, .toolbar, .editor-mock { display: none !important; }
+    table.map { font-size: 10px; }
+    .chip { cursor: default; }
+    .chip-detail { display: block !important; } /* detailed print shows full sequence */
+  }
+</style>
+</head>
+<body>
+
+<div class="proto-banner">
+  <strong>Static prototype — hardcoded sample data only.</strong> Nothing here is wired to real app state, localStorage, or logic.mjs.
+  This is a visual checkpoint for the Family School Map layout before any data-model migration happens.
+</div>
+
+<h1>Family School Map</h1>
+<p class="sub">Rows = who it's for. Columns = subject families. Chips = PlanItems / PlanStrands the family has actually chosen.</p>
+
+<div class="toolbar">
+  <div class="toggle-group" id="density-toggle">
+    <button class="active" data-mode="compact">Compact</button>
+    <button data-mode="detailed">Detailed</button>
+  </div>
+  <button class="print-btn" onclick="window.print()">Print preview</button>
+  <div class="legend">
+    <span><span class="dot book"></span> has book</span>
+    <span><span class="dot needbook"></span> needs book</span>
+    <span><span class="dot practice"></span> practice/no book</span>
+    <span><span class="dot coop"></span> co-op</span>
+    <span><span class="dot optional"></span> optional</span>
+    <span><span class="dot unplaced"></span> needs placement</span>
+  </div>
+</div>
+
+<table class="map" id="map-table">
+  <thead>
+    <tr>
+      <th class="row-head" style="background:#fff;"></th>
+      <th class="col-bible">Bible</th>
+      <th class="col-la">Language Arts</th>
+      <th class="col-lit">Literature</th>
+      <th class="col-hist">History</th>
+      <th class="col-sci">Science / Nat. History</th>
+      <th class="col-math">Math</th>
+      <th class="col-beauty">Beauty</th>
+      <th class="col-geo">Geography / Citizenship</th>
+    </tr>
+  </thead>
+  <tbody id="map-body"></tbody>
+</table>
+
+<div class="editor-mock" id="editor-mock">
+  <span class="close" onclick="closeEditor()">✕</span>
+  <h4 id="editor-title">Chip detail</h4>
+  <label>Audience</label>
+  <select disabled><option>Together</option></select>
+  <label>Status</label>
+  <select disabled><option>Active</option></select>
+  <label>Schedule</label>
+  <select disabled><option>Loop — 4x/week</option></select>
+  <div class="editor-note">Mockup only — not a working editor in this prototype.</div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// HARDCODED SAMPLE DATA — illustrates PlanItem + PlanStrand shape.
+// Not parsed from or written to any real app state.
+// ---------------------------------------------------------------------------
+var COLS = [
+  { id: 'bible', label: 'Bible', cls: 'bible' },
+  { id: 'la', label: 'Language Arts', cls: 'la' },
+  { id: 'lit', label: 'Literature', cls: 'lit' },
+  { id: 'hist', label: 'History', cls: 'hist' },
+  { id: 'sci', label: 'Science / Nat. History', cls: 'sci' },
+  { id: 'math', label: 'Math', cls: 'math' },
+  { id: 'beauty', label: 'Beauty', cls: 'beauty' },
+  { id: 'geo', label: 'Geography / Citizenship', cls: 'geo' }
+];
+
+var ROWS = [
+  { id: 'together', label: 'Together' },
+  { id: 'littles', label: 'Littles Together' },
+  { id: 'older', label: 'Older Students' },
+  { id: 'lucy', label: 'Lucy' },
+  { id: 'jeremiah', label: 'Jeremiah' },
+  { id: 'coop', label: 'Co-op / External' },
+  { id: 'optional', label: 'Optional / Not this year' },
+  { id: 'unplaced', label: 'Needs Placement' }
+];
+
+// PlanStrands (sequential/loop groupings)
+var STRANDS = [
+  {
+    id: 'strand-bible-loop', subjectFamilyId: 'bible', audience: 'together',
+    label: 'Bible Loop', behavior: 'loop', schedule: 'Loop — 4x/week',
+    items: [
+      { label: 'Matthew ch. 1', status: 'active', hasBook: true, current: true },
+      { label: 'Psalms selection', status: 'active', hasBook: true },
+      { label: 'Proverbs selection', status: 'active', hasBook: true }
+    ]
+  },
+  {
+    id: 'strand-readaloud', subjectFamilyId: 'lit', audience: 'together',
+    label: 'Family Read-Aloud', behavior: 'sequential', schedule: 'Direct — 3x/week',
+    items: [
+      { label: 'Book 1: The Hobbit', status: 'done', hasBook: true },
+      { label: 'Book 2: Charlotte\'s Web', status: 'current', hasBook: true, current: true },
+      { label: 'Book 3: My Side of the Mountain', status: 'upnext', hasBook: true }
+    ]
+  },
+  {
+    id: 'strand-beauty-loop', subjectFamilyId: 'beauty', audience: 'together',
+    label: 'Beauty Loop', behavior: 'loop', schedule: 'Loop — 1-3x/week',
+    items: [
+      { label: 'Picture Study', status: 'active', hasBook: false, practice: true, current: true },
+      { label: 'Hymn Study', status: 'active', hasBook: false, practice: true },
+      { label: 'Handicraft', status: 'active', hasBook: false, practice: true }
+    ]
+  },
+  {
+    id: 'strand-lucy-lit', subjectFamilyId: 'lit', audience: 'lucy',
+    label: 'Lucy Independent Literature', behavior: 'sequential', schedule: 'Direct — 4x/week',
+    items: [
+      { label: 'Anne of Green Gables', status: 'done', hasBook: true },
+      { label: 'The Secret Garden', status: 'current', hasBook: true, current: true },
+      { label: 'Little Women', status: 'upnext', hasBook: false, needsBook: true }
+    ]
+  },
+  {
+    id: 'strand-jeremiah-sci', subjectFamilyId: 'sci', audience: 'jeremiah',
+    label: 'Jeremiah Science', behavior: 'sequential', schedule: 'Direct — 3x/week',
+    items: [
+      { label: 'Botany', status: 'done', hasBook: true },
+      { label: 'Geology', status: 'current', hasBook: true, current: true },
+      { label: 'Physiology', status: 'upnext', hasBook: false, needsBook: true }
+    ]
+  }
+];
+
+// Standalone (independent/concurrent) PlanItems — not part of a strand
+var ITEMS = [
+  { subjectFamilyId: 'math', audience: 'lucy', label: 'Math (independent)', status: 'active', hasBook: true, schedule: 'Direct — 5x/week' },
+  { subjectFamilyId: 'math', audience: 'jeremiah', label: 'Math (with Mom)', status: 'active', hasBook: true, schedule: 'Direct — 5x/week' },
+  { subjectFamilyId: 'la', audience: 'littles', label: 'Handwriting', status: 'active', hasBook: true, schedule: 'Direct — 3x/week' },
+  { subjectFamilyId: 'la', audience: 'littles', label: 'Phonics', status: 'active', hasBook: true, schedule: 'Direct — 4x/week' },
+  { subjectFamilyId: 'sci', audience: 'coop', label: 'Co-op Science Class', status: 'co-op-external', schedule: 'Co-op — weekly' },
+  { subjectFamilyId: 'hist', audience: 'older', label: 'American History Spine', status: 'active', hasBook: true, schedule: 'Direct — 2x/week' },
+  { subjectFamilyId: 'geo', audience: 'optional', label: 'Map Quizzing', status: 'optional', schedule: '—' },
+  { subjectFamilyId: 'hist', audience: 'unplaced', label: 'Neighboring Lands Spine', status: 'active', needsBook: true, schedule: 'not set' }
+];
+
+function colClass(id) { return 'col-' + id; }
+function chipClass(id) { return 'chip-' + id; }
+
+function statusDot(it) {
+  if (it.status === 'co-op-external') return 'coop';
+  if (it.status === 'optional') return 'optional';
+  if (it.practice) return 'practice';
+  if (it.needsBook) return 'needbook';
+  if (it.hasBook) return 'book';
+  if (it.audience === 'unplaced') return 'unplaced';
+  return 'needbook';
+}
+
+function strandChipHTML(strand) {
+  var current = strand.items.find(function (i) { return i.current; }) || strand.items[0];
+  var dot = statusDot(current);
+  var seqHTML = strand.items.map(function (i, idx) {
+    var cls = i.status === 'done' ? 'done' : (i.current ? 'current' : 'upnext');
+    var marker = i.status === 'done' ? '✓' : (i.current ? '▶' : (idx + 1));
+    return '<div class="seq-item ' + cls + '"><span>' + marker + ' ' + i.label + '</span></div>';
+  }).join('');
+  var behaviorTag = strand.behavior === 'loop' ? 'Loop' : (strand.behavior === 'sequential' ? 'Sequence' : 'Concurrent');
+  return (
+    '<div class="chip ' + chipClass(strand.subjectFamilyId) + '" onclick="toggleExpand(this)" ondblclick="openEditor(\'' + escapeHtml(strand.label) + '\')">' +
+      '<div class="chip-title"><span class="dot ' + dot + '"></span>' + escapeHtml(strand.label) +
+        '<span class="strand-badge">' + behaviorTag + '</span></div>' +
+      '<div class="chip-sub">' + escapeHtml(strand.schedule) + ' · now: ' + escapeHtml(current.label) + '</div>' +
+      '<div class="chip-detail">' + seqHTML + '</div>' +
+    '</div>'
+  );
+}
+
+function itemChipHTML(it) {
+  var dot = statusDot(it);
+  var tag = it.status === 'co-op-external' ? 'Co-op' : (it.status === 'optional' ? 'Optional' : (it.audience === 'unplaced' ? 'Needs placement' : ''));
+  return (
+    '<div class="chip ' + chipClass(it.subjectFamilyId) + '" onclick="toggleExpand(this)" ondblclick="openEditor(\'' + escapeHtml(it.label) + '\')">' +
+      '<div class="chip-title"><span class="dot ' + dot + '"></span>' + escapeHtml(it.label) + (tag ? '<span class="chip-tag">' + tag + '</span>' : '') + '</div>' +
+      '<div class="chip-sub">' + escapeHtml(it.schedule || '') + '</div>' +
+      '<div class="chip-detail">Single item — not part of a strand.</div>' +
+    '</div>'
+  );
+}
+
+function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/'/g, '&#39;'); }
+
+function buildGrid() {
+  var body = document.getElementById('map-body');
+  var html = '';
+  ROWS.forEach(function (row) {
+    html += '<tr><th class="row-head">' + escapeHtml(row.label) + '</th>';
+    COLS.forEach(function (col) {
+      var cellChips = '';
+      STRANDS.filter(function (s) { return s.subjectFamilyId === col.id && s.audience === row.id; })
+        .forEach(function (s) { cellChips += strandChipHTML(s); });
+      ITEMS.filter(function (i) { return i.subjectFamilyId === col.id && i.audience === row.id; })
+        .forEach(function (i) { cellChips += itemChipHTML(i); });
+      var rowCls = row.id === 'unplaced' ? ' unplaced-row' : '';
+      var emptyCls = !cellChips ? ' empty-cell' : '';
+      html += '<td class="' + rowCls + emptyCls + '">' + cellChips + '</td>';
+    });
+    html += '</tr>';
+  });
+  body.innerHTML = html;
+}
+
+window.toggleExpand = function (el) {
+  el.classList.toggle('expanded');
+};
+window.openEditor = function (title) {
+  document.getElementById('editor-title').textContent = title;
+  document.getElementById('editor-mock').classList.add('show');
+};
+window.closeEditor = function () {
+  document.getElementById('editor-mock').classList.remove('show');
+};
+
+document.getElementById('density-toggle').addEventListener('click', function (e) {
+  var btn = e.target.closest('button'); if (!btn) return;
+  document.querySelectorAll('#density-toggle button').forEach(function (b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  document.getElementById('map-table').parentElement === null; // no-op safety
+  document.body.classList.toggle('compact', btn.dataset.mode === 'compact');
+});
+
+buildGrid();
+document.body.classList.add('compact');
+</script>
+
+</body>
+</html>
