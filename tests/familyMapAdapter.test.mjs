@@ -236,6 +236,52 @@ test('"Needs rhythm review" flags a rhythm assignment whose referenced card/loop
   assert.ok(reviewItems.every((a) => typeof a.rhythmReviewReason === 'string'));
 });
 
+// ---------------------------------------------------------------------------
+// Phase 1D — Weekly Rhythm editing wrappers
+// ---------------------------------------------------------------------------
+test('addRhythmAssignmentToState/updateRhythmAssignmentInState/deleteRhythmAssignmentFromState edit the shared state weeklyRhythm', () => {
+  const state = A.buildSampleAppState();
+  const dayId = state.weeklyRhythm.days[0].id;
+  const blockId = state.weeklyRhythm.blocks[0].id;
+
+  const added = A.addRhythmAssignmentToState(state, { dayId, blockId, label: 'Free reading', assignmentType: 'custom' });
+  assert.ok(state.weeklyRhythm.assignments.some((a) => a.id === added.id));
+
+  const updated = A.updateRhythmAssignmentInState(state, added.id, { label: 'Free reading (updated)', isFlexible: true });
+  assert.equal(updated.label, 'Free reading (updated)');
+  assert.equal(updated.isFlexible, true);
+
+  const deleted = A.deleteRhythmAssignmentFromState(state, added.id);
+  assert.equal(deleted, true);
+  assert.ok(!state.weeklyRhythm.assignments.some((a) => a.id === added.id));
+});
+
+test('addCardToRhythm creates a card-referencing rhythm assignment without touching the card, and resolves placement', () => {
+  const state = A.buildSampleAppState();
+  const card = state.cards[0];
+  const dayId = state.weeklyRhythm.days[0].id;
+  const blockId = state.weeklyRhythm.blocks[0].id;
+
+  assert.equal(A.cardHasRhythmPlacement(state, card.id), false);
+  const titleBefore = card.title;
+
+  const assignment = A.addCardToRhythm(state, card.id, dayId, blockId);
+  assert.equal(assignment.assignmentType, 'card');
+  assert.equal(assignment.referencedId, card.id);
+  assert.equal(assignment.label, titleBefore);
+  assert.equal(card.title, titleBefore); // card itself untouched
+
+  assert.equal(A.cardHasRhythmPlacement(state, card.id), true);
+});
+
+test('addCardToRhythm returns null for an unknown card id and does not modify the rhythm', () => {
+  const state = A.buildSampleAppState();
+  const before = state.weeklyRhythm.assignments.length;
+  const result = A.addCardToRhythm(state, 'card_does_not_exist', state.weeklyRhythm.days[0].id, state.weeklyRhythm.blocks[0].id);
+  assert.equal(result, null);
+  assert.equal(state.weeklyRhythm.assignments.length, before);
+});
+
 let passed = 0;
 let failed = 0;
 for (const t of tests) {

@@ -148,6 +148,112 @@ test('print orientation for Weekly Rhythm overview is landscape', () => {
   assert.equal(R.printOrientationForRhythmMode(settings.printMode), 'landscape');
 });
 
+// ---------------------------------------------------------------------------
+// Phase 1D — cell editing mutators
+// ---------------------------------------------------------------------------
+test('addRhythmAssignment adds a custom-label assignment to a cell with no referenced object', () => {
+  var rhythm = R.makeWeeklyRhythm({ days: [R.makeRhythmDay({ id: 'day1' })], blocks: [R.makeRhythmBlock({ id: 'morning' })] });
+  var added = R.addRhythmAssignment(rhythm, { dayId: 'day1', blockId: 'morning', label: 'Free reading', assignmentType: 'custom' });
+  assert.equal(added.referencedId, null);
+  assert.equal(R.getAssignmentsForCell(rhythm, 'day1', 'morning').length, 1);
+});
+
+test('a cell can hold multiple assignments after repeated adds', () => {
+  var rhythm = R.makeWeeklyRhythm({ days: [R.makeRhythmDay({ id: 'day1' })], blocks: [R.makeRhythmBlock({ id: 'morning' })] });
+  R.addRhythmAssignment(rhythm, { dayId: 'day1', blockId: 'morning', label: 'Together Time', assignmentType: 'together' });
+  R.addRhythmAssignment(rhythm, { dayId: 'day1', blockId: 'morning', label: 'Jeremiah independent', assignmentType: 'student', referencedId: 'jeremiah' });
+  var cell = R.getAssignmentsForCell(rhythm, 'day1', 'morning');
+  assert.equal(cell.length, 2);
+  assert.deepEqual(cell.map((a) => a.label), ['Together Time', 'Jeremiah independent']);
+});
+
+test('addRhythmAssignment can reference an existing card, loop, or sequence', () => {
+  var rhythm = R.makeWeeklyRhythm({ days: [R.makeRhythmDay({ id: 'day1' })], blocks: [R.makeRhythmBlock({ id: 'morning' })] });
+  var card = M.makeCard({ id: 'card1' });
+  var loop = M.makeLoop({ id: 'loop1' });
+  var sequence = M.makeSequence({ id: 'seq1' });
+  var context = { students: sampleStudents(), groups: sampleGroups(), cards: [card], loops: [loop], sequences: [sequence] };
+
+  var cardAsn = R.addRhythmAssignment(rhythm, { dayId: 'day1', blockId: 'morning', assignmentType: 'card', referencedId: 'card1' });
+  var loopAsn = R.addRhythmAssignment(rhythm, { dayId: 'day1', blockId: 'morning', assignmentType: 'loop', referencedId: 'loop1' });
+  var seqAsn = R.addRhythmAssignment(rhythm, { dayId: 'day1', blockId: 'morning', assignmentType: 'sequence', referencedId: 'seq1' });
+
+  assert.equal(R.resolveRhythmAssignmentReviewState(cardAsn, context).missingReference, false);
+  assert.equal(R.resolveRhythmAssignmentReviewState(loopAsn, context).missingReference, false);
+  assert.equal(R.resolveRhythmAssignmentReviewState(seqAsn, context).missingReference, false);
+});
+
+test('addRhythmAssignment for a group resolves to the group students, and together resolves to active students', () => {
+  var rhythm = R.makeWeeklyRhythm({ days: [R.makeRhythmDay({ id: 'day1' })], blocks: [R.makeRhythmBlock({ id: 'morning' })] });
+  var context = { students: sampleStudents(), groups: sampleGroups() };
+  var groupAsn = R.addRhythmAssignment(rhythm, { dayId: 'day1', blockId: 'morning', assignmentType: 'group', referencedId: 'littles' });
+  var togetherAsn = R.addRhythmAssignment(rhythm, { dayId: 'day1', blockId: 'morning', assignmentType: 'together' });
+  assert.deepEqual(R.resolveRhythmAssignmentParticipants(groupAsn, context).sort(), ['charis', 'kayla']);
+  assert.deepEqual(R.resolveRhythmAssignmentParticipants(togetherAsn, context).sort(), ['charis', 'jeremiah', 'kayla', 'lucy']);
+});
+
+test('updateRhythmAssignment edits label, type/reference, notes, and the all-day/flexible/print toggles', () => {
+  var rhythm = R.buildSampleWeeklyRhythm();
+  var original = rhythm.assignments.find((a) => a.label === 'Free reading');
+  var updated = R.updateRhythmAssignment(rhythm, original.id, {
+    label: 'Free reading (updated)',
+    assignmentType: 'student',
+    referencedId: 'lucy',
+    notes: 'Lucy picks her own book',
+    isAllDay: true,
+    isFlexible: false,
+    showOnPrint: false
+  });
+  assert.equal(updated.label, 'Free reading (updated)');
+  assert.equal(updated.assignmentType, 'student');
+  assert.equal(updated.referencedId, 'lucy');
+  assert.equal(updated.notes, 'Lucy picks her own book');
+  assert.equal(updated.isAllDay, true);
+  assert.equal(updated.isFlexible, false);
+  assert.equal(updated.showOnPrint, false);
+
+  var context = { students: sampleStudents(), groups: sampleGroups() };
+  assert.deepEqual(R.resolveRhythmAssignmentParticipants(updated, context), ['lucy']);
+});
+
+test('updateRhythmAssignment on an unknown id returns null and changes nothing', () => {
+  var rhythm = R.buildSampleWeeklyRhythm();
+  var before = rhythm.assignments.length;
+  var result = R.updateRhythmAssignment(rhythm, 'does_not_exist', { label: 'x' });
+  assert.equal(result, null);
+  assert.equal(rhythm.assignments.length, before);
+});
+
+test('deleteRhythmAssignment removes the assignment but never touches the card/loop/sequence it referenced', () => {
+  var rhythm = R.makeWeeklyRhythm({
+    days: [R.makeRhythmDay({ id: 'day1' })],
+    blocks: [R.makeRhythmBlock({ id: 'morning' })]
+  });
+  var card = M.makeCard({ id: 'card_keep', title: 'Keep me' });
+  var asn = R.addRhythmAssignment(rhythm, { dayId: 'day1', blockId: 'morning', assignmentType: 'card', referencedId: 'card_keep' });
+  var deleted = R.deleteRhythmAssignment(rhythm, asn.id);
+  assert.equal(deleted, true);
+  assert.equal(rhythm.assignments.length, 0);
+  assert.equal(card.id, 'card_keep'); // untouched, still exists independently
+});
+
+test('deleting a rhythm assignment removes it from student and group rhythm views', () => {
+  var rhythm = R.makeWeeklyRhythm({ days: [R.makeRhythmDay({ id: 'day1' })], blocks: [R.makeRhythmBlock({ id: 'morning' })] });
+  var context = { students: sampleStudents(), groups: sampleGroups() };
+  var asn = R.addRhythmAssignment(rhythm, { dayId: 'day1', blockId: 'morning', assignmentType: 'student', referencedId: 'jeremiah' });
+  assert.ok(R.getRhythmForStudent(rhythm, 'jeremiah', context).some((a) => a.id === asn.id));
+  R.deleteRhythmAssignment(rhythm, asn.id);
+  assert.ok(!R.getRhythmForStudent(rhythm, 'jeremiah', context).some((a) => a.id === asn.id));
+});
+
+test('rhythm edits remain plain JSON-serializable', () => {
+  var rhythm = R.buildSampleWeeklyRhythm();
+  R.addRhythmAssignment(rhythm, { dayId: 'day1', blockId: 'morning', label: 'New thing', assignmentType: 'custom', notes: 'a note' });
+  var json = JSON.stringify(rhythm);
+  var back = JSON.parse(json);
+  assert.deepEqual(back, rhythm);
+});
+
 let passed = 0;
 let failed = 0;
 for (const t of tests) {

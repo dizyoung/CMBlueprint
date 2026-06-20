@@ -22,14 +22,29 @@
   table.rhythm th.row-head { background: #eee; color: var(--ink); text-align: left; font-weight: 600; width: 140px; }
   table.rhythm td.dim-cell .rasn { opacity: 0.3; }
 
-  .rasn { border-radius: 6px; padding: 4px 6px; margin-bottom: 4px; font-size: 11px; border-left: 3px solid #888; background: #f5f5f5; }
+  .rasn { border-radius: 6px; padding: 4px 6px; margin-bottom: 4px; font-size: 11px; border-left: 3px solid #888; background: #f5f5f5; cursor: pointer; position: relative; }
+  .rasn:hover { background: #ececec; }
   .rasn:last-child { margin-bottom: 0; }
   .rasn .tag { font-size: 9px; color: var(--muted); margin-left: 4px; }
   .rasn.allday { border-left-color: #5c8fc9; }
   .rasn.flexible { border-style: dashed; }
 
+  .add-cell-btn { display: block; width: 100%; margin-top: 2px; font-size: 10px; padding: 3px; border: 1px dashed var(--border); border-radius: 5px; background: #fafafa; color: var(--muted); cursor: pointer; }
+  .add-cell-btn:hover { background: #f0f0f0; }
+
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  .editor { background: #fff; border-radius: 10px; padding: 18px 20px; width: 380px; max-height: 88vh; overflow-y: auto; box-shadow: 0 8px 30px rgba(0,0,0,0.25); }
+  .editor h2 { font-size: 16px; margin: 0 0 12px; }
+  .editor label { display: block; font-size: 12px; font-weight: 600; margin: 10px 0 4px; }
+  .editor input[type=text], .editor select, .editor textarea { width: 100%; font-size: 13px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; }
+  .editor textarea { resize: vertical; min-height: 50px; }
+  .checkrow { display: flex; align-items: center; gap: 6px; margin: 8px 0; font-size: 12px; font-weight: 400; }
+  .editor-actions { display: flex; justify-content: space-between; margin-top: 16px; gap: 8px; }
+  .editor-actions .right { display: flex; gap: 8px; }
+  button.danger { border-color: #c0524a; color: #c0524a; }
+
   @media print {
-    .banner, .toolbar { display: none !important; }
+    .banner, .toolbar, .add-cell-btn { display: none !important; }
     @page { size: landscape; margin: 0.4in; }
   }
 </style>
@@ -44,7 +59,7 @@
 <div class="toolbar" id="save-bar"></div>
 
 <h1>Weekly Rhythm</h1>
-<p class="sub">Days across the top, rhythm blocks down the side. Each cell can hold several broad pieces of the day.</p>
+<p class="sub">Days across the top, rhythm blocks down the side. Each cell can hold several broad pieces of the day. Click an item to edit it, or use "Add to this block" to add something new.</p>
 
 <div class="toolbar">
   <label style="font-size:12px;display:flex;align-items:center;gap:6px;">Lens
@@ -59,6 +74,38 @@
 </table>
 
 <div id="review-panel" style="margin-top:16px;font-size:12px;"></div>
+
+<div id="editor-overlay" class="overlay" style="display:none;">
+  <div class="editor">
+    <h2 id="editor-title">Edit rhythm item</h2>
+
+    <label for="ed-label">Label</label>
+    <input type="text" id="ed-label" placeholder="e.g. Jeremiah independent">
+
+    <label for="ed-type">Type</label>
+    <select id="ed-type"></select>
+
+    <div id="ed-ref-wrap">
+      <label for="ed-ref" id="ed-ref-label">Linked item</label>
+      <select id="ed-ref"></select>
+    </div>
+
+    <label for="ed-notes">Notes</label>
+    <textarea id="ed-notes"></textarea>
+
+    <div class="checkrow"><input type="checkbox" id="ed-allday"><label for="ed-allday" style="margin:0;font-weight:400;">All day</label></div>
+    <div class="checkrow"><input type="checkbox" id="ed-flexible"><label for="ed-flexible" style="margin:0;font-weight:400;">Flexible</label></div>
+    <div class="checkrow"><input type="checkbox" id="ed-showprint" checked><label for="ed-showprint" style="margin:0;font-weight:400;">Show on print</label></div>
+
+    <div class="editor-actions">
+      <button class="danger" id="ed-delete" style="display:none;">Delete</button>
+      <div class="right">
+        <button id="ed-cancel">Cancel</button>
+        <button class="accent" id="ed-save">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script type="module">
 import * as R from '../../lib/weeklyRhythm.mjs';
@@ -92,6 +139,119 @@ if (initial.source === 'reset-after-invalid') {
 
 function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
 
+// ---------------------------------------------------------------------------
+// Phase 1D — friendly type labels + reference picker config
+// ---------------------------------------------------------------------------
+var TYPE_LABELS = {
+  custom: 'Custom label',
+  student: 'Student',
+  group: 'Group',
+  together: 'Together',
+  coop: 'Co-op / External',
+  subject: 'Subject',
+  card: 'Card',
+  loop: 'Loop',
+  sequence: 'Sequence'
+};
+
+function refOptionsForType(type) {
+  if (type === 'student') return appState.students.filter(function (s) { return s.active; }).map(function (s) { return { id: s.id, label: s.name }; });
+  if (type === 'group') return appState.groups.map(function (g) { return { id: g.id, label: g.label }; });
+  if (type === 'subject') return appState.subjectColumns.map(function (s) { return { id: s.id, label: s.label || s.title || s.id }; });
+  if (type === 'card') return appState.cards.map(function (c) { return { id: c.id, label: c.title }; });
+  if (type === 'loop') return appState.loops.map(function (l) { return { id: l.id, label: l.title || l.id }; });
+  if (type === 'sequence') return appState.sequences.map(function (s) { return { id: s.id, label: s.title || s.id }; });
+  return null; // together / custom / coop — no reference list
+}
+
+var editingState = { dayId: null, blockId: null, assignmentId: null };
+
+function openEditor(dayId, blockId, assignment) {
+  editingState = { dayId: dayId, blockId: blockId, assignmentId: assignment ? assignment.id : null };
+
+  document.getElementById('editor-title').textContent = assignment ? 'Edit rhythm item' : 'Add to this block';
+  document.getElementById('ed-label').value = assignment ? assignment.label : '';
+  document.getElementById('ed-notes').value = assignment ? (assignment.notes || '') : '';
+  document.getElementById('ed-allday').checked = assignment ? !!assignment.isAllDay : false;
+  document.getElementById('ed-flexible').checked = assignment ? !!assignment.isFlexible : false;
+  document.getElementById('ed-showprint').checked = assignment ? assignment.showOnPrint !== false : true;
+  document.getElementById('ed-delete').style.display = assignment ? '' : 'none';
+
+  var typeSel = document.getElementById('ed-type');
+  typeSel.innerHTML = R.RHYTHM_ASSIGNMENT_TYPES.map(function (t) {
+    return '<option value="' + t + '">' + escapeHtml(TYPE_LABELS[t] || t) + '</option>';
+  }).join('');
+  typeSel.value = assignment ? assignment.assignmentType : 'custom';
+
+  populateRefSelect(assignment ? assignment.referencedId : null);
+
+  document.getElementById('editor-overlay').style.display = 'flex';
+}
+
+function populateRefSelect(selectedId) {
+  var type = document.getElementById('ed-type').value;
+  var wrap = document.getElementById('ed-ref-wrap');
+  var sel = document.getElementById('ed-ref');
+  var opts = refOptionsForType(type);
+  if (!opts) {
+    wrap.style.display = 'none';
+    sel.innerHTML = '';
+    return;
+  }
+  wrap.style.display = '';
+  document.getElementById('ed-ref-label').textContent = TYPE_LABELS[type] || 'Linked item';
+  sel.innerHTML = '<option value="">(none)</option>' + opts.map(function (o) {
+    return '<option value="' + escapeHtml(o.id) + '">' + escapeHtml(o.label) + '</option>';
+  }).join('');
+  if (selectedId) sel.value = selectedId;
+}
+
+function closeEditor() {
+  document.getElementById('editor-overlay').style.display = 'none';
+}
+
+function saveEditor() {
+  var type = document.getElementById('ed-type').value;
+  var refOpts = refOptionsForType(type);
+  var refSel = document.getElementById('ed-ref').value;
+  var fields = {
+    label: document.getElementById('ed-label').value.trim() || (TYPE_LABELS[type] || type),
+    assignmentType: type,
+    referencedId: refOpts && refSel ? refSel : null,
+    notes: document.getElementById('ed-notes').value,
+    isAllDay: document.getElementById('ed-allday').checked,
+    isFlexible: document.getElementById('ed-flexible').checked,
+    showOnPrint: document.getElementById('ed-showprint').checked
+  };
+
+  if (editingState.assignmentId) {
+    A.updateRhythmAssignmentInState(appState, editingState.assignmentId, fields);
+  } else {
+    fields.dayId = editingState.dayId;
+    fields.blockId = editingState.blockId;
+    A.addRhythmAssignmentToState(appState, fields);
+  }
+  saveBar.scheduleSave(appState);
+  closeEditor();
+  render();
+}
+
+function deleteEditorAssignment() {
+  if (!editingState.assignmentId) return;
+  A.deleteRhythmAssignmentFromState(appState, editingState.assignmentId);
+  saveBar.scheduleSave(appState);
+  closeEditor();
+  render();
+}
+
+document.getElementById('ed-type').addEventListener('change', function () { populateRefSelect(null); });
+document.getElementById('ed-cancel').addEventListener('click', closeEditor);
+document.getElementById('ed-save').addEventListener('click', saveEditor);
+document.getElementById('ed-delete').addEventListener('click', deleteEditorAssignment);
+document.getElementById('editor-overlay').addEventListener('click', function (e) {
+  if (e.target.id === 'editor-overlay') closeEditor();
+});
+
 function populateLensSelect() {
   var sel = document.getElementById('lens-select');
   var html = '<option value="all">View all</option>';
@@ -123,8 +283,8 @@ function assignmentMatchesLens(a) {
 
 function assignmentHTML(a) {
   var cls = 'rasn' + (a.isAllDay ? ' allday' : '') + (a.isFlexible ? ' flexible' : '');
-  var tag = a.isAllDay ? 'all day' : (a.assignmentType !== 'custom' ? a.assignmentType : '');
-  return '<div class="' + cls + '">' + escapeHtml(a.label) + (tag ? '<span class="tag">' + escapeHtml(tag) + '</span>' : '') + '</div>';
+  var tag = a.isAllDay ? 'all day' : (a.assignmentType !== 'custom' ? (TYPE_LABELS[a.assignmentType] || a.assignmentType) : '');
+  return '<div class="' + cls + '" data-asn-id="' + escapeHtml(a.id) + '">' + escapeHtml(a.label) + (tag ? '<span class="tag">' + escapeHtml(tag) + '</span>' : '') + '</div>';
 }
 
 function render() {
@@ -144,11 +304,26 @@ function render() {
       var cell = R.getAssignmentsForCell(rhythm, day.id, block.id);
       var anyMatch = cell.some(assignmentMatchesLens);
       var cellCls = (lens.type !== 'all' && !anyMatch) ? ' dim-cell' : '';
-      html += '<td class="' + cellCls + '">' + cell.map(assignmentHTML).join('') + '</td>';
+      html += '<td class="' + cellCls + '" data-day-id="' + escapeHtml(day.id) + '" data-block-id="' + escapeHtml(block.id) + '">'
+        + cell.map(assignmentHTML).join('')
+        + '<button class="add-cell-btn" data-day-id="' + escapeHtml(day.id) + '" data-block-id="' + escapeHtml(block.id) + '">+ Add to this block</button>'
+        + '</td>';
     });
     html += '</tr>';
   });
   body.innerHTML = html;
+
+  body.querySelectorAll('.rasn').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var a = rhythm.assignments.find(function (x) { return x.id === el.getAttribute('data-asn-id'); });
+      if (a) openEditor(a.dayId, a.blockId, a);
+    });
+  });
+  body.querySelectorAll('.add-cell-btn').forEach(function (el) {
+    el.addEventListener('click', function () {
+      openEditor(el.getAttribute('data-day-id'), el.getAttribute('data-block-id'), null);
+    });
+  });
 
   renderReviewPanel();
 }
