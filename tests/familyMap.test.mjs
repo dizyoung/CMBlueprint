@@ -177,7 +177,7 @@ test('advanceSequence completes current and promotes next upcoming to current', 
 // ---------------------------------------------------------------------------
 test('resource and resource use are separate concepts', () => {
   const resource = M.makeResource({ id: 'r1', title: 'Bible' });
-  const use = M.makeResourceUse({ resourceId: 'r1', participants: ['charis'] });
+  const use = M.makeResourceUse({ resourceId: 'r1', participantsOverride: ['charis'] });
   assert.notEqual(resource.id, use.id);
   assert.equal(use.resourceId, resource.id);
 });
@@ -185,8 +185,8 @@ test('resource and resource use are separate concepts', () => {
 test('same resource can appear in multiple uses without duplicating the resource card', () => {
   const resources = [M.makeResource({ id: 'bible', title: 'Bible' })];
   const uses = [
-    M.makeResourceUse({ resourceId: 'bible', participants: ['charis', 'kayla'], usedIn: 'Bible Loop' }),
-    M.makeResourceUse({ resourceId: 'bible', participants: ['jeremiah'], usedIn: 'Personal Spiritual Reading' })
+    M.makeResourceUse({ resourceId: 'bible', participantsOverride: ['charis', 'kayla'], usedIn: 'Bible Loop' }),
+    M.makeResourceUse({ resourceId: 'bible', participantsOverride: ['jeremiah'], usedIn: 'Personal Spiritual Reading' })
   ];
   const rollup = M.buildResourceRollup(resources, uses);
   assert.equal(rollup.length, 1);
@@ -195,7 +195,7 @@ test('same resource can appear in multiple uses without duplicating the resource
 
 test('resource rollup preserves who/where/how context per use', () => {
   const resources = [M.makeResource({ id: 'bible', title: 'Bible' })];
-  const uses = [M.makeResourceUse({ resourceId: 'bible', participants: ['jeremiah'], scheduleSummary: '2x/week', nextAssignment: 'Psalm 1' })];
+  const uses = [M.makeResourceUse({ resourceId: 'bible', participantsOverride: ['jeremiah'], scheduleSummary: '2x/week', nextAssignment: 'Psalm 1' })];
   const rollup = M.buildResourceRollup(resources, uses);
   assert.equal(rollup[0].uses[0].scheduleSummary, '2x/week');
   assert.equal(rollup[0].uses[0].nextAssignment, 'Psalm 1');
@@ -215,11 +215,52 @@ test('resources can group by subject', () => {
 
 test('resources can group by student', () => {
   const resources = [M.makeResource({ id: 'r1' })];
-  const uses = [M.makeResourceUse({ resourceId: 'r1', participants: ['lucy', 'jeremiah'] })];
+  const uses = [M.makeResourceUse({ resourceId: 'r1', participantsOverride: ['lucy', 'jeremiah'] })];
   const rollup = M.buildResourceRollup(resources, uses);
   const grouped = M.groupResourcesByStudent(rollup);
   assert.equal(grouped.lucy.length, 1);
   assert.equal(grouped.jeremiah.length, 1);
+});
+
+// ---------------------------------------------------------------------------
+// ResourceUse participant derivation (no drift from parent)
+// ---------------------------------------------------------------------------
+test('ResourceUse derives participants from parent card by default', () => {
+  const card = M.makeCard({ id: 'card1', participantMode: 'group', participantIds: ['older'] });
+  const use = M.makeResourceUse({ resourceId: 'r1', cardId: 'card1' });
+  const context = { cards: [card], students: sampleStudents(), groups: sampleGroups() };
+  const resolved = M.resolveResourceUseParticipants(use, context);
+  assert.deepEqual(resolved.sort(), ['jeremiah', 'lucy']);
+});
+
+test('ResourceUse derives participants from loop/sequence context when applicable', () => {
+  const loop = M.makeLoop({ id: 'loop1', participantMode: 'together' });
+  const sequence = M.makeSequence({ id: 'seq1', participantMode: 'individual', participantIds: ['kayla'] });
+  const loopUse = M.makeResourceUse({ resourceId: 'r1', loopId: 'loop1' });
+  const seqUse = M.makeResourceUse({ resourceId: 'r2', sequenceId: 'seq1' });
+  const context = { loops: [loop], sequences: [sequence], students: sampleStudents(), groups: sampleGroups() };
+  assert.deepEqual(M.resolveResourceUseParticipants(loopUse, context).sort(), ['charis', 'jeremiah', 'kayla', 'lucy']);
+  assert.deepEqual(M.resolveResourceUseParticipants(seqUse, context), ['kayla']);
+});
+
+test('ResourceUse explicit participant override wins over parent derivation', () => {
+  const card = M.makeCard({ id: 'card1', participantMode: 'group', participantIds: ['older'] }); // Lucy + Jeremiah
+  const use = M.makeResourceUse({ resourceId: 'r1', cardId: 'card1', participantsOverride: ['jeremiah'] });
+  const context = { cards: [card], students: sampleStudents(), groups: sampleGroups() };
+  const resolved = M.resolveResourceUseParticipants(use, context);
+  assert.deepEqual(resolved, ['jeremiah']);
+});
+
+test('Resource rollup uses resolved participants, not stale duplicated participant data', () => {
+  // The card includes both Lucy and Jeremiah. The stored ResourceUse has no
+  // override at all — it must reflect both, not whatever (if anything) was
+  // ever separately and possibly incorrectly stored on the use.
+  const card = M.makeCard({ id: 'card1', participantMode: 'group', participantIds: ['older'] });
+  const resources = [M.makeResource({ id: 'spine', title: 'American History Spine' })];
+  const uses = [M.makeResourceUse({ resourceId: 'spine', cardId: 'card1' })];
+  const context = { cards: [card], students: sampleStudents(), groups: sampleGroups() };
+  const rollup = M.buildResourceRollup(resources, uses, context);
+  assert.deepEqual(rollup[0].uses[0].participants.sort(), ['jeremiah', 'lucy']);
 });
 
 test('resources can group by status', () => {
@@ -307,7 +348,7 @@ test('Student overview can include/exclude Together, Group, Co-op, Individual, O
 
 test('resource list can group by subject, student, or status', () => {
   const resources = [M.makeResource({ id: 'r1' })];
-  const uses = [M.makeResourceUse({ resourceId: 'r1', subjectColumnId: 'bible', participants: ['kayla'] })];
+  const uses = [M.makeResourceUse({ resourceId: 'r1', subjectColumnId: 'bible', participantsOverride: ['kayla'] })];
   const rollup = M.buildResourceRollup(resources, uses);
   assert.ok(M.groupResources(rollup, 'subject').bible);
   assert.ok(M.groupResources(rollup, 'student').kayla);
