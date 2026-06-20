@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Weekly Rhythm Builder — Phase 1A.5 (wired to real in-memory state)</title>
+<style>
+  :root { --border: #d8d8d8; --ink: #2c2c2c; --muted: #777; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, sans-serif; margin: 0; padding: 20px; background: #f7f7f5; color: var(--ink); }
+  .banner { background: #e3f3e6; border: 1px solid #8fcf9e; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+
+  .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  select, input[type=text] { font-size: 12px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; }
+  button { font-size: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }
+  button.accent { border-color: #3568b0; color: #3568b0; }
+
+  table.rhythm { border-collapse: collapse; width: 100%; background: #fff; table-layout: fixed; }
+  table.rhythm th, table.rhythm td { border: 1px solid var(--border); vertical-align: top; padding: 6px; font-size: 11px; }
+  table.rhythm thead th { background: #2c2c2c; color: #fff; text-align: center; padding: 8px 4px; }
+  table.rhythm th.row-head { background: #eee; color: var(--ink); text-align: left; font-weight: 600; width: 140px; }
+  table.rhythm td.dim-cell .rasn { opacity: 0.3; }
+
+  .rasn { border-radius: 6px; padding: 4px 6px; margin-bottom: 4px; font-size: 11px; border-left: 3px solid #888; background: #f5f5f5; }
+  .rasn:last-child { margin-bottom: 0; }
+  .rasn .tag { font-size: 9px; color: var(--muted); margin-left: 4px; }
+  .rasn.allday { border-left-color: #5c8fc9; }
+  .rasn.flexible { border-style: dashed; }
+
+  @media print {
+    .banner, .toolbar { display: none !important; }
+    @page { size: landscape; margin: 0.4in; }
+  }
+</style>
+</head>
+<body>
+
+<div class="banner">
+  <strong>Phase 1A.5 — Weekly Rhythm Builder foundation.</strong> Renders from <code>lib/weeklyRhythm.mjs</code> sample state.
+  This is the broad "when do the big buckets happen" layer — not Today, not minute-by-minute scheduling.
+</div>
+
+<h1>Weekly Rhythm</h1>
+<p class="sub">Days across the top, rhythm blocks down the side. Each cell can hold several broad pieces of the day.</p>
+
+<div class="toolbar">
+  <label style="font-size:12px;display:flex;align-items:center;gap:6px;">Lens
+    <select id="lens-select"></select>
+  </label>
+  <button class="accent" onclick="window.print();">Print weekly rhythm</button>
+</div>
+
+<table class="rhythm" id="rhythm-table">
+  <thead><tr id="rhythm-head-row"><th class="row-head"></th></tr></thead>
+  <tbody id="rhythm-body"></tbody>
+</table>
+
+<script type="module">
+import * as R from '../../lib/weeklyRhythm.mjs';
+import * as A from '../../lib/familyMapAdapter.mjs';
+
+var appState = A.buildSampleAppState();
+var rhythm = R.buildSampleWeeklyRhythm();
+var context = { students: appState.students, groups: appState.groups, cards: appState.cards, loops: appState.loops, sequences: appState.sequences };
+var lens = { type: 'all' };
+
+window.onLensChange = onLensChange;
+
+function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+
+function populateLensSelect() {
+  var sel = document.getElementById('lens-select');
+  var html = '<option value="all">View all</option>';
+  appState.students.forEach(function (s) { html += '<option value="student:' + s.id + '">Student: ' + escapeHtml(s.name) + '</option>'; });
+  appState.groups.forEach(function (g) { html += '<option value="group:' + g.id + '">Group: ' + escapeHtml(g.label) + '</option>'; });
+  sel.innerHTML = html;
+}
+
+function onLensChange() {
+  var v = document.getElementById('lens-select').value;
+  if (v === 'all') lens = { type: 'all' };
+  else {
+    var parts = v.split(':');
+    lens = { type: parts[0], id: parts[1] };
+  }
+  render();
+}
+
+function assignmentMatchesLens(a) {
+  if (lens.type === 'all') return true;
+  var participants = R.resolveRhythmAssignmentParticipants(a, context);
+  if (lens.type === 'student') return participants.indexOf(lens.id) > -1;
+  if (lens.type === 'group') {
+    var group = appState.groups.find(function (g) { return g.id === lens.id; });
+    return group ? group.studentIds.some(function (id) { return participants.indexOf(id) > -1; }) : false;
+  }
+  return true;
+}
+
+function assignmentHTML(a) {
+  var cls = 'rasn' + (a.isAllDay ? ' allday' : '') + (a.isFlexible ? ' flexible' : '');
+  var tag = a.isAllDay ? 'all day' : (a.assignmentType !== 'custom' ? a.assignmentType : '');
+  return '<div class="' + cls + '">' + escapeHtml(a.label) + (tag ? '<span class="tag">' + escapeHtml(tag) + '</span>' : '') + '</div>';
+}
+
+function render() {
+  var days = rhythm.days.slice().sort(function (a, b) { return a.sortOrder - b.sortOrder; });
+  var blocks = rhythm.blocks.slice().sort(function (a, b) { return a.sortOrder - b.sortOrder; });
+
+  var head = document.getElementById('rhythm-head-row');
+  var headHtml = '<th class="row-head"></th>';
+  days.forEach(function (d) { headHtml += '<th>' + escapeHtml(d.label) + '</th>'; });
+  head.innerHTML = headHtml;
+
+  var body = document.getElementById('rhythm-body');
+  var html = '';
+  blocks.forEach(function (block) {
+    html += '<tr><th class="row-head" style="border-left:4px solid ' + (block.color || '#888') + ';">' + escapeHtml(block.label) + '</th>';
+    days.forEach(function (day) {
+      var cell = R.getAssignmentsForCell(rhythm, day.id, block.id);
+      var anyMatch = cell.some(assignmentMatchesLens);
+      var cellCls = (lens.type !== 'all' && !anyMatch) ? ' dim-cell' : '';
+      html += '<td class="' + cellCls + '">' + cell.map(assignmentHTML).join('') + '</td>';
+    });
+    html += '</tr>';
+  });
+  body.innerHTML = html;
+}
+
+populateLensSelect();
+document.getElementById('lens-select').addEventListener('change', onLensChange);
+render();
+</script>
+</body>
+</html>
