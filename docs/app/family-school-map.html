@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Family School Map — Phase 1A (wired to real in-memory state)</title>
+<style>
+  :root { --border: #d8d8d8; --ink: #2c2c2c; --muted: #777; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, sans-serif; margin: 0; padding: 20px; background: #f7f7f5; color: var(--ink); }
+  .banner { background: #e3f3e6; border: 1px solid #8fcf9e; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+
+  .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  select, input[type=text] { font-size: 12px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; }
+  button { font-size: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }
+  button.accent { border-color: #3568b0; color: #3568b0; }
+
+  table.map { border-collapse: collapse; width: 100%; background: #fff; table-layout: fixed; margin-bottom: 24px; }
+  table.map th, table.map td { border: 1px solid var(--border); vertical-align: top; padding: 6px; font-size: 11px; }
+  table.map thead th { background: #2c2c2c; color: #fff; text-align: center; padding: 6px 4px; }
+  table.map th.row-head { background: #eee; color: var(--ink); text-align: left; font-weight: 600; width: 120px; }
+
+  .chip { border: 1px solid var(--border); border-left: 4px solid #888; border-radius: 6px; padding: 5px 7px; margin-bottom: 5px; cursor: pointer; }
+  .chip:hover { background: #f5f8fc; }
+  .chip.lens-dim { opacity: 0.3; }
+  .chip-title { font-weight: 600; }
+  .chip-sub { color: var(--muted); font-size: 10px; margin-top: 2px; }
+
+  .panel { border: 1px solid var(--border); border-radius: 8px; padding: 14px; background: #fff; margin-bottom: 20px; }
+  .panel h2 { font-size: 14px; margin: 0 0 10px; }
+  .loop-row, .seq-row { padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
+  .loop-row:last-child, .seq-row:last-child { border-bottom: none; }
+  .seq-item { font-size: 11px; padding: 1px 0; }
+  .seq-item.done { color: var(--muted); text-decoration: line-through; }
+  .seq-item.current { font-weight: 600; }
+  .seq-item.upcoming { color: var(--muted); }
+
+  .res-group { margin-bottom: 12px; }
+  .res-group h3 { font-size: 11px; margin: 0 0 5px; text-transform: uppercase; color: var(--muted); }
+  .res-card { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; font-size: 11px; }
+  .res-card-title { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .res-status { font-size: 9px; border-radius: 6px; padding: 1px 6px; margin-left: auto; background: #eee; }
+  .res-use { font-size: 10px; color: var(--muted); }
+
+  .editor { position: fixed; right: 20px; bottom: 20px; width: 300px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 14px; font-size: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); display: none; }
+  .editor.show { display: block; }
+  .editor label { display: block; font-size: 11px; margin-top: 8px; }
+  .editor .close { position: absolute; top: 8px; right: 10px; cursor: pointer; color: var(--muted); }
+
+  @media print {
+    .banner, .toolbar, .editor { display: none !important; }
+    @page { size: landscape; margin: 0.4in; }
+    @page resources { size: portrait; margin: 0.5in; }
+    body.print-resources table.map, body.print-resources #loops-panel, body.print-resources #sequences-panel { display: none !important; }
+    body.print-resources #resources-panel { page: resources; }
+    body:not(.print-resources) #resources-panel { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="banner">
+  <strong>Phase 1A — wired to real in-memory state.</strong> Everything below renders from <code>lib/familyMap.mjs</code> via
+  <code>lib/familyMapAdapter.mjs</code>. Editing is minimal on purpose; persistence, Today, Term Plan, Progress, and accounts are not built yet.
+</div>
+
+<h1>Family School Map</h1>
+<p class="sub">Rows show who it's for. Columns show subjects. Cards show what your family has chosen.</p>
+
+<div class="toolbar">
+  <label style="font-size:12px;display:flex;align-items:center;gap:6px;">Lens
+    <select id="lens-select"></select>
+  </label>
+  <button onclick="render()">Refresh</button>
+  <button class="accent" onclick="document.body.classList.remove('print-resources'); window.print();">Print map</button>
+  <button class="accent" onclick="document.body.classList.add('print-resources'); window.print();">Print Book &amp; Resource List</button>
+</div>
+
+<table class="map" id="map-table">
+  <thead><tr id="map-head-row"><th class="row-head"></th></tr></thead>
+  <tbody id="map-body"></tbody>
+</table>
+
+<div class="panel" id="loops-panel">
+  <h2>Loops</h2>
+  <div id="loops-body"></div>
+</div>
+
+<div class="panel" id="sequences-panel">
+  <h2>Sequences</h2>
+  <div id="sequences-body"></div>
+</div>
+
+<div class="panel" id="resources-panel">
+  <h2>Book &amp; Resource List</h2>
+  <div class="toolbar">
+    <label style="font-size:11px;">Group by
+      <select id="res-groupby">
+        <option value="subject">Subject</option>
+        <option value="student">Student</option>
+        <option value="status">Status</option>
+      </select>
+    </label>
+    <label style="font-size:11px;">Filter
+      <select id="res-filter">
+        <option value="all">All</option>
+        <option value="need-to-get">Only things I need to get</option>
+        <option value="missing">Only missing/undecided</option>
+      </select>
+    </label>
+  </div>
+  <div id="resources-body"></div>
+</div>
+
+<div class="editor" id="card-editor">
+  <span class="close" onclick="closeEditor()">✕</span>
+  <h4 id="editor-title" style="margin:0 0 6px;font-size:13px;"></h4>
+  <label>Title
+    <input type="text" id="ed-title">
+  </label>
+  <label>Audience
+    <select id="ed-audience">
+      <option value="together">Together</option>
+      <option value="group">Group</option>
+      <option value="individual">Individual</option>
+      <option value="coop-outside">Co-op / Outside</option>
+      <option value="optional">Optional</option>
+      <option value="unplaced">Needs placement</option>
+    </select>
+  </label>
+  <label>Participants (comma-separated student ids; blank = derive from audience)
+    <input type="text" id="ed-participants">
+  </label>
+  <label>Subject
+    <select id="ed-subject"></select>
+  </label>
+  <button class="accent" style="margin-top:10px;width:100%;" onclick="saveEditor()">Save</button>
+</div>
+
+<script type="module">
+import * as A from '../../lib/familyMapAdapter.mjs';
+import * as M from '../../lib/familyMap.mjs';
+
+window.A = A;
+window.M = M;
+window.state = A.buildSampleAppState();
+window.lens = { type: 'all' };
+window.editingCardId = null;
+
+window.render = render;
+window.onLensChange = onLensChange;
+window.openEditor = openEditor;
+window.closeEditor = closeEditor;
+window.saveEditor = saveEditor;
+window.advanceLoop = advanceLoopUI;
+window.advanceSequence = advanceSequenceUI;
+
+function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+
+function populateLensSelect() {
+  var sel = document.getElementById('lens-select');
+  var html = '<option value="all">View all</option>';
+  state.students.forEach(function (s) { html += '<option value="student:' + s.id + '">Student: ' + escapeHtml(s.name) + '</option>'; });
+  state.groups.forEach(function (g) { html += '<option value="group:' + g.id + '">Group: ' + escapeHtml(g.label) + '</option>'; });
+  state.subjectColumns.forEach(function (c) { html += '<option value="subject:' + c.id + '">Subject: ' + escapeHtml(c.label) + '</option>'; });
+  sel.innerHTML = html;
+}
+
+function onLensChange() {
+  var v = document.getElementById('lens-select').value;
+  if (v === 'all') { lens = { type: 'all' }; }
+  else {
+    var parts = v.split(':');
+    if (parts[0] === 'student') lens = { type: 'student', studentId: parts[1] };
+    else if (parts[0] === 'group') lens = { type: 'group', groupId: parts[1] };
+    else if (parts[0] === 'subject') lens = { type: 'subject', subjectColumnId: parts[1] };
+  }
+  render();
+}
+
+function cardChipHTML(card) {
+  var participants = M.resolveParticipants(card, state.students, state.groups);
+  var names = participants.map(function (id) {
+    var s = A.findStudent(state, id);
+    return s ? s.name : id;
+  }).join(', ');
+  var matches = A.cardMatchesLens(card, lens, state);
+  var dim = (lens.type !== 'all' && !matches) ? ' lens-dim' : '';
+  return (
+    '<div class="chip' + dim + '" onclick="openEditor(\'' + card.id + '\')">' +
+      '<div class="chip-title">' + escapeHtml(card.title || '(untitled)') + '</div>' +
+      '<div class="chip-sub">' + escapeHtml(card.audience) + (names ? ' · ' + escapeHtml(names) : '') + '</div>' +
+    '</div>'
+  );
+}
+
+function renderMap() {
+  var { rows, columns, grid } = A.buildMapGrid(state);
+  var head = document.getElementById('map-head-row');
+  var headHtml = '<th class="row-head"></th>';
+  columns.forEach(function (col) { headHtml += '<th style="background:' + col.color + ';">' + escapeHtml(col.label) + '</th>'; });
+  head.innerHTML = headHtml;
+
+  var body = document.getElementById('map-body');
+  var html = '';
+  grid.forEach(function (g) {
+    html += '<tr><th class="row-head">' + escapeHtml(g.row.label) + '</th>';
+    columns.forEach(function (col) {
+      var cards = g.cells[col.id] || [];
+      html += '<td>' + cards.map(cardChipHTML).join('') + '</td>';
+    });
+    html += '</tr>';
+  });
+  body.innerHTML = html;
+}
+
+function renderLoops() {
+  var html = '';
+  state.loops.forEach(function (loop) {
+    var item = A.currentLoopItem(state, loop.id);
+    html += '<div class="loop-row">' +
+      '<strong>' + escapeHtml(loop.title) + '</strong> — ' + loop.turnsPerWeek + ' turns/week<br>' +
+      'Current: ' + escapeHtml(item ? item.title : '—') + (item && item.nextAssignment ? ' — next: ' + escapeHtml(item.nextAssignment) : '') + ' ' +
+      '<button onclick="advanceLoop(\'' + loop.id + '\')">Advance</button>' +
+    '</div>';
+  });
+  document.getElementById('loops-body').innerHTML = html || '<p style="color:#777;font-size:12px;">No loops yet.</p>';
+}
+
+function renderSequences() {
+  var html = '';
+  state.sequences.forEach(function (seq) {
+    var progress = A.sequenceProgress(state, seq.id);
+    var itemsHtml = state.sequenceItems.filter(function (i) { return i.sequenceId === seq.id; })
+      .sort(function (a, b) { return a.position - b.position; })
+      .map(function (i) { return '<div class="seq-item ' + i.status + '">' + escapeHtml(i.title) + '</div>'; })
+      .join('');
+    html += '<div class="seq-row">' +
+      '<strong>' + escapeHtml(seq.title) + '</strong> — current: ' + escapeHtml(progress.current ? progress.current.title : '—') + ' ' +
+      '<button onclick="advanceSequence(\'' + seq.id + '\')">Advance</button>' +
+      itemsHtml +
+    '</div>';
+  });
+  document.getElementById('sequences-body').innerHTML = html || '<p style="color:#777;font-size:12px;">No sequences yet.</p>';
+}
+
+function renderResources() {
+  var groupBy = document.getElementById('res-groupby').value;
+  var filter = document.getElementById('res-filter').value;
+  var grouped = A.getResourceList(state, { groupBy: groupBy, filter: filter });
+  var html = '';
+  Object.keys(grouped).forEach(function (key) {
+    var resources = grouped[key];
+    if (!resources.length) return;
+    html += '<div class="res-group"><h3>' + escapeHtml(key) + '</h3>';
+    resources.forEach(function (r) {
+      html += '<div class="res-card"><div class="res-card-title">' + escapeHtml(r.title) +
+        '<span class="res-status">' + escapeHtml(M.RESOURCE_STATUS_LABELS[r.status] || r.status) + '</span></div>';
+      r.uses.forEach(function (u) {
+        var who = u.participants.length ? u.participants.map(function (id) { var s = A.findStudent(state, id); return s ? s.name : id; }).join(', ') : 'Everyone';
+        html += '<div class="res-use">' + escapeHtml(A.resourceUseContextLabel(u, state)) + ' — ' + escapeHtml(who) + '</div>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+  document.getElementById('resources-body').innerHTML = html || '<p style="color:#777;font-size:12px;">No resources match.</p>';
+}
+
+function populateSubjectSelect() {
+  var sel = document.getElementById('ed-subject');
+  sel.innerHTML = state.subjectColumns.map(function (c) { return '<option value="' + c.id + '">' + escapeHtml(c.label) + '</option>'; }).join('');
+}
+
+function openEditor(cardId) {
+  var card = A.findCard(state, cardId);
+  if (!card) return;
+  editingCardId = cardId;
+  document.getElementById('editor-title').textContent = 'Edit card';
+  document.getElementById('ed-title').value = card.title || '';
+  document.getElementById('ed-audience').value = card.audience;
+  document.getElementById('ed-participants').value = (card.participantIds || []).join(', ');
+  document.getElementById('ed-subject').value = card.subjectColumnId;
+  document.getElementById('card-editor').classList.add('show');
+}
+
+function closeEditor() {
+  editingCardId = null;
+  document.getElementById('card-editor').classList.remove('show');
+}
+
+function saveEditor() {
+  if (!editingCardId) return;
+  A.setCardTitle(state, editingCardId, document.getElementById('ed-title').value);
+  A.setCardAudience(state, editingCardId, document.getElementById('ed-audience').value);
+  A.moveCardToSubject(state, editingCardId, document.getElementById('ed-subject').value);
+  var raw = document.getElementById('ed-participants').value.trim();
+  var ids = raw ? raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean) : [];
+  var card = A.findCard(state, editingCardId);
+  A.setCardParticipants(state, editingCardId, ids.length ? 'override' : card.participantMode, ids);
+  closeEditor();
+  render();
+}
+
+function advanceLoopUI(loopId) { A.advanceLoopInState(state, loopId); render(); }
+function advanceSequenceUI(sequenceId) { A.advanceSequenceInState(state, sequenceId); render(); }
+
+function render() {
+  renderMap();
+  renderLoops();
+  renderSequences();
+  renderResources();
+}
+
+populateLensSelect();
+populateSubjectSelect();
+document.getElementById('res-groupby').addEventListener('change', renderResources);
+document.getElementById('res-filter').addEventListener('change', renderResources);
+document.getElementById('lens-select').addEventListener('change', onLensChange);
+render();
+</script>
+</body>
+</html>
