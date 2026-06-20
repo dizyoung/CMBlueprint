@@ -56,13 +56,15 @@
   <tbody id="rhythm-body"></tbody>
 </table>
 
+<div id="review-panel" style="margin-top:16px;font-size:12px;"></div>
+
 <script type="module">
 import * as R from '../../lib/weeklyRhythm.mjs';
 import * as A from '../../lib/familyMapAdapter.mjs';
 
 var appState = A.buildSampleAppState();
-var rhythm = R.buildSampleWeeklyRhythm();
-var context = { students: appState.students, groups: appState.groups, cards: appState.cards, loops: appState.loops, sequences: appState.sequences };
+var rhythm = appState.weeklyRhythm;
+var context = A.rhythmContext(appState);
 var lens = { type: 'all' };
 
 window.onLensChange = onLensChange;
@@ -126,6 +128,34 @@ function render() {
     html += '</tr>';
   });
   body.innerHTML = html;
+
+  renderReviewPanel();
+}
+
+function renderReviewPanel() {
+  var panel = document.getElementById('review-panel');
+  var reviewItems = A.getRhythmReviewItems(appState);
+  var cardsNoPlacement = A.getCardsWithoutRhythmPlacement(appState);
+  var loopsNoPlacement = A.getLoopsWithoutRhythmPlacement(appState);
+  var seqNoPlacement = A.getSequencesWithoutRhythmPlacement(appState);
+
+  var html = '';
+  if (reviewItems.length) {
+    html += '<p><strong>Needs rhythm review (' + reviewItems.length + ')</strong></p><ul>';
+    reviewItems.forEach(function (a) {
+      html += '<li>' + escapeHtml(a.label || a.id) + ' — ' + escapeHtml(a.rhythmReviewReason) + '</li>';
+    });
+    html += '</ul>';
+  }
+  var placement = cardsNoPlacement.length + loopsNoPlacement.length + seqNoPlacement.length;
+  if (placement) {
+    html += '<p><strong>Needs rhythm placement (' + placement + ')</strong></p><ul>';
+    cardsNoPlacement.forEach(function (c) { html += '<li>Card: ' + escapeHtml(c.title) + '</li>'; });
+    loopsNoPlacement.forEach(function (l) { html += '<li>Loop: ' + escapeHtml(l.title || l.id) + '</li>'; });
+    seqNoPlacement.forEach(function (s) { html += '<li>Sequence: ' + escapeHtml(s.title || s.id) + '</li>'; });
+    html += '</ul>';
+  }
+  panel.innerHTML = html;
 }
 
 populateLensSelect();

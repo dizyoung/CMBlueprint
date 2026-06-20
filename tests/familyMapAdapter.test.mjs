@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import * as A from '../lib/familyMapAdapter.mjs';
 import * as M from '../lib/familyMap.mjs';
+import * as R from '../lib/weeklyRhythm.mjs';
 
 const tests = [];
 function test(name, fn) { tests.push({ name, fn }); }
@@ -160,6 +161,79 @@ test('minimal editing mutators update state in place', () => {
   assert.ok(card);
   assert.equal(card.title, 'Nature Study');
   assert.ok(state.cards.some((c) => c.id === card.id));
+});
+
+test('shared AppState carries a weeklyRhythm and rhythmPrintSettings, read by both map and rhythm layers', () => {
+  const state = A.buildSampleAppState();
+  assert.ok(state.weeklyRhythm);
+  assert.ok(Array.isArray(state.weeklyRhythm.assignments));
+  assert.ok(state.rhythmPrintSettings);
+  assert.equal(state.rhythmPrintSettings.printMode, 'rhythm-overview');
+});
+
+test('addCardFromTemplate creates a resource + resourceUse placeholder when the template expects one', () => {
+  const state = A.buildSampleAppState();
+  const resCountBefore = state.resources.length;
+  const useCountBefore = state.resourceUses.length;
+
+  const noResourceCard = A.addCardFromTemplate(state, 'tpl_naturestudy');
+  assert.ok(noResourceCard);
+  assert.equal(state.resources.length, resCountBefore, 'suggestedResourceExpectation "none" should not create a resource');
+  assert.equal(state.resourceUses.length, useCountBefore);
+
+  const bookCard = A.addCardFromTemplate(state, 'tpl_picturestudy');
+  assert.ok(bookCard);
+  assert.equal(state.resources.length, resCountBefore + 1);
+  assert.equal(state.resourceUses.length, useCountBefore + 1);
+  const newUse = state.resourceUses[state.resourceUses.length - 1];
+  assert.equal(newUse.cardId, bookCard.id);
+  const newResource = state.resources.find((r) => r.id === newUse.resourceId);
+  assert.ok(newResource);
+  assert.equal(newResource.status, 'undecided');
+});
+
+test('a card added from a template is discoverable by the combined Student Lens once it has participants', () => {
+  const state = A.buildSampleAppState();
+  const card = A.addCardFromTemplate(state, 'tpl_picturestudy');
+  A.setCardParticipants(state, card.id, 'individual', ['jeremiah']);
+  const lens = A.studentLensView(state, 'jeremiah');
+  assert.ok(lens.cards.some((c) => c.id === card.id));
+  assert.ok(lens.resources.some((r) => r.uses.some((u) => u.cardId === card.id)));
+});
+
+test('combined Student Lens reads map cards, rhythm assignments, and resources from the same shared state', () => {
+  const state = A.buildSampleAppState();
+  const lens = A.studentLensView(state, 'jeremiah');
+  assert.ok(Array.isArray(lens.cards));
+  assert.ok(Array.isArray(lens.rhythmAssignments));
+  assert.ok(Array.isArray(lens.resources));
+  assert.ok(lens.rhythmAssignments.some((a) => a.label === 'Jeremiah independent'));
+  assert.ok(lens.rhythmAssignments.some((a) => a.label === 'Jeremiah at co-op all day'));
+});
+
+test('"Needs rhythm placement" helpers find cards/loops/sequences absent from the rhythm', () => {
+  const state = A.buildSampleAppState();
+  const cardsWithoutPlacement = A.getCardsWithoutRhythmPlacement(state);
+  assert.ok(Array.isArray(cardsWithoutPlacement));
+  // none of the sample cards are referenced by id from the sample rhythm (the
+  // sample rhythm uses its own student/group ids, not the sample card ids)
+  assert.ok(cardsWithoutPlacement.length > 0);
+  assert.equal(A.cardHasRhythmPlacement(state, 'card_math'), false);
+
+  const loop = state.loops[0];
+  assert.equal(A.loopHasRhythmPlacement(state, loop.id), false);
+  assert.ok(A.getLoopsWithoutRhythmPlacement(state).some((l) => l.id === loop.id));
+});
+
+test('"Needs rhythm review" flags a rhythm assignment whose referenced card/loop/sequence no longer exists', () => {
+  const state = A.buildSampleAppState();
+  state.weeklyRhythm.assignments.push(
+    R.makeRhythmAssignment({ dayId: state.weeklyRhythm.days[0].id, blockId: state.weeklyRhythm.blocks[0].id, assignmentType: 'card', referencedId: 'card_does_not_exist' })
+  );
+  const reviewItems = A.getRhythmReviewItems(state);
+  assert.ok(reviewItems.some((a) => a.referencedId === 'card_does_not_exist'));
+  assert.ok(reviewItems.some((a) => a.missingReference === true));
+  assert.ok(reviewItems.every((a) => typeof a.rhythmReviewReason === 'string'));
 });
 
 let passed = 0;

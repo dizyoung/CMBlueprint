@@ -75,7 +75,13 @@
   <button onclick="render()">Refresh</button>
   <button class="accent" onclick="document.body.classList.remove('print-resources'); window.print();">Print map</button>
   <button class="accent" onclick="document.body.classList.add('print-resources'); window.print();">Print Book &amp; Resource List</button>
+  <label style="font-size:12px;display:flex;align-items:center;gap:6px;">Add from starter card
+    <select id="starter-select"></select>
+  </label>
+  <button onclick="addStarterCard()">Add</button>
 </div>
+
+<div id="review-panel" style="font-size:12px;margin-bottom:12px;"></div>
 
 <table class="map" id="map-table">
   <thead><tr id="map-head-row"><th class="row-head"></th></tr></thead>
@@ -155,6 +161,7 @@ window.closeEditor = closeEditor;
 window.saveEditor = saveEditor;
 window.advanceLoop = advanceLoopUI;
 window.advanceSequence = advanceSequenceUI;
+window.addStarterCard = addStarterCard;
 
 function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
 
@@ -306,15 +313,45 @@ function saveEditor() {
 function advanceLoopUI(loopId) { A.advanceLoopInState(state, loopId); render(); }
 function advanceSequenceUI(sequenceId) { A.advanceSequenceInState(state, sequenceId); render(); }
 
+function populateStarterSelect() {
+  var sel = document.getElementById('starter-select');
+  sel.innerHTML = state.starterTemplates.map(function (t) {
+    return '<option value="' + t.id + '">' + escapeHtml(t.title) + '</option>';
+  }).join('');
+}
+
+function addStarterCard() {
+  var templateId = document.getElementById('starter-select').value;
+  if (!templateId) return;
+  A.addCardFromTemplate(state, templateId);
+  render();
+}
+
+function renderReviewPanel() {
+  var panel = document.getElementById('review-panel');
+  var reviewItems = A.getRhythmReviewItems(state);
+  var cardsNoPlacement = A.getCardsWithoutRhythmPlacement(state);
+  var html = '';
+  if (reviewItems.length) {
+    html += '<strong>Needs rhythm review:</strong> ' + reviewItems.map(function (a) { return escapeHtml(a.label || a.id); }).join(', ') + '. ';
+  }
+  if (cardsNoPlacement.length) {
+    html += '<strong>Needs rhythm placement:</strong> ' + cardsNoPlacement.map(function (c) { return escapeHtml(c.title); }).join(', ') + '.';
+  }
+  panel.innerHTML = html;
+}
+
 function render() {
   renderMap();
   renderLoops();
   renderSequences();
   renderResources();
+  renderReviewPanel();
 }
 
 populateLensSelect();
 populateSubjectSelect();
+populateStarterSelect();
 document.getElementById('res-groupby').addEventListener('change', renderResources);
 document.getElementById('res-filter').addEventListener('change', renderResources);
 document.getElementById('lens-select').addEventListener('change', onLensChange);
