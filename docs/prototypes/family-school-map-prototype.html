@@ -181,13 +181,42 @@
   .res-status-tag.status-undecided { background: #fff3cd; color: #8a6d1f; }
   .res-use-line { font-size: 10px; color: var(--muted); padding: 1px 0; }
   .res-use-who { color: #999; }
+  .res-status-tag.status-need-to-choose { background: #f3d9c4; color: #8a4a1f; }
   #resource-list-panel { width: 360px; }
   .res-tab-row { margin-bottom: 10px; }
+
+  /* ---- printed resource checklist (portrait) ---- */
+  .res-print-header { margin-bottom: 16px; }
+  .res-print-h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .res-print-header div { font-size: 11px; color: var(--muted); }
+  .res-print-sub { margin-top: 4px; font-style: italic; }
+  .res-print-row { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid #eee; }
+  .res-checkbox { font-size: 14px; line-height: 1.2; flex-shrink: 0; }
+  .res-print-fields { font-size: 11px; line-height: 1.5; }
+  .res-print-title { font-weight: 700; font-size: 12px; }
+
+  /* ---- model notes panel ---- */
+  .mn-section { margin-bottom: 16px; }
+  .mn-section h5 { font-size: 12px; margin: 0 0 6px; }
+  .mn-section p { font-size: 11px; color: var(--muted); margin: 0 0 6px; }
+  table.mn-table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin-bottom: 4px; }
+  table.mn-table th, table.mn-table td { border: 1px solid var(--border); padding: 4px 6px; text-align: left; vertical-align: top; }
+  table.mn-table th { background: #f0f0f0; font-size: 10px; }
+  .mn-warning { font-size: 11px; padding: 5px 8px; border-radius: 6px; background: #fff7e6; border: 1px solid #e0c25c; margin-bottom: 5px; }
+  .mn-status-tag { font-size: 9px; border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
+  .mn-status-supported { background: #e3f3e6; color: #2f7a3d; }
+  .mn-status-change { background: #fde2e2; color: #a33; }
+  .mn-status-deferred { background: #eee; color: #666; }
+  .mn-workload-row { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0; border-bottom: 1px dashed #eee; }
 
   /* ===================== PRINT ===================== */
   @media print {
     body { background: #fff; padding: 0; }
+    /* Map prints landscape (it's a wide grid); the Book & Resource List
+       prints portrait (it's a vertical checklist) via a named page below. */
     @page { size: landscape; margin: 0.4in; }
+    @page resource-page { size: portrait; margin: 0.5in; }
+    body.print-resources #resource-print-render { page: resource-page; }
     .proto-banner, .toolbar, .filters-row, .editor-mock, .side-panel, .add-cell, .sample-note { display: none !important; }
     body.lens-active .chip { opacity: 1 !important; filter: none !important; box-shadow: none !important; }
     table.map { font-size: 10px; }
@@ -249,6 +278,7 @@
   <button class="util-btn-proto" onclick="openCustomize('subjects')">Customize subjects</button>
   <button class="util-btn-proto" onclick="openResourceList('subject')">Book &amp; Resource List</button>
   <button class="util-btn-proto" onclick="openPrintOptions()">Print…</button>
+  <button class="util-btn-proto" onclick="openModelNotes()">Model notes &amp; Phase 0 readiness</button>
   <div class="legend">
     <span><span class="dot book"></span> has resource</span>
     <span><span class="dot needbook"></span> needs resource</span>
@@ -502,6 +532,17 @@
   <div id="resource-list-body"></div>
 </div>
 
+<!-- ===================== Model notes & Phase 0 readiness ===================== -->
+<!-- Static, read-only prototype content. No scheduling math, warnings, or
+     workload computation is wired up yet — these are model/planning notes
+     per the explicit instruction to defer that build until Phase 0+. -->
+<div class="side-panel" id="model-notes-panel" style="width:420px;">
+  <span class="close" onclick="closePanels()">✕</span>
+  <h4>Model notes &amp; Phase 0 readiness</h4>
+  <p class="panel-help">Planning notes only — nothing on this panel is computed or enforced in this prototype.</p>
+  <div id="model-notes-body"></div>
+</div>
+
 <script>
 // ---------------------------------------------------------------------------
 // HARDCODED SAMPLE DATA — internal shape mirrors PlanItem / PlanStrand /
@@ -510,11 +551,14 @@
 // written to real app state.
 // ---------------------------------------------------------------------------
 
+// gradeBand: 'form1' (Grades 1-3), 'form2' (Grades 4-6), 'form3' (Grades 7-9).
+// Used only for age-stage time guardrails and mixed-age group lesson-length
+// suggestions in this prototype — not wired to any real scheduling math yet.
 var STUDENTS = [
-  { id: 'charis', name: 'Charis', color: '#e08a3c', initials: 'C' },
-  { id: 'kayla', name: 'Kayla', color: '#5c9e8f', initials: 'K' },
-  { id: 'lucy', name: 'Lucy', color: '#b5708a', initials: 'L' },
-  { id: 'jeremiah', name: 'Jeremiah', color: '#3f7a82', initials: 'J' }
+  { id: 'charis', name: 'Charis', color: '#e08a3c', initials: 'C', gradeBand: 'form1', gradeLabel: 'Grade 2 / Form I' },
+  { id: 'kayla', name: 'Kayla', color: '#5c9e8f', initials: 'K', gradeBand: 'form1', gradeLabel: 'Grade 3 / Form I' },
+  { id: 'lucy', name: 'Lucy', color: '#b5708a', initials: 'L', gradeBand: 'form2', gradeLabel: 'Grade 5 / Form II' },
+  { id: 'jeremiah', name: 'Jeremiah', color: '#3f7a82', initials: 'J', gradeBand: 'form3', gradeLabel: 'Grade 7 / Form III' }
 ];
 function studentsById(id) { return STUDENTS.find(function (s) { return s.id === id; }); }
 function allStudentIds() { return STUDENTS.map(function (s) { return s.id; }); }
@@ -759,9 +803,20 @@ var ITEMS_SIMPLE = [
   { subjectFamilyId: 'la', audience: 'littles', label: 'Handwriting', status: 'active', practice: true, frequencyLabel: '3x/week', resource: 'Handwriting Without Tears', fromStarter: true },
   { subjectFamilyId: 'la', audience: 'littles', label: 'Phonics', status: 'active', hasBook: true, frequencyLabel: '4x/week', resource: 'All About Reading' },
   { subjectFamilyId: 'sci', audience: 'coop', label: 'Co-op Science Class', status: 'coop', frequencyLabel: 'weekly', participants: ['jeremiah'], resource: 'co-op provided', fromStarter: true },
-  { subjectFamilyId: 'hist', audience: 'older', label: 'American History Spine', status: 'active', hasBook: true, frequencyLabel: '2x/week', resource: 'This Country of Ours' },
+  {
+    subjectFamilyId: 'hist', audience: 'older', label: 'American History Spine', status: 'active', hasBook: true,
+    frequencyLabel: '2x/week', resource: 'This Country of Ours',
+    // ---- mixed-age group lesson-length demo: shared reading sized to the
+    // youngest participant (Lucy, Form II), with extension work for Jeremiah
+    // rather than stretching the shared lesson to his Form III max ----
+    sharedLessonMinutes: 25, sharedLessonRule: 'youngest',
+    extension: { jeremiah: { label: 'Independent reading + written narration', minutes: 15, resource: 'This Country of Ours (extension chapters)' } }
+  },
   { subjectFamilyId: 'geo', audience: 'optional', label: 'Map Quizzing', status: 'optional', frequencyLabel: '—' },
-  { subjectFamilyId: 'hist', audience: 'unplaced', label: 'Neighboring Lands Spine', status: 'active', needsBook: true, frequencyLabel: 'not set' }
+  { subjectFamilyId: 'hist', audience: 'unplaced', label: 'Neighboring Lands Spine', status: 'active', needsBook: true, frequencyLabel: 'not set' },
+  // "Need to choose resource" is distinct from "need to buy" — the family hasn't
+  // picked a spine yet, so there's nothing to buy or reserve until they decide.
+  { subjectFamilyId: 'hist', audience: 'older', label: 'Ancient History Spine', status: 'active', needsChoice: true, frequencyLabel: '2x/week' }
 ];
 
 // ---- Full family sample: denser, more cards per cell, more columns ----
@@ -836,6 +891,7 @@ function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '
 function statusDot(it) {
   if (it.status === 'coop') return 'coop';
   if (it.status === 'optional') return 'optional';
+  if (it.needsChoice) return 'needbook';
   if (it.practice) return 'practice';
   if (it.needsBook) return 'needbook';
   if (it.hasBook) return 'book';
@@ -922,18 +978,29 @@ function seqChipHTML(seq) {
 
 function itemChipHTML(it) {
   var dot = statusDot(it);
-  var tag = it.status === 'coop' ? 'Co-op' : (it.status === 'optional' ? 'Optional' : (it.audience === 'unplaced' ? 'Needs placement' : (it.practice ? 'Practice' : '')));
+  var tag = it.status === 'coop' ? 'Co-op' : (it.status === 'optional' ? 'Optional' : (it.needsChoice ? 'Needs resource choice' : (it.audience === 'unplaced' ? 'Needs placement' : (it.practice ? 'Practice' : ''))));
   var lensCls = cardMatchesLens(it) ? ' lens-match' : '';
   var filterCls = cardMatchesFilters(it) ? '' : ' filtered-out';
+  var extensionHTML = '';
+  if (it.extension) {
+    extensionHTML = Object.keys(it.extension).map(function (sid) {
+      var s = studentsById(sid), ext = it.extension[sid];
+      return '<div style="margin-top:3px;">Extension — ' + escapeHtml(s.name) + ': ' + escapeHtml(ext.label) + ' (+' + ext.minutes + ' min)</div>';
+    }).join('');
+  }
+  var sharedHTML = it.sharedLessonMinutes
+    ? '<div>Shared lesson length: ~' + it.sharedLessonMinutes + ' min (sized to youngest participant)</div>' : '';
   return (
     '<div class="chip ' + chipClass(it.subjectFamilyId) + lensCls + filterCls + '" draggable="true" ' +
       'ondragstart="onDragStart(event)" onclick="toggleExpand(this)" ' +
       'ondblclick="openEditor(\'' + escapeHtml(it.label) + '\',\'standalone\',' + JSON.stringify(it).replace(/"/g, '&quot;') + ')">' +
       '<div class="chip-title"><span class="dot ' + dot + '"></span>' + escapeHtml(it.label) + (tag ? '<span class="chip-tag">' + tag + '</span>' : '') +
         (it.fromStarter ? '<span class="starter-badge">CM starter</span>' : '') + '</div>' +
-      '<div class="chip-sub full-detail">' + escapeHtml(it.frequencyLabel || '') + '</div>' +
+      '<div class="chip-sub full-detail">' + escapeHtml(it.frequencyLabel || '') + (it.sharedLessonMinutes ? ' · ~' + it.sharedLessonMinutes + ' min shared' : '') + '</div>' +
       participantsRowHTML(it) +
-      '<div class="chip-detail">Single card — not part of a loop or sequence.' + (it.resource ? ' Resource: ' + escapeHtml(it.resource) : '') + '</div>' +
+      '<div class="chip-detail">Single card — not part of a loop or sequence.' + (it.resource ? ' Resource: ' + escapeHtml(it.resource) : '') +
+        sharedHTML + extensionHTML +
+      '</div>' +
     '</div>'
   );
 }
@@ -1173,13 +1240,17 @@ window.openCustomize = function (which) {
 //                     subjectFamilyId, loopItemLabel?, next?, position?,
 //                     audience, scheduleSummary
 // ---------------------------------------------------------------------------
+// "Need to choose resource" is intentionally distinct from "Need to buy" — a
+// parent can't buy or reserve a book until they've decided what it is.
 var STATUS_LABELS = {
-  'have-it': 'Have it', 'need-to-buy': 'Need to buy', 'need-library': 'Need to reserve at library',
-  'reserved-library': 'Reserved at library', 'ordered': 'Ordered, not arrived', 'borrowed': 'Borrowed',
-  'digital': 'Digital / online', 'coop-provided': 'Provided by co-op', 'no-resource': 'No resource needed',
-  'undecided': 'Maybe / undecided'
+  'have-it': 'Have it', 'need-to-choose': 'Need to choose resource', 'need-to-buy': 'Need to buy',
+  'need-library': 'Need to reserve at library', 'reserved-library': 'Reserved at library',
+  'ordered': 'Ordered, not arrived', 'borrowed': 'Borrowed', 'digital': 'Digital / online',
+  'coop-provided': 'Provided by co-op', 'no-resource': 'No resource needed', 'undecided': 'Maybe / undecided'
 };
-function statusPriority(s) { return { 'need-to-buy': 3, 'undecided': 2, 'coop-provided': 1, 'have-it': 0 }[s] || 0; }
+function statusPriority(s) {
+  return { 'need-to-choose': 4, 'need-to-buy': 3, 'undecided': 2, 'coop-provided': 1, 'have-it': 0 }[s] || 0;
+}
 
 function buildResourceRollup() {
   var resources = {};
@@ -1192,6 +1263,13 @@ function buildResourceRollup() {
   }
 
   items().forEach(function (it) {
+    if (it.needsChoice) {
+      addUse(it.label, 'need-to-choose', {
+        type: 'standalone', usedIn: it.label, subjectFamilyId: it.subjectFamilyId, audience: it.audience,
+        participants: resolveParticipants(it), scheduleSummary: it.frequencyLabel
+      });
+      return;
+    }
     var title = it.resource || (it.needsBook ? it.label : null);
     if (!title) return;
     var status = it.status === 'coop' ? 'coop-provided' : (it.needsBook ? 'need-to-buy' : (it.hasBook ? 'have-it' : 'undecided'));
@@ -1242,8 +1320,11 @@ function resourceUseMatchesInclude(use, includeMap) {
   return includeMap[cat] !== false;
 }
 function resourceMatchesFilter(r, filter) {
+  // "no resource needed" / practice-only items never produce a rollup entry
+  // (see buildResourceRollup), so shopping-style filters stay free of clutter
+  // by default without any extra exclusion logic here.
   if (filter === 'need') return r.status === 'need-to-buy';
-  if (filter === 'missing') return r.status === 'need-to-buy' || r.status === 'undecided';
+  if (filter === 'missing') return r.status === 'need-to-buy' || r.status === 'need-to-choose' || r.status === 'undecided';
   return true;
 }
 
@@ -1256,14 +1337,37 @@ function resourceUseLine(u) {
   return bits.join(' · ');
 }
 
+function resourceWhoLabel(u) {
+  return (u.participants && u.participants.length) ? u.participants.map(function (id) { var s = studentsById(id); return s ? s.name : id; }).join(', ') : 'Everyone';
+}
+
+// Screen view: compact cards, all uses rolled into one card.
 function resourceCardHTML(r) {
   var usesHTML = r.uses.map(function (u) {
-    var who = (u.participants && u.participants.length) ? u.participants.map(function (id) { var s = studentsById(id); return s ? s.name : id; }).join(', ') : 'Everyone';
-    return '<div class="res-use-line">' + escapeHtml(resourceUseLine(u)) + ' <span class="res-use-who">(' + escapeHtml(who) + ')</span></div>';
+    return '<div class="res-use-line">' + escapeHtml(resourceUseLine(u)) + ' <span class="res-use-who">(' + escapeHtml(resourceWhoLabel(u)) + ')</span></div>';
   }).join('');
   return '<div class="res-card"><div class="res-card-title">' + escapeHtml(r.title) +
     '<span class="res-status-tag status-' + r.status + '">' + STATUS_LABELS[r.status] + '</span></div>' +
     usesHTML + '</div>';
+}
+
+// Print view: a checklist a parent can mark up while gathering, ordering, or
+// placing library holds — one blank checkbox per resource, one row per use
+// when a resource has more than one (so "Used in" context stays specific).
+function resourceChecklistRowHTML(r) {
+  return r.uses.map(function (u, idx) {
+    var titleLine = idx === 0 ? escapeHtml(r.title) : escapeHtml(r.title) + ' (also used elsewhere)';
+    return '<div class="res-print-row">' +
+      '<span class="res-checkbox">&#9633;</span>' +
+      '<div class="res-print-fields">' +
+        '<div class="res-print-title">' + titleLine + '</div>' +
+        '<div>Status: ' + escapeHtml(STATUS_LABELS[r.status]) + '</div>' +
+        '<div>Used by: ' + escapeHtml(resourceWhoLabel(u)) + '</div>' +
+        '<div>Used in: ' + escapeHtml(u.usedIn) + '</div>' +
+        (u.type === 'loop-item' || u.type === 'sequence-item' ? '<div>Context: ' + escapeHtml(resourceUseLine(u)) + '</div>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
 }
 
 function filterRollup(resources, includeMap, filter) {
@@ -1304,9 +1408,24 @@ function groupResourcesByStatus(resources) {
   return groups;
 }
 
-function renderResourceList(groupBy, includeMap, filter) {
+var GROUP_BY_LABELS = { subject: 'Subject', student: 'Student', status: 'Status' };
+var FILTER_LABELS = {
+  all: 'All statuses', need: 'Need to buy', missing: 'Need to buy / reserve / undecided',
+  student: 'One student', subject: 'One subject'
+};
+function resourcePrintHeaderHTML(groupBy, filter) {
+  return '<div class="res-print-header">' +
+    '<div class="res-print-h1">Book &amp; Resource List</div>' +
+    '<div>Grouped by: ' + escapeHtml(GROUP_BY_LABELS[groupBy] || groupBy) + '</div>' +
+    '<div>Filter: ' + escapeHtml(FILTER_LABELS[filter] || filter) + '</div>' +
+    '<div class="res-print-sub">Generated from Family School Map</div>' +
+  '</div>';
+}
+
+function renderResourceList(groupBy, includeMap, filter, checklist) {
   includeMap = includeMap || {};
   filter = filter || 'all';
+  var renderRow = checklist ? resourceChecklistRowHTML : resourceCardHTML;
   var resources = filterRollup(buildResourceRollup(), includeMap, filter);
   var html = '';
   if (groupBy === 'student') {
@@ -1314,20 +1433,20 @@ function renderResourceList(groupBy, includeMap, filter) {
     STUDENTS.forEach(function (s) {
       var list = byStudent[s.id] || [];
       if (!list.length) return;
-      html += '<div class="res-group"><h5 style="background:' + s.color + ';">' + escapeHtml(s.name) + '</h5>' + list.map(resourceCardHTML).join('') + '</div>';
+      html += '<div class="res-group"><h5 style="background:' + s.color + ';">' + escapeHtml(s.name) + '</h5>' + list.map(renderRow).join('') + '</div>';
     });
   } else if (groupBy === 'status') {
     var byStatus = groupResourcesByStatus(resources);
     Object.keys(STATUS_LABELS).forEach(function (st) {
       var list = byStatus[st]; if (!list || !list.length) return;
-      html += '<div class="res-group"><h5 class="status-head">' + STATUS_LABELS[st] + '</h5>' + list.map(resourceCardHTML).join('') + '</div>';
+      html += '<div class="res-group"><h5 class="status-head">' + STATUS_LABELS[st] + '</h5>' + list.map(renderRow).join('') + '</div>';
     });
   } else {
     var bySubj = groupResourcesBySubject(resources);
     cols().forEach(function (c) {
       var list = bySubj[c.id] || [];
       if (!list.length) return;
-      html += '<div class="res-group"><h5 style="background:var(' + SUBJECT_COLOR_VAR[c.id] + ');">' + escapeHtml(c.label) + '</h5>' + list.map(resourceCardHTML).join('') + '</div>';
+      html += '<div class="res-group"><h5 style="background:var(' + SUBJECT_COLOR_VAR[c.id] + ');">' + escapeHtml(c.label) + '</h5>' + list.map(renderRow).join('') + '</div>';
     });
   }
   return html || '<p style="font-size:11px;color:var(--muted);">No resources match this view.</p>';
@@ -1397,7 +1516,8 @@ window.applyPrintOptionsAndPrint = function () {
     var resInclude = {};
     document.querySelectorAll('.rinc').forEach(function (c) { resInclude[c.dataset.key] = c.checked; });
     var filter = document.getElementById('print-res-filter').value;
-    document.getElementById('resource-print-render').innerHTML = renderResourceList(groupBy, resInclude, filter);
+    document.getElementById('resource-print-render').innerHTML =
+      resourcePrintHeaderHTML(groupBy, filter) + renderResourceList(groupBy, resInclude, filter, true);
     document.body.classList.add('print-resources');
   }
 
@@ -1407,6 +1527,121 @@ window.applyPrintOptionsAndPrint = function () {
   }
   closePanels();
   window.print();
+};
+
+// ---------------------------------------------------------------------------
+// Age-stage timetable guardrails (model notes only — not enforced anywhere
+// in this prototype). Literal minutes, inspired loosely by Charlotte Mason
+// Form I/II/III scheduling patterns (see AmblesideOnline's scheduling tips
+// and Juniper Pines' Form I/II/III timetable articles) but not copied
+// wholesale from any one provider. These are wise starting parameters that
+// a parent can override per card or per age-stage template.
+// ---------------------------------------------------------------------------
+var AGE_STAGE_GUARDRAILS = [
+  { band: 'form1', label: 'Grades 1–3 / Form I', min: 15, target: 18, max: 20 },
+  { band: 'form2', label: 'Grades 4–6 / Form II', min: 20, target: 25, max: 30 },
+  { band: 'form3', label: 'Grades 7–9 / Form III', min: 30, target: 38, max: 45 }
+];
+var AGE_STAGE_SAMPLE_MINUTES = {
+  form1: [
+    ['Reading practice', '10–15 min'], ['Copywork / handwriting', '5–10 min'], ['Math', '15–20 min'],
+    ['Bible reading', '10–15 min'], ['Literature / history reading', '10–20 min'],
+    ['Nature Study', 'outdoor time may run longer; formal lesson/read-aloud stays short']
+  ],
+  form2: [
+    ['Math', '20–30 min'], ['History reading', '20–30 min'], ['Geography', '20–30 min'],
+    ['Literature or science reading', '20–30 min'], ['Dictation / grammar / written narration', 'often shorter than the max']
+  ],
+  form3: [
+    ['Math', '30–45 min max'], ['Science', '30–45 min max'], ['History', '30–45 min max'], ['Literature', '30–45 min max'],
+    ['Some practices', 'remain shorter even for older students'],
+    ['Older students', 'may add independent reading or written narration beyond a combined family/group reading']
+  ]
+};
+
+var PHASE0_READINESS = [
+  ['Student', 'Supported'], ['Student grade/form band', 'Needs model change'], ['Group', 'Supported'],
+  ['SubjectColumn', 'Supported'], ['PlanCard', 'Supported'], ['Participant override', 'Supported'],
+  ['Mixed-age group time rule', 'Needs model change'], ['Extension work', 'Needs model change'],
+  ['Loop', 'Supported'], ['Loop item', 'Supported'], ['Sequence', 'Supported'], ['Sequence item', 'Supported'],
+  ['Resource', 'Supported'], ['ResourceUse', 'Supported'], ['Resource status', 'Needs model change'],
+  ['StarterTemplate', 'Supported'], ['AgeStageTemplate', 'Needs model change'],
+  ['Lesson length / time estimate', 'Needs model change'], ['Schedule mode', 'Supported'],
+  ['PrintSettings', 'Supported'], ['Resource print orientation', 'Supported'],
+  ['Student Lens', 'Supported'], ['Group Lens', 'Supported'], ['Subject Lens', 'Supported'],
+  ['Needs resources filter', 'Supported'], ['Needs scheduling filter', 'Needs model change'],
+  ['Needs placement filter', 'Supported'], ['Workload/time preview later', 'Deferred intentionally'],
+  ['Term Plan projection later', 'Deferred intentionally'], ['Today checklist later', 'Deferred intentionally'],
+  ['Progress tracking later', 'Deferred intentionally']
+];
+
+function mnStatusTag(s) {
+  var cls = s === 'Supported' ? 'mn-status-supported' : (s === 'Deferred intentionally' ? 'mn-status-deferred' : 'mn-status-change');
+  return '<span class="mn-status-tag ' + cls + '">' + escapeHtml(s) + '</span>';
+}
+
+window.openModelNotes = function () {
+  closePanels();
+  var html = '';
+
+  html += '<div class="mn-section"><h5>Charlotte Mason lesson-length guardrails by grade/form</h5>' +
+    '<p>Literal maximums, not vague phrases. Many subjects will take less than the maximum — it\'s a guardrail, not a target every subject must fill. Parents can override everything per card.</p>' +
+    '<table class="mn-table"><tr><th>Band</th><th>Suggested min</th><th>Target</th><th>Hard max</th></tr>' +
+    AGE_STAGE_GUARDRAILS.map(function (g) {
+      return '<tr><td>' + escapeHtml(g.label) + '</td><td>' + g.min + ' min</td><td>' + g.target + ' min</td><td>' + g.max + ' min</td></tr>';
+    }).join('') + '</table>' +
+    AGE_STAGE_GUARDRAILS.map(function (g) {
+      return '<div style="margin-top:6px;"><strong style="font-size:11px;">' + escapeHtml(g.label) + ' sample minutes</strong>' +
+        '<table class="mn-table">' + AGE_STAGE_SAMPLE_MINUTES[g.band].map(function (row) {
+          return '<tr><td>' + escapeHtml(row[0]) + '</td><td>' + escapeHtml(row[1]) + '</td></tr>';
+        }).join('') + '</table></div>';
+    }).join('') +
+  '</div>';
+
+  html += '<div class="mn-section"><h5>Mixed-age group lesson-length rule</h5>' +
+    '<p>For a shared/group card, the suggested lesson length defaults to the <strong>youngest</strong> participant\'s guardrail (optionally the middle child), not the oldest. Older participants can get extension work attached to the same card instead of stretching the shared lesson.</p>' +
+    '<p><em>Demo on the map:</em> "American History Spine" (audience: Older Students = Lucy + Jeremiah) is sized to Lucy\'s Form II guardrail (~25 min), with a separate extension entry for Jeremiah (+15 min independent reading &amp; written narration). Toggle Detailed mode and expand that card to see it.</p>' +
+    '<table class="mn-table"><tr><th>Rule</th><th>Behavior</th></tr>' +
+    '<tr><td>Default</td><td>Use the youngest participant\'s max lesson length</td></tr>' +
+    '<tr><td>Alternate</td><td>Use the middle child\'s level, when that fits the group better</td></tr>' +
+    '<tr><td>Manual override</td><td>Parent sets a custom shared lesson length</td></tr>' +
+    '<tr><td>Extension work</td><td>Independent reading / written narration / notebook work / extra resource / extra minutes, attached per older student</td></tr>' +
+    '</table></div>';
+
+  html += '<div class="mn-section"><h5>Workload / time preview (mockup, not computed)</h5>' +
+    '<p>Structure for a future per-student or per-group workload preview, tied to the Student Lens. Numbers below are illustrative placeholders, not calculated from the sample data.</p>' +
+    '<div style="border:1px solid var(--border);border-radius:6px;padding:8px;">' +
+    '<div style="font-weight:600;font-size:11px;margin-bottom:4px;">Jeremiah <span style="color:var(--muted);font-weight:400;">— Together + Older Students + Individual + Co-op included</span></div>' +
+    ['Estimated weekly lesson time', '~9.5 hrs (mock)', 'Shared lesson time', '~4 hrs (mock)', 'Independent time', '~4.5 hrs (mock)',
+     'Extension work', '~1 hr (mock)', 'Needs resources', '1 card (mock)', 'Needs scheduling', '0 cards (mock)',
+     'Lessons over suggested max', '0 (mock)'].reduce(function (acc, val, idx) {
+      if (idx % 2 === 0) acc.push('<div class="mn-workload-row"><span>' + escapeHtml(val) + '</span>');
+      else acc[acc.length - 1] += '<span>' + escapeHtml(val) + '</span></div>';
+      return acc;
+    }, []).join('') +
+    '</div></div>';
+
+  html += '<div class="mn-section"><h5>Gentle workload warnings (examples, not wired up)</h5>' +
+    '<p>Soft warnings, never hard blocks. Parents can always override.</p>' +
+    [
+      'This lesson exceeds the suggested maximum for the youngest participant.',
+      'This group lesson may be too long for the younger students.',
+      'Consider splitting into a shared reading plus older-student extension work.',
+      'This child\'s total weekly time looks light / balanced / heavy.',
+      'This subject has time assigned but no resource chosen.',
+      'This resource is needed but has not been chosen yet.'
+    ].map(function (w) { return '<div class="mn-warning">' + escapeHtml(w) + '</div>'; }).join('') +
+  '</div>';
+
+  html += '<div class="mn-section"><h5>Phase 0 readiness checklist</h5>' +
+    '<p>Supported = the prototype/model already shapes this. Needs model change = real fields/records still need to be added in Phase 0. Deferred intentionally = explicitly out of scope until Phase 1/2.</p>' +
+    '<table class="mn-table"><tr><th>Concept</th><th>Status</th></tr>' +
+    PHASE0_READINESS.map(function (row) {
+      return '<tr><td>' + escapeHtml(row[0]) + '</td><td>' + mnStatusTag(row[1]) + '</td></tr>';
+    }).join('') + '</table></div>';
+
+  document.getElementById('model-notes-body').innerHTML = html;
+  document.getElementById('model-notes-panel').classList.add('show');
 };
 
 document.getElementById('density-toggle').addEventListener('click', function (e) {
