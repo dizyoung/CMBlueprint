@@ -37,9 +37,11 @@
 <body>
 
 <div class="banner">
-  <strong>Phase 1A.5 — Weekly Rhythm Builder foundation.</strong> Renders from <code>lib/weeklyRhythm.mjs</code> sample state.
+  <strong>Beta.</strong> This saves in this browser only. Use <strong>Export Backup</strong> if you want to move or protect your plan.
   This is the broad "when do the big buckets happen" layer — not Today, not minute-by-minute scheduling.
 </div>
+
+<div class="toolbar" id="save-bar"></div>
 
 <h1>Weekly Rhythm</h1>
 <p class="sub">Days across the top, rhythm blocks down the side. Each cell can hold several broad pieces of the day.</p>
@@ -61,13 +63,32 @@
 <script type="module">
 import * as R from '../../lib/weeklyRhythm.mjs';
 import * as A from '../../lib/familyMapAdapter.mjs';
+import { createSaveBar, loadInitialState } from './saveBar.mjs';
 
-var appState = A.buildSampleAppState();
+var initial = loadInitialState();
+var appState = initial.state;
 var rhythm = appState.weeklyRhythm;
 var context = A.rhythmContext(appState);
 var lens = { type: 'all' };
 
 window.onLensChange = onLensChange;
+
+var saveBar = createSaveBar({
+  onStateReplaced: function (newState) {
+    appState = newState;
+    rhythm = appState.weeklyRhythm;
+    context = A.rhythmContext(appState);
+    populateLensSelect();
+    render();
+  }
+});
+saveBar.mountControls(document.getElementById('save-bar'));
+saveBar.wire(function () { return appState; });
+saveBar.setStatus(initial.source === 'saved' ? 'Saved in this browser' : 'Using sample plan');
+if (initial.source === 'reset-after-invalid') {
+  saveBar.saveNow(appState);
+  window.alert('Your saved plan could not be opened, so the sample plan was loaded instead.');
+}
 
 function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
 

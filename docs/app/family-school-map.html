@@ -61,9 +61,11 @@
 <body>
 
 <div class="banner">
-  <strong>Phase 1A — wired to real in-memory state.</strong> Everything below renders from <code>lib/familyMap.mjs</code> via
-  <code>lib/familyMapAdapter.mjs</code>. Editing is minimal on purpose; persistence, Today, Term Plan, Progress, and accounts are not built yet.
+  <strong>Beta.</strong> This saves in this browser only. Use <strong>Export Backup</strong> if you want to move or protect your plan.
+  Today, Term Plan, Progress, and accounts are not built yet.
 </div>
+
+<div class="toolbar" id="save-bar"></div>
 
 <h1>Family School Map</h1>
 <p class="sub">Rows show who it's for. Columns show subjects. Cards show what your family has chosen.</p>
@@ -147,10 +149,13 @@
 <script type="module">
 import * as A from '../../lib/familyMapAdapter.mjs';
 import * as M from '../../lib/familyMap.mjs';
+import { createSaveBar, loadInitialState } from './saveBar.mjs';
 
 window.A = A;
 window.M = M;
-window.state = A.buildSampleAppState();
+
+var initial = loadInitialState();
+window.state = initial.state;
 window.lens = { type: 'all' };
 window.editingCardId = null;
 
@@ -162,6 +167,26 @@ window.saveEditor = saveEditor;
 window.advanceLoop = advanceLoopUI;
 window.advanceSequence = advanceSequenceUI;
 window.addStarterCard = addStarterCard;
+window.setResourceStatusUI = setResourceStatusUI;
+
+var saveBar = createSaveBar({
+  onStateReplaced: function (newState, source) {
+    window.state = newState;
+    populateLensSelect();
+    populateSubjectSelect();
+    populateStarterSelect();
+    render();
+    saveBar.setStatus(source === 'sample' ? 'Using sample plan' : 'Saved in this browser');
+  }
+});
+saveBar.mountControls(document.getElementById('save-bar'));
+saveBar.wire(function () { return window.state; });
+saveBar.setStatus(initial.source === 'saved' ? 'Saved in this browser' : 'Using sample plan');
+if (initial.source === 'reset-after-invalid') {
+  saveBar.saveNow(window.state);
+  window.alert('Your saved plan could not be opened, so the sample plan was loaded instead.');
+}
+function markDirtyAndSave() { saveBar.scheduleSave(window.state); }
 
 function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
 
@@ -263,7 +288,10 @@ function renderResources() {
     html += '<div class="res-group"><h3>' + escapeHtml(key) + '</h3>';
     resources.forEach(function (r) {
       html += '<div class="res-card"><div class="res-card-title">' + escapeHtml(r.title) +
-        '<span class="res-status">' + escapeHtml(M.RESOURCE_STATUS_LABELS[r.status] || r.status) + '</span></div>';
+        '<select class="res-status" onchange="window.setResourceStatusUI(\'' + r.id + '\', this.value)">' +
+        M.RESOURCE_STATUSES.map(function (st) {
+          return '<option value="' + st + '"' + (st === r.status ? ' selected' : '') + '>' + escapeHtml(M.RESOURCE_STATUS_LABELS[st] || st) + '</option>';
+        }).join('') + '</select></div>';
       r.uses.forEach(function (u) {
         var who = u.participants.length ? u.participants.map(function (id) { var s = A.findStudent(state, id); return s ? s.name : id; }).join(', ') : 'Everyone';
         html += '<div class="res-use">' + escapeHtml(A.resourceUseContextLabel(u, state)) + ' — ' + escapeHtml(who) + '</div>';
@@ -308,10 +336,12 @@ function saveEditor() {
   A.setCardParticipants(state, editingCardId, ids.length ? 'override' : card.participantMode, ids);
   closeEditor();
   render();
+  markDirtyAndSave();
 }
 
-function advanceLoopUI(loopId) { A.advanceLoopInState(state, loopId); render(); }
-function advanceSequenceUI(sequenceId) { A.advanceSequenceInState(state, sequenceId); render(); }
+function advanceLoopUI(loopId) { A.advanceLoopInState(state, loopId); render(); markDirtyAndSave(); }
+function advanceSequenceUI(sequenceId) { A.advanceSequenceInState(state, sequenceId); render(); markDirtyAndSave(); }
+function setResourceStatusUI(resourceId, status) { A.setResourceStatus(state, resourceId, status); render(); markDirtyAndSave(); }
 
 function populateStarterSelect() {
   var sel = document.getElementById('starter-select');
@@ -325,6 +355,7 @@ function addStarterCard() {
   if (!templateId) return;
   A.addCardFromTemplate(state, templateId);
   render();
+  markDirtyAndSave();
 }
 
 function renderReviewPanel() {
