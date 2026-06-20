@@ -21,7 +21,7 @@
   .toggle-group button.active { background: var(--ink); color: #fff; }
   .legend { display: flex; gap: 12px; font-size: 11px; color: var(--muted); flex-wrap: wrap; margin-left: auto; }
   .legend span { display: inline-flex; align-items: center; gap: 4px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
   .dot.book { background: #4a9b5e; }
   .dot.needbook { background: #d9534f; }
   .dot.practice { background: #888; }
@@ -29,7 +29,7 @@
   .dot.optional { background: #c9a45c; }
   .dot.unplaced { background: #d9534f; border: 1px dashed #a33; }
 
-  .print-btn { margin-left: 8px; font-size: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }
+  .print-btn { font-size: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }
 
   table.map { border-collapse: collapse; width: 100%; background: #fff; table-layout: fixed; }
   table.map th, table.map td { border: 1px solid var(--border); vertical-align: top; }
@@ -38,14 +38,17 @@
   table.map td { padding: 6px; min-height: 40px; }
   table.map td.unplaced-row { background: #fff7f6; }
   table.map td.empty-cell { background: #fafafa; }
+  table.map td.drag-target { background: #e9f3ff; outline: 2px dashed #5c8fc9; }
 
   th.col-bible { background: var(--bible); } th.col-la { background: var(--la); color:#3a2f00; }
   th.col-lit { background: var(--lit); } th.col-hist { background: var(--hist); }
   th.col-sci { background: var(--sci); } th.col-math { background: var(--math); }
   th.col-beauty { background: var(--beauty); } th.col-geo { background: var(--geo); }
+  th.col-art { background: #b5708a; } th.col-pe { background: #6b9bd1; }
 
-  .chip { border-radius: 6px; padding: 4px 6px; margin-bottom: 4px; font-size: 11px; line-height: 1.3; cursor: pointer; position: relative; }
+  .chip { border-radius: 6px; padding: 4px 6px; margin-bottom: 4px; font-size: 11px; line-height: 1.3; cursor: grab; position: relative; }
   .chip:last-child { margin-bottom: 0; }
+  .chip.dragging { opacity: 0.4; }
   .chip-bible { background: #f7e3e5; border-left: 3px solid var(--bible); }
   .chip-la { background: #fbf3da; border-left: 3px solid var(--la); }
   .chip-lit { background: #f7e7e2; border-left: 3px solid var(--lit); }
@@ -54,36 +57,56 @@
   .chip-math { background: #e1eef0; border-left: 3px solid var(--math); }
   .chip-beauty { background: #ece6f5; border-left: 3px solid var(--beauty); }
   .chip-geo { background: #e1ede8; border-left: 3px solid var(--geo); }
+  .chip-art { background: #f5e3ec; border-left: 3px solid #b5708a; }
+  .chip-pe { background: #e3edf7; border-left: 3px solid #6b9bd1; }
 
   .chip-title { font-weight: 600; display: flex; align-items: center; gap: 4px; }
   .chip-sub { color: var(--muted); font-size: 10px; margin-top: 1px; }
-  .chip-tag { font-size: 9px; background: rgba(0,0,0,0.08); border-radius: 6px; padding: 0 5px; margin-left: auto; }
-  .strand-badge { font-size: 9px; background: rgba(0,0,0,0.55); color: #fff; border-radius: 6px; padding: 0 5px; }
+  .chip-tag { font-size: 9px; background: rgba(0,0,0,0.08); border-radius: 6px; padding: 0 5px; margin-left: auto; white-space: nowrap; }
+  .strand-badge { font-size: 9px; background: rgba(0,0,0,0.55); color: #fff; border-radius: 6px; padding: 0 5px; white-space: nowrap; }
 
   .chip-detail { display: none; margin-top: 4px; padding-top: 4px; border-top: 1px dashed rgba(0,0,0,0.15); font-size: 10px; }
   .chip.expanded .chip-detail { display: block; }
-  .seq-item { display: flex; justify-content: space-between; padding: 1px 0; }
+  .seq-item { display: flex; justify-content: space-between; gap: 6px; padding: 1px 0; }
+  .seq-item .marker { flex-shrink: 0; width: 14px; }
   .seq-item.current { font-weight: 600; }
   .seq-item.done { color: var(--muted); text-decoration: line-through; }
   .seq-item.upnext { color: var(--muted); }
 
-  .compact .chip-sub { display: none; }
+  .compact .chip-sub.full-detail { display: none; }
   .compact .chip { padding: 3px 5px; }
 
-  .editor-mock { position: fixed; right: 20px; bottom: 20px; width: 250px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); display: none; }
+  .add-cell { font-size: 11px; color: var(--muted); text-align: center; padding: 8px 4px; border: 1px dashed var(--border); border-radius: 6px; cursor: pointer; }
+  .add-cell:hover { background: #eef4ff; color: #3568b0; border-color: #3568b0; }
+  td.empty-cell .add-cell { margin: 0; }
+  td:not(.empty-cell) .add-cell { margin-top: 4px; font-size: 9px; padding: 2px 4px; opacity: 0.6; }
+  td:not(.empty-cell) .add-cell:hover { opacity: 1; }
+
+  /* ---- card editor mockup ---- */
+  .editor-mock { position: fixed; right: 20px; bottom: 20px; width: 280px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 14px; font-size: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); display: none; max-height: 80vh; overflow-y: auto; }
   .editor-mock.show { display: block; }
-  .editor-mock h4 { margin: 0 0 6px; font-size: 12px; }
-  .editor-mock label { display: block; font-size: 10px; color: var(--muted); margin-top: 8px; }
-  .editor-mock select, .editor-mock input { width: 100%; font-size: 11px; padding: 3px; margin-top: 2px; }
-  .editor-mock .close { position: absolute; top: 6px; right: 8px; cursor: pointer; color: var(--muted); }
-  .editor-note { font-size: 10px; color: var(--muted); margin-top: 8px; font-style: italic; }
+  .editor-mock h4 { margin: 0 0 10px; font-size: 13px; }
+  .editor-mock .field { margin-bottom: 10px; }
+  .editor-mock label { display: block; font-size: 10px; color: var(--muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.02em; }
+  .editor-mock select, .editor-mock input { width: 100%; font-size: 11px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; }
+  .editor-mock .close { position: absolute; top: 8px; right: 10px; cursor: pointer; color: var(--muted); font-size: 14px; }
+  .editor-mock .conditional { padding: 8px; background: #f5f8fc; border-radius: 6px; margin-top: -2px; }
+  .editor-mock .conditional.hidden { display: none; }
+  .editor-note { font-size: 10px; color: var(--muted); margin-top: 10px; font-style: italic; border-top: 1px solid var(--border); padding-top: 8px; }
+  .seq-edit-row { display: flex; align-items: center; gap: 6px; font-size: 10px; padding: 3px 0; }
+  .seq-edit-row .grip { cursor: grab; color: var(--muted); }
+  .seq-edit-row.current-seq { font-weight: 600; }
+
+  .sample-note { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
 
   @media print {
     body { background: #fff; padding: 0; }
-    .proto-banner, .toolbar, .editor-mock { display: none !important; }
+    @page { size: landscape; margin: 0.4in; }
+    .proto-banner, .toolbar, .editor-mock, .add-cell, .sample-note { display: none !important; }
     table.map { font-size: 10px; }
     .chip { cursor: default; }
-    .chip-detail { display: block !important; } /* detailed print shows full sequence */
+    .chip-detail { display: block !important; }
+    .chip-sub.full-detail { display: block !important; }
   }
 </style>
 </head>
@@ -95,68 +118,126 @@
 </div>
 
 <h1>Family School Map</h1>
-<p class="sub">Rows = who it's for. Columns = subject families. Chips = PlanItems / PlanStrands the family has actually chosen.</p>
+<p class="sub">Rows show who it's for. Columns show subjects. Cards show what your family has chosen.</p>
 
 <div class="toolbar">
   <div class="toggle-group" id="density-toggle">
     <button class="active" data-mode="compact">Compact</button>
     <button data-mode="detailed">Detailed</button>
   </div>
+  <div class="toggle-group" id="sample-toggle">
+    <button class="active" data-sample="simple">Simple sample</button>
+    <button data-sample="full">Full family sample</button>
+  </div>
   <button class="print-btn" onclick="window.print()">Print preview</button>
   <div class="legend">
     <span><span class="dot book"></span> has book</span>
     <span><span class="dot needbook"></span> needs book</span>
-    <span><span class="dot practice"></span> practice/no book</span>
-    <span><span class="dot coop"></span> co-op</span>
+    <span><span class="dot practice"></span> practice</span>
+    <span><span class="dot coop"></span> outside/co-op</span>
     <span><span class="dot optional"></span> optional</span>
     <span><span class="dot unplaced"></span> needs placement</span>
   </div>
 </div>
 
+<p class="sample-note" id="sample-note"></p>
+
 <table class="map" id="map-table">
-  <thead>
-    <tr>
-      <th class="row-head" style="background:#fff;"></th>
-      <th class="col-bible">Bible</th>
-      <th class="col-la">Language Arts</th>
-      <th class="col-lit">Literature</th>
-      <th class="col-hist">History</th>
-      <th class="col-sci">Science / Nat. History</th>
-      <th class="col-math">Math</th>
-      <th class="col-beauty">Beauty</th>
-      <th class="col-geo">Geography / Citizenship</th>
-    </tr>
-  </thead>
+  <thead><tr id="map-head-row"><th class="row-head" style="background:#fff;"></th></tr></thead>
   <tbody id="map-body"></tbody>
 </table>
 
 <div class="editor-mock" id="editor-mock">
   <span class="close" onclick="closeEditor()">✕</span>
-  <h4 id="editor-title">Chip detail</h4>
-  <label>Audience</label>
-  <select disabled><option>Together</option></select>
-  <label>Status</label>
-  <select disabled><option>Active</option></select>
-  <label>Schedule</label>
-  <select disabled><option>Loop — 4x/week</option></select>
-  <div class="editor-note">Mockup only — not a working editor in this prototype.</div>
+  <h4 id="editor-title">Card details</h4>
+
+  <div class="field">
+    <label>Who does this?</label>
+    <select id="ed-audience" onchange="renderEditorConditionals()">
+      <option value="together">Together</option>
+      <option value="group">A group (e.g. Littles Together)</option>
+      <option value="form">A Form</option>
+      <option value="child">One child</option>
+      <option value="coop">Outside / co-op</option>
+      <option value="optional">Optional / not this year</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label>How is this scheduled?</label>
+    <select id="ed-schedule" onchange="renderEditorConditionals()">
+      <option value="direct">On its own weekly rhythm</option>
+      <option value="loop">Part of a loop</option>
+      <option value="fixed">On chosen days</option>
+      <option value="manual">Track only — don't schedule</option>
+    </select>
+  </div>
+
+  <div class="field conditional" id="ed-loop-fields">
+    <label>Which loop?</label>
+    <select>
+      <option>Bible Loop</option>
+      <option>Beauty Loop</option>
+      <option>Writing Loop</option>
+      <option>Reading Loop</option>
+      <option>+ New loop…</option>
+    </select>
+    <label style="margin-top:8px;">Turns per week (for this loop)</label>
+    <input type="number" value="4" min="1" max="7">
+  </div>
+
+  <div class="field conditional" id="ed-seq-fields">
+    <label>Sequence order (drag to reorder)</label>
+    <div class="seq-edit-row current-seq"><span class="grip">⠿</span> ▶ 2. Charlotte's Web (current)</div>
+    <div class="seq-edit-row"><span class="grip">⠿</span> 3. My Side of the Mountain</div>
+    <div class="seq-edit-row"><span class="grip">⠿</span> + Add another book…</div>
+  </div>
+
+  <div class="field">
+    <label>Status</label>
+    <select>
+      <option>Active</option>
+      <option>Practice / no book needed</option>
+      <option>Outside / co-op</option>
+      <option>Optional</option>
+      <option>Not this year</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label>Books / resources</label>
+    <input type="text" placeholder="Search or add a book…">
+  </div>
+
+  <div class="field">
+    <label>Notes</label>
+    <input type="text" placeholder="Optional note">
+  </div>
+
+  <div class="editor-note">Mockup only — fields are not functional in this prototype. Advanced scheduling detail stays out of the main grid; this panel is as deep as the grid view goes.</div>
 </div>
 
 <script>
 // ---------------------------------------------------------------------------
-// HARDCODED SAMPLE DATA — illustrates PlanItem + PlanStrand shape.
+// HARDCODED SAMPLE DATA — internal shape mirrors PlanItem / PlanStrand, but
+// all user-facing text below uses parent-facing language only.
 // Not parsed from or written to any real app state.
 // ---------------------------------------------------------------------------
-var COLS = [
-  { id: 'bible', label: 'Bible', cls: 'bible' },
-  { id: 'la', label: 'Language Arts', cls: 'la' },
-  { id: 'lit', label: 'Literature', cls: 'lit' },
-  { id: 'hist', label: 'History', cls: 'hist' },
-  { id: 'sci', label: 'Science / Nat. History', cls: 'sci' },
-  { id: 'math', label: 'Math', cls: 'math' },
-  { id: 'beauty', label: 'Beauty', cls: 'beauty' },
-  { id: 'geo', label: 'Geography / Citizenship', cls: 'geo' }
+
+var COLS_SIMPLE = [
+  { id: 'bible', label: 'Bible' },
+  { id: 'la', label: 'Language Arts' },
+  { id: 'lit', label: 'Literature' },
+  { id: 'hist', label: 'History' },
+  { id: 'sci', label: 'Science / Nat. History' },
+  { id: 'math', label: 'Math' },
+  { id: 'beauty', label: 'Beauty' },
+  { id: 'geo', label: 'Geography / Citizenship' }
 ];
+var COLS_FULL = COLS_SIMPLE.concat([
+  { id: 'art', label: 'Art / Handicrafts' },
+  { id: 'pe', label: 'PE / Health' }
+]);
 
 var ROWS = [
   { id: 'together', label: 'Together' },
@@ -169,72 +250,140 @@ var ROWS = [
   { id: 'unplaced', label: 'Needs Placement' }
 ];
 
-// PlanStrands (sequential/loop groupings)
-var STRANDS = [
+// loops: turns/week belongs to the loop, not to any one item inside it
+var LOOPS_SIMPLE = [
   {
-    id: 'strand-bible-loop', subjectFamilyId: 'bible', audience: 'together',
-    label: 'Bible Loop', behavior: 'loop', schedule: 'Loop — 4x/week',
+    id: 'loop-bible', subjectFamilyId: 'bible', audience: 'together',
+    label: 'Bible Loop', turnsPerWeek: 4,
     items: [
-      { label: 'Matthew ch. 1', status: 'active', hasBook: true, current: true },
-      { label: 'Psalms selection', status: 'active', hasBook: true },
-      { label: 'Proverbs selection', status: 'active', hasBook: true }
+      { label: 'Matthew', next: 'ch. 1', current: true, hasBook: true },
+      { label: 'Psalms + Proverbs', next: 'ch. 1', hasBook: true },
+      { label: 'Theology', next: 'lesson 1', hasBook: true },
+      { label: 'Old Testament', next: 'ch. 1', hasBook: true }
     ]
   },
   {
-    id: 'strand-readaloud', subjectFamilyId: 'lit', audience: 'together',
-    label: 'Family Read-Aloud', behavior: 'sequential', schedule: 'Direct — 3x/week',
+    id: 'loop-beauty', subjectFamilyId: 'beauty', audience: 'together',
+    label: 'Beauty Loop', turnsPerWeek: 2,
     items: [
-      { label: 'Book 1: The Hobbit', status: 'done', hasBook: true },
-      { label: 'Book 2: Charlotte\'s Web', status: 'current', hasBook: true, current: true },
-      { label: 'Book 3: My Side of the Mountain', status: 'upnext', hasBook: true }
-    ]
-  },
-  {
-    id: 'strand-beauty-loop', subjectFamilyId: 'beauty', audience: 'together',
-    label: 'Beauty Loop', behavior: 'loop', schedule: 'Loop — 1-3x/week',
-    items: [
-      { label: 'Picture Study', status: 'active', hasBook: false, practice: true, current: true },
-      { label: 'Hymn Study', status: 'active', hasBook: false, practice: true },
-      { label: 'Handicraft', status: 'active', hasBook: false, practice: true }
-    ]
-  },
-  {
-    id: 'strand-lucy-lit', subjectFamilyId: 'lit', audience: 'lucy',
-    label: 'Lucy Independent Literature', behavior: 'sequential', schedule: 'Direct — 4x/week',
-    items: [
-      { label: 'Anne of Green Gables', status: 'done', hasBook: true },
-      { label: 'The Secret Garden', status: 'current', hasBook: true, current: true },
-      { label: 'Little Women', status: 'upnext', hasBook: false, needsBook: true }
-    ]
-  },
-  {
-    id: 'strand-jeremiah-sci', subjectFamilyId: 'sci', audience: 'jeremiah',
-    label: 'Jeremiah Science', behavior: 'sequential', schedule: 'Direct — 3x/week',
-    items: [
-      { label: 'Botany', status: 'done', hasBook: true },
-      { label: 'Geology', status: 'current', hasBook: true, current: true },
-      { label: 'Physiology', status: 'upnext', hasBook: false, needsBook: true }
+      { label: 'Picture Study', next: 'this week\'s painting', current: true, practice: true },
+      { label: 'Hymn Study', next: 'verse 2', practice: true },
+      { label: 'Handicraft', next: 'continue project', practice: true }
     ]
   }
 ];
 
-// Standalone (independent/concurrent) PlanItems — not part of a strand
-var ITEMS = [
-  { subjectFamilyId: 'math', audience: 'lucy', label: 'Math (independent)', status: 'active', hasBook: true, schedule: 'Direct — 5x/week' },
-  { subjectFamilyId: 'math', audience: 'jeremiah', label: 'Math (with Mom)', status: 'active', hasBook: true, schedule: 'Direct — 5x/week' },
-  { subjectFamilyId: 'la', audience: 'littles', label: 'Handwriting', status: 'active', hasBook: true, schedule: 'Direct — 3x/week' },
-  { subjectFamilyId: 'la', audience: 'littles', label: 'Phonics', status: 'active', hasBook: true, schedule: 'Direct — 4x/week' },
-  { subjectFamilyId: 'sci', audience: 'coop', label: 'Co-op Science Class', status: 'co-op-external', schedule: 'Co-op — weekly' },
-  { subjectFamilyId: 'hist', audience: 'older', label: 'American History Spine', status: 'active', hasBook: true, schedule: 'Direct — 2x/week' },
-  { subjectFamilyId: 'geo', audience: 'optional', label: 'Map Quizzing', status: 'optional', schedule: '—' },
-  { subjectFamilyId: 'hist', audience: 'unplaced', label: 'Neighboring Lands Spine', status: 'active', needsBook: true, schedule: 'not set' }
+var SEQUENCES_SIMPLE = [
+  {
+    id: 'seq-readaloud', subjectFamilyId: 'lit', audience: 'together',
+    label: 'Family Read-Alouds', frequencyLabel: '3x/week',
+    items: [
+      { label: 'The Hobbit', status: 'done', hasBook: true },
+      { label: 'Charlotte\'s Web', status: 'current', hasBook: true, current: true },
+      { label: 'My Side of the Mountain', status: 'upnext', hasBook: true }
+    ]
+  },
+  {
+    id: 'seq-lucy-lit', subjectFamilyId: 'lit', audience: 'lucy',
+    label: 'Lucy\'s Independent Literature', frequencyLabel: '4x/week',
+    items: [
+      { label: 'Anne of Green Gables', status: 'done', hasBook: true },
+      { label: 'The Secret Garden', status: 'current', hasBook: true, current: true },
+      { label: 'Little Women', status: 'upnext', needsBook: true }
+    ]
+  },
+  {
+    id: 'seq-jeremiah-sci', subjectFamilyId: 'sci', audience: 'jeremiah',
+    label: 'Jeremiah\'s Science', frequencyLabel: '3x/week',
+    items: [
+      { label: 'Botany', status: 'done', hasBook: true },
+      { label: 'Geology', status: 'current', hasBook: true, current: true },
+      { label: 'Physiology', status: 'upnext', needsBook: true }
+    ]
+  }
 ];
 
-function colClass(id) { return 'col-' + id; }
+var ITEMS_SIMPLE = [
+  { subjectFamilyId: 'math', audience: 'lucy', label: 'Math', status: 'active', hasBook: true, frequencyLabel: '5x/week' },
+  { subjectFamilyId: 'math', audience: 'jeremiah', label: 'Math (with Mom)', status: 'active', hasBook: true, frequencyLabel: '5x/week' },
+  { subjectFamilyId: 'la', audience: 'littles', label: 'Handwriting', status: 'active', hasBook: true, frequencyLabel: '3x/week' },
+  { subjectFamilyId: 'la', audience: 'littles', label: 'Phonics', status: 'active', hasBook: true, frequencyLabel: '4x/week' },
+  { subjectFamilyId: 'sci', audience: 'coop', label: 'Co-op Science Class', status: 'coop', frequencyLabel: 'weekly' },
+  { subjectFamilyId: 'hist', audience: 'older', label: 'American History Spine', status: 'active', hasBook: true, frequencyLabel: '2x/week' },
+  { subjectFamilyId: 'geo', audience: 'optional', label: 'Map Quizzing', status: 'optional', frequencyLabel: '—' },
+  { subjectFamilyId: 'hist', audience: 'unplaced', label: 'Neighboring Lands Spine', status: 'active', needsBook: true, frequencyLabel: 'not set' }
+];
+
+// ---- Full family sample: denser, more cards per cell, more columns ----
+var LOOPS_FULL = LOOPS_SIMPLE.concat([
+  {
+    id: 'loop-writing', subjectFamilyId: 'la', audience: 'older',
+    label: 'Writing Loop', turnsPerWeek: 3,
+    items: [
+      { label: 'Copywork', next: 'passage 4', current: true, hasBook: true },
+      { label: 'Dictation', next: 'passage 2', hasBook: true },
+      { label: 'Composition', next: 'essay draft', hasBook: false, practice: true }
+    ]
+  },
+  {
+    id: 'loop-reading', subjectFamilyId: 'la', audience: 'littles',
+    label: 'Reading Loop', turnsPerWeek: 4,
+    items: [
+      { label: 'Phonics readers', next: 'lesson 9', current: true, hasBook: true },
+      { label: 'Fairy Tales', next: 'next story', hasBook: true },
+      { label: 'Picture book read-aloud', next: 'continue book', hasBook: true },
+      { label: 'Sight words', next: 'set 3', practice: true }
+    ]
+  },
+  {
+    id: 'loop-histnat', subjectFamilyId: 'hist', audience: 'together',
+    label: 'History + Natural History Loop', turnsPerWeek: 2,
+    items: [
+      { label: 'American History', next: 'ch. 6', current: true, hasBook: true },
+      { label: 'Nature Study', next: 'this week\'s walk', practice: true }
+    ]
+  }
+]);
+
+var SEQUENCES_FULL = SEQUENCES_SIMPLE.concat([
+  {
+    id: 'seq-older-sci', subjectFamilyId: 'sci', audience: 'older',
+    label: 'Older Students\' Science', frequencyLabel: '3x/week',
+    items: [
+      { label: 'Astronomy', status: 'done', hasBook: true },
+      { label: 'Chemistry', status: 'current', hasBook: true, current: true },
+      { label: 'Physics', status: 'upnext', needsBook: true }
+    ]
+  }
+]);
+
+var ITEMS_FULL = ITEMS_SIMPLE.concat([
+  { subjectFamilyId: 'bible', audience: 'littles', label: 'Bible Memory Verses', status: 'active', practice: true, frequencyLabel: '2x/week' },
+  { subjectFamilyId: 'bible', audience: 'jeremiah', label: 'Personal Spiritual Reading', status: 'active', hasBook: true, frequencyLabel: '2x/week' },
+  { subjectFamilyId: 'bible', audience: 'lucy', label: 'Catechism', status: 'active', practice: true, frequencyLabel: '1x/week' },
+  { subjectFamilyId: 'art', audience: 'together', label: 'Art History', status: 'active', hasBook: true, frequencyLabel: '1x/week' },
+  { subjectFamilyId: 'art', audience: 'lucy', label: 'Personal Instrument Practice', status: 'optional', practice: true, frequencyLabel: 'daily' },
+  { subjectFamilyId: 'pe', audience: 'together', label: 'Outdoor Free Play', status: 'active', practice: true, frequencyLabel: 'daily' },
+  { subjectFamilyId: 'pe', audience: 'coop', label: 'Co-op PE Class', status: 'coop', frequencyLabel: 'weekly' },
+  { subjectFamilyId: 'geo', audience: 'older', label: 'Mapping Notebook', status: 'active', hasBook: true, frequencyLabel: '1x/week' },
+  { subjectFamilyId: 'math', audience: 'littles', label: 'Family Math Games', status: 'active', practice: true, frequencyLabel: '3x/week' },
+  { subjectFamilyId: 'geo', audience: 'unplaced', label: 'Citizenship Spine', status: 'active', needsBook: true, frequencyLabel: 'not set' },
+  { subjectFamilyId: 'sci', audience: 'unplaced', label: 'Lucy\'s Health/Botany unit', status: 'active', needsBook: true, frequencyLabel: 'not set' },
+  { subjectFamilyId: 'art', audience: 'unplaced', label: 'Handicraft (TBD)', status: 'active', needsBook: false, frequencyLabel: 'not set' }
+]);
+
+var state = { density: 'compact', sample: 'simple' };
+
+function cols() { return state.sample === 'full' ? COLS_FULL : COLS_SIMPLE; }
+function loops() { return state.sample === 'full' ? LOOPS_FULL : LOOPS_SIMPLE; }
+function sequences() { return state.sample === 'full' ? SEQUENCES_FULL : SEQUENCES_SIMPLE; }
+function items() { return state.sample === 'full' ? ITEMS_FULL : ITEMS_SIMPLE; }
+
 function chipClass(id) { return 'chip-' + id; }
+function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/'/g, '&#39;'); }
 
 function statusDot(it) {
-  if (it.status === 'co-op-external') return 'coop';
+  if (it.status === 'coop') return 'coop';
   if (it.status === 'optional') return 'optional';
   if (it.practice) return 'practice';
   if (it.needsBook) return 'needbook';
@@ -243,20 +392,46 @@ function statusDot(it) {
   return 'needbook';
 }
 
-function strandChipHTML(strand) {
-  var current = strand.items.find(function (i) { return i.current; }) || strand.items[0];
+function loopChipHTML(loop) {
+  var current = loop.items.find(function (i) { return i.current; }) || loop.items[0];
   var dot = statusDot(current);
-  var seqHTML = strand.items.map(function (i, idx) {
-    var cls = i.status === 'done' ? 'done' : (i.current ? 'current' : 'upnext');
-    var marker = i.status === 'done' ? '✓' : (i.current ? '▶' : (idx + 1));
-    return '<div class="seq-item ' + cls + '"><span>' + marker + ' ' + i.label + '</span></div>';
+  var seqHTML = loop.items.map(function (i) {
+    var marker = i.current ? '▶' : '&nbsp;&nbsp;';
+    var cls = i.current ? 'current' : '';
+    return '<div class="seq-item ' + cls + '"><span><span class="marker">' + marker + '</span>' + escapeHtml(i.label) +
+      ' — next: ' + escapeHtml(i.next) + '</span></div>';
   }).join('');
-  var behaviorTag = strand.behavior === 'loop' ? 'Loop' : (strand.behavior === 'sequential' ? 'Sequence' : 'Concurrent');
   return (
-    '<div class="chip ' + chipClass(strand.subjectFamilyId) + '" onclick="toggleExpand(this)" ondblclick="openEditor(\'' + escapeHtml(strand.label) + '\')">' +
-      '<div class="chip-title"><span class="dot ' + dot + '"></span>' + escapeHtml(strand.label) +
-        '<span class="strand-badge">' + behaviorTag + '</span></div>' +
-      '<div class="chip-sub">' + escapeHtml(strand.schedule) + ' · now: ' + escapeHtml(current.label) + '</div>' +
+    '<div class="chip ' + chipClass(loop.subjectFamilyId) + '" draggable="true" ' +
+      'ondragstart="onDragStart(event,\'' + loop.id + '\')" onclick="toggleExpand(this)" ' +
+      'ondblclick="openEditor(\'' + escapeHtml(loop.label) + '\',true,false)">' +
+      '<div class="chip-title"><span class="dot ' + dot + '"></span>' + escapeHtml(loop.label) +
+        '<span class="strand-badge">Loop</span></div>' +
+      '<div class="chip-sub">' + loop.turnsPerWeek + ' turns/week · next: ' + escapeHtml(current.label) + ' — ' + escapeHtml(current.next) + '</div>' +
+      '<div class="chip-detail">' +
+        '<div style="margin-bottom:3px;font-weight:600;">' + escapeHtml(loop.label) + ' · ' + loop.turnsPerWeek + ' turns/week</div>' +
+        seqHTML +
+      '</div>' +
+    '</div>'
+  );
+}
+
+function seqChipHTML(seq) {
+  var current = seq.items.find(function (i) { return i.current; }) || seq.items[0];
+  var dot = statusDot(current);
+  var seqHTML = seq.items.map(function (i, idx) {
+    var cls = i.status === 'done' ? 'done' : (i.current ? 'current' : 'upnext');
+    var marker = i.status === 'done' ? '✓' : (i.current ? '▶' : (idx + 1) + '.');
+    return '<div class="seq-item ' + cls + '"><span><span class="marker">' + marker + '</span>' + escapeHtml(i.label) + '</span></div>';
+  }).join('');
+  return (
+    '<div class="chip ' + chipClass(seq.subjectFamilyId) + '" draggable="true" ' +
+      'ondragstart="onDragStart(event,\'' + seq.id + '\')" onclick="toggleExpand(this)" ' +
+      'ondblclick="openEditor(\'' + escapeHtml(seq.label) + '\',false,true)">' +
+      '<div class="chip-title"><span class="dot ' + dot + '"></span>' + escapeHtml(seq.label) +
+        '<span class="strand-badge">Sequence</span></div>' +
+      '<div class="chip-sub">Current: ' + escapeHtml(current.label) + '</div>' +
+      '<div class="chip-sub full-detail">' + seq.frequencyLabel + '</div>' +
       '<div class="chip-detail">' + seqHTML + '</div>' +
     '</div>'
   );
@@ -264,59 +439,110 @@ function strandChipHTML(strand) {
 
 function itemChipHTML(it) {
   var dot = statusDot(it);
-  var tag = it.status === 'co-op-external' ? 'Co-op' : (it.status === 'optional' ? 'Optional' : (it.audience === 'unplaced' ? 'Needs placement' : ''));
+  var tag = it.status === 'coop' ? 'Co-op' : (it.status === 'optional' ? 'Optional' : (it.audience === 'unplaced' ? 'Needs placement' : (it.practice ? 'Practice' : '')));
   return (
-    '<div class="chip ' + chipClass(it.subjectFamilyId) + '" onclick="toggleExpand(this)" ondblclick="openEditor(\'' + escapeHtml(it.label) + '\')">' +
+    '<div class="chip ' + chipClass(it.subjectFamilyId) + '" draggable="true" ' +
+      'ondragstart="onDragStart(event,\'item-' + items().indexOf(it) + '\')" onclick="toggleExpand(this)" ' +
+      'ondblclick="openEditor(\'' + escapeHtml(it.label) + '\',false,false)">' +
       '<div class="chip-title"><span class="dot ' + dot + '"></span>' + escapeHtml(it.label) + (tag ? '<span class="chip-tag">' + tag + '</span>' : '') + '</div>' +
-      '<div class="chip-sub">' + escapeHtml(it.schedule || '') + '</div>' +
-      '<div class="chip-detail">Single item — not part of a strand.</div>' +
+      '<div class="chip-sub full-detail">' + escapeHtml(it.frequencyLabel || '') + '</div>' +
+      '<div class="chip-detail">Single card — not part of a loop or sequence.</div>' +
     '</div>'
   );
 }
 
-function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/'/g, '&#39;'); }
+function addCellHTML(rowId, colId) {
+  return '<div class="add-cell" onclick="onAddCard(\'' + rowId + '\',\'' + colId + '\')">+ Add</div>';
+}
+
+function buildHead() {
+  var head = document.getElementById('map-head-row');
+  var html = '<th class="row-head" style="background:#fff;"></th>';
+  cols().forEach(function (col) {
+    html += '<th class="col-' + col.id + '">' + escapeHtml(col.label) + '</th>';
+  });
+  head.innerHTML = html;
+}
 
 function buildGrid() {
+  buildHead();
   var body = document.getElementById('map-body');
   var html = '';
   ROWS.forEach(function (row) {
     html += '<tr><th class="row-head">' + escapeHtml(row.label) + '</th>';
-    COLS.forEach(function (col) {
+    cols().forEach(function (col) {
       var cellChips = '';
-      STRANDS.filter(function (s) { return s.subjectFamilyId === col.id && s.audience === row.id; })
-        .forEach(function (s) { cellChips += strandChipHTML(s); });
-      ITEMS.filter(function (i) { return i.subjectFamilyId === col.id && i.audience === row.id; })
+      loops().filter(function (l) { return l.subjectFamilyId === col.id && l.audience === row.id; })
+        .forEach(function (l) { cellChips += loopChipHTML(l); });
+      sequences().filter(function (s) { return s.subjectFamilyId === col.id && s.audience === row.id; })
+        .forEach(function (s) { cellChips += seqChipHTML(s); });
+      items().filter(function (i) { return i.subjectFamilyId === col.id && i.audience === row.id; })
         .forEach(function (i) { cellChips += itemChipHTML(i); });
       var rowCls = row.id === 'unplaced' ? ' unplaced-row' : '';
       var emptyCls = !cellChips ? ' empty-cell' : '';
-      html += '<td class="' + rowCls + emptyCls + '">' + cellChips + '</td>';
+      html += '<td class="' + rowCls + emptyCls + '" data-row="' + row.id + '" data-col="' + col.id + '" ' +
+        'ondragover="onDragOver(event)" ondrop="onDrop(event)" ondragleave="onDragLeave(event)">' +
+        cellChips + addCellHTML(row.id, col.id) + '</td>';
     });
     html += '</tr>';
   });
   body.innerHTML = html;
+  document.getElementById('sample-note').textContent = state.sample === 'full'
+    ? 'Full family sample — denser, with practice items, optional items, co-op, and several Needs Placement cards.'
+    : 'Simple sample — a lighter plan to show the basic shapes (loop, sequence, single card).';
 }
 
-window.toggleExpand = function (el) {
-  el.classList.toggle('expanded');
+// ---- drag and drop mockup (visual only — does not persist a move) ----
+var draggedId = null;
+window.onDragStart = function (e, id) { draggedId = id; e.target.classList.add('dragging'); };
+window.onDragOver = function (e) { e.preventDefault(); e.currentTarget.classList.add('drag-target'); };
+window.onDragLeave = function (e) { e.currentTarget.classList.remove('drag-target'); };
+window.onDrop = function (e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-target');
+  var row = e.currentTarget.dataset.row, col = e.currentTarget.dataset.col;
+  document.querySelectorAll('.chip.dragging').forEach(function (c) { c.classList.remove('dragging'); });
+  alert('Mockup only: this would move the card to "' + row + '" / "' + col + '".\nNo data actually moves in this prototype.');
 };
-window.openEditor = function (title) {
+
+window.toggleExpand = function (el) { el.classList.toggle('expanded'); };
+
+window.openEditor = function (title, isLoop, isSeq) {
   document.getElementById('editor-title').textContent = title;
+  document.getElementById('ed-schedule').value = isLoop ? 'loop' : 'direct';
+  renderEditorConditionals(isLoop, isSeq);
   document.getElementById('editor-mock').classList.add('show');
 };
-window.closeEditor = function () {
-  document.getElementById('editor-mock').classList.remove('show');
+window.closeEditor = function () { document.getElementById('editor-mock').classList.remove('show'); };
+window.renderEditorConditionals = function (forceLoop, forceSeq) {
+  var scheduleVal = document.getElementById('ed-schedule').value;
+  var showLoop = forceLoop !== undefined ? forceLoop : scheduleVal === 'loop';
+  var showSeq = forceSeq !== undefined ? forceSeq : false;
+  document.getElementById('ed-loop-fields').classList.toggle('hidden', !showLoop);
+  document.getElementById('ed-seq-fields').classList.toggle('hidden', !showSeq);
+};
+window.onAddCard = function (rowId, colId) {
+  openEditor('New card — ' + rowId + ' / ' + colId, false, false);
 };
 
 document.getElementById('density-toggle').addEventListener('click', function (e) {
   var btn = e.target.closest('button'); if (!btn) return;
   document.querySelectorAll('#density-toggle button').forEach(function (b) { b.classList.remove('active'); });
   btn.classList.add('active');
-  document.getElementById('map-table').parentElement === null; // no-op safety
-  document.body.classList.toggle('compact', btn.dataset.mode === 'compact');
+  state.density = btn.dataset.mode;
+  document.body.classList.toggle('compact', state.density === 'compact');
+});
+document.getElementById('sample-toggle').addEventListener('click', function (e) {
+  var btn = e.target.closest('button'); if (!btn) return;
+  document.querySelectorAll('#sample-toggle button').forEach(function (b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  state.sample = btn.dataset.sample;
+  buildGrid();
 });
 
 buildGrid();
 document.body.classList.add('compact');
+window.renderEditorConditionals();
 </script>
 
 </body>
