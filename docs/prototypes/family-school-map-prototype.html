@@ -154,12 +154,35 @@
 
   .print-opt-section { margin-bottom: 10px; }
   .print-opt-section label { display: block; font-size: 11px; margin: 3px 0; }
-  .print-opt-radio { display: block; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 5px; cursor: pointer; }
-  .print-opt-radio.selected { border-color: #3568b0; background: #f5f8fc; }
-  .print-opt-radio .opt-title { font-weight: 600; font-size: 11px; }
-  .print-opt-radio .opt-desc { font-size: 10px; color: var(--muted); }
   .col-check-grid, .row-check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
   .col-check-grid label, .row-check-grid label { font-size: 10px; }
+
+  /* ---- print: top-level mode cards (calm first decision) ---- */
+  .print-mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 4px; }
+  .print-mode-card { border: 1px solid var(--border); border-radius: 8px; padding: 8px; cursor: pointer; }
+  .print-mode-card.selected { border-color: #3568b0; background: #f5f8fc; box-shadow: 0 0 0 1px #3568b0 inset; }
+  .print-mode-card .opt-title { font-weight: 600; font-size: 11px; }
+  .print-mode-card .opt-desc { font-size: 9.5px; color: var(--muted); margin-top: 3px; line-height: 1.3; }
+
+  .more-settings-toggle { font-size: 11px; color: #3568b0; cursor: pointer; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+  .more-settings-body { display: none; margin-top: 8px; }
+  .more-settings-body.show { display: block; }
+
+  /* ---- Book & Resource List ---- */
+  .res-group { margin-bottom: 12px; }
+  .res-group h5 { font-size: 11px; margin: 0 0 5px; padding: 3px 6px; border-radius: 4px; color: #fff; }
+  .res-group h5.status-head { background: #555; }
+  .res-card { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; font-size: 11px; }
+  .res-card-title { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .res-status-tag { font-size: 9px; border-radius: 6px; padding: 1px 6px; margin-left: auto; background: #eee; color: #555; white-space: nowrap; }
+  .res-status-tag.status-need-to-buy { background: #fde2e2; color: #a33; }
+  .res-status-tag.status-have-it { background: #e3f3e6; color: #2f7a3d; }
+  .res-status-tag.status-coop-provided { background: #e3edf7; color: #33588f; }
+  .res-status-tag.status-undecided { background: #fff3cd; color: #8a6d1f; }
+  .res-use-line { font-size: 10px; color: var(--muted); padding: 1px 0; }
+  .res-use-who { color: #999; }
+  #resource-list-panel { width: 360px; }
+  .res-tab-row { margin-bottom: 10px; }
 
   /* ===================== PRINT ===================== */
   @media print {
@@ -186,9 +209,15 @@
     /* Student view print: hide non-matching cards entirely instead of dimming */
     body.print-student-only .chip:not(.lens-match) { display: none !important; }
 
-    /* Hidden rows/cols/optional row per print options */
+    /* Hidden rows/cols/optional row per print options (also used for student "Include" categories) */
     body.print-hide-optional tr[data-row-id="optional"] { display: none !important; }
     .row-hidden-print, .col-hidden-print { display: none !important; }
+
+    /* Book & Resource List print: hide the map entirely, show the rolled-up resource render */
+    #resource-print-render { display: none; }
+    body.print-resources table.map { display: none !important; }
+    body.print-resources #resource-print-render { display: block !important; }
+    body.print-resources .res-card { font-size: 10px; }
   }
 </style>
 </head>
@@ -196,8 +225,9 @@
 
 <div class="proto-banner">
   <strong>Static prototype — hardcoded sample data only.</strong> Nothing here is wired to real app state, localStorage, or logic.mjs.
-  Visual checkpoint for Charlotte Mason starter cards, plain-language scheduling, a guided card editor, filters/lenses, and print options before any data-model migration.
+  Visual checkpoint for Charlotte Mason starter cards, plain-language scheduling, a guided card editor, a calm Print screen, and a Book &amp; Resource List rolled up from the plan — before any data-model migration.
 </div>
+<div id="resource-print-render" style="display:none;"></div>
 
 <h1>Family School Map</h1>
 <p class="sub">Rows show who it's for. Columns show subjects. Cards show what your family has chosen.</p>
@@ -217,7 +247,8 @@
   <button class="util-btn-proto accent" onclick="openStarterCards()">Add from Charlotte Mason starter cards</button>
   <button class="util-btn-proto" onclick="openCustomize('family')">Customize family</button>
   <button class="util-btn-proto" onclick="openCustomize('subjects')">Customize subjects</button>
-  <button class="util-btn-proto" onclick="openPrintOptions()">Print options…</button>
+  <button class="util-btn-proto" onclick="openResourceList('subject')">Book &amp; Resource List</button>
+  <button class="util-btn-proto" onclick="openPrintOptions()">Print…</button>
   <div class="legend">
     <span><span class="dot book"></span> has resource</span>
     <span><span class="dot needbook"></span> needs resource</span>
@@ -374,46 +405,101 @@
   <button class="cust-add" onclick="alert('Mockup only: would add a new subject column.')">+ Add subject column</button>
 </div>
 
-<!-- ===================== Print options mockup ===================== -->
+<!-- ===================== Print mockup — calm top-level choice first ===================== -->
 <div class="side-panel" id="print-options-panel">
   <span class="close" onclick="closePanels()">✕</span>
-  <h4>Print options</h4>
+  <h4>Print</h4>
+  <p class="panel-help">Choose what you'd like to print.</p>
 
-  <div class="print-opt-section">
-    <div class="print-opt-radio selected" data-mode="overview" onclick="selectPrintMode('overview')">
-      <div class="opt-title">One-page overview</div>
-      <div class="opt-desc">Compact cards, loops/sequences collapsed to current item, no resource detail. Best effort to fit one landscape page.</div>
+  <div class="print-mode-grid">
+    <div class="print-mode-card" data-mode="overview" onclick="selectPrintMode('overview')">
+      <div class="opt-title">One-page family overview</div>
+      <div class="opt-desc">Best for seeing the whole family plan at a glance.</div>
     </div>
-    <div class="print-opt-radio" data-mode="detailed" onclick="selectPrintMode('detailed')">
-      <div class="opt-title">Detailed map</div>
-      <div class="opt-desc">Expands loops, sequences, and resources. May take more than one page. Good for a planning binder.</div>
+    <div class="print-mode-card" data-mode="student" onclick="selectPrintMode('student')">
+      <div class="opt-title">Student overview</div>
+      <div class="opt-desc">Best for seeing everything one child is doing.</div>
     </div>
-    <div class="print-opt-radio" data-mode="student" onclick="selectPrintMode('student')">
-      <div class="opt-title">Student view</div>
-      <div class="opt-desc">Shows only cards that include the selected student — across Together, groups, co-op, and their individual row.</div>
+    <div class="print-mode-card" data-mode="detailed" onclick="selectPrintMode('detailed')">
+      <div class="opt-title">Detailed planning map</div>
+      <div class="opt-desc">Best for binder/reference pages.</div>
+    </div>
+    <div class="print-mode-card" data-mode="resources" onclick="selectPrintMode('resources')">
+      <div class="opt-title">Book &amp; Resource List</div>
+      <div class="opt-desc">Best for gathering books, ordering, library holds, and checking what each child needs.</div>
     </div>
   </div>
 
-  <div class="print-opt-section" id="print-student-select" style="display:none;">
-    <label style="font-size:11px;">Which student?</label>
+  <!-- Student overview: include/exclude, not just "apply the lens" -->
+  <div class="print-opt-section" id="print-student-block" style="display:none;">
+    <label style="font-size:11px;font-weight:600;">Choose student</label>
     <select id="print-student-pick"></select>
+    <label style="font-size:11px;font-weight:600;margin-top:8px;">Include</label>
+    <label style="font-size:11px;"><input type="checkbox" class="pinc" data-key="together" checked style="width:auto;display:inline;"> Together work</label>
+    <label style="font-size:11px;"><input type="checkbox" class="pinc" data-key="group" checked style="width:auto;display:inline;"> Group work</label>
+    <label style="font-size:11px;"><input type="checkbox" class="pinc" data-key="coop" checked style="width:auto;display:inline;"> Co-op / outside work</label>
+    <label style="font-size:11px;"><input type="checkbox" class="pinc" data-key="individual" checked style="width:auto;display:inline;"> Individual work</label>
+    <label style="font-size:11px;"><input type="checkbox" class="pinc" data-key="optional" style="width:auto;display:inline;"> Optional / not this year</label>
   </div>
 
-  <div class="print-opt-section">
-    <label style="font-size:11px;font-weight:600;">Rows to include</label>
-    <div class="row-check-grid" id="print-row-checks"></div>
-  </div>
-  <div class="print-opt-section">
-    <label style="font-size:11px;font-weight:600;">Subjects to include</label>
-    <div class="col-check-grid" id="print-col-checks"></div>
-  </div>
-  <div class="print-opt-section">
-    <label style="font-size:11px;"><input type="checkbox" id="print-hide-optional" style="width:auto;display:inline;" checked> Hide "Optional / not this year" row</label>
-    <label style="font-size:11px;"><input type="checkbox" id="print-hide-empty" style="width:auto;display:inline;" checked> Hide empty rows/columns</label>
+  <!-- Book & Resource List: its own simple choices, hidden until selected -->
+  <div class="print-opt-section" id="print-resource-block" style="display:none;">
+    <label style="font-size:11px;font-weight:600;">Group by</label>
+    <select id="print-res-groupby">
+      <option value="subject">Subject</option>
+      <option value="student">Student</option>
+      <option value="status">Status</option>
+    </select>
+    <label style="font-size:11px;font-weight:600;margin-top:8px;">Include</label>
+    <label style="font-size:11px;"><input type="checkbox" class="rinc" data-key="together" checked style="width:auto;display:inline;"> Together work</label>
+    <label style="font-size:11px;"><input type="checkbox" class="rinc" data-key="group" checked style="width:auto;display:inline;"> Group work</label>
+    <label style="font-size:11px;"><input type="checkbox" class="rinc" data-key="coop" checked style="width:auto;display:inline;"> Co-op / outside work</label>
+    <label style="font-size:11px;"><input type="checkbox" class="rinc" data-key="individual" checked style="width:auto;display:inline;"> Individual work</label>
+    <label style="font-size:11px;"><input type="checkbox" class="rinc" data-key="optional" style="width:auto;display:inline;"> Optional / not this year</label>
+    <label style="font-size:11px;"><input type="checkbox" class="rinc" data-key="unplaced" checked style="width:auto;display:inline;"> Needs Placement</label>
+    <label style="font-size:11px;font-weight:600;margin-top:8px;">Filter</label>
+    <select id="print-res-filter">
+      <option value="all">All statuses</option>
+      <option value="need">Only things I need to get</option>
+      <option value="missing">Only missing/undecided resources</option>
+      <option value="student">Only one student…</option>
+      <option value="subject">Only one subject…</option>
+    </select>
   </div>
 
-  <button class="util-btn-proto accent" style="width:100%;margin-top:8px;" onclick="applyPrintOptionsAndPrint()">Apply &amp; print preview</button>
-  <div class="editor-note">For large families with many columns, an exact one-page fit can't always be guaranteed — these options (fewer columns/rows, compact mode) are the lever for getting close.</div>
+  <!-- Everything else stays tucked away until asked for -->
+  <div class="more-settings-toggle" id="more-settings-toggle" onclick="toggleMoreSettings()">More print settings ▾</div>
+  <div class="more-settings-body" id="more-settings-body">
+    <div class="print-opt-section">
+      <label style="font-size:11px;font-weight:600;">Choose rows</label>
+      <div class="row-check-grid" id="print-row-checks"></div>
+    </div>
+    <div class="print-opt-section">
+      <label style="font-size:11px;font-weight:600;">Choose subjects</label>
+      <div class="col-check-grid" id="print-col-checks"></div>
+    </div>
+    <div class="print-opt-section">
+      <label style="font-size:11px;"><input type="checkbox" id="print-hide-optional" style="width:auto;display:inline;" checked> Hide "Optional / not this year" row</label>
+      <label style="font-size:11px;"><input type="checkbox" id="print-hide-empty" style="width:auto;display:inline;" checked> Hide empty rows/columns</label>
+      <label style="font-size:11px;"><input type="checkbox" id="print-compact" style="width:auto;display:inline;" checked> Compact cards (collapse loops/sequences to summary)</label>
+    </div>
+  </div>
+
+  <button class="util-btn-proto accent" style="width:100%;margin-top:10px;" id="print-apply-btn" onclick="applyPrintOptionsAndPrint()">Print preview</button>
+  <div class="editor-note">For large or dense plans, an exact one-page fit can't always be guaranteed — rows, subjects, and compact mode (under "More print settings") are the levers for getting close.</div>
+</div>
+
+<!-- ===================== Book & Resource List — rolled up from the plan ===================== -->
+<div class="side-panel" id="resource-list-panel">
+  <span class="close" onclick="closePanels()">✕</span>
+  <h4>Book &amp; Resource List</h4>
+  <p class="panel-help">Rolled up automatically from every standalone card, loop item, and sequence item in your plan — nothing here is re-entered by hand.</p>
+  <div class="toggle-group res-tab-row" id="res-group-tabs">
+    <button class="active" data-group="subject">By subject</button>
+    <button data-group="student">By student</button>
+    <button data-group="status">By status</button>
+  </div>
+  <div id="resource-list-body"></div>
 </div>
 
 <script>
@@ -1073,11 +1159,196 @@ window.openCustomize = function (which) {
   }
 };
 
-// ---- Print options mockup ----
+// ---------------------------------------------------------------------------
+// Resource vs. Resource Use (model notes — prototype derives both from the
+// same sample data already on each card/loop-item/sequence-item, but a real
+// Resource is the book/material itself; a real ResourceUse is one place it
+// shows up — who uses it, in what card/loop/sequence, with what schedule.
+// A single Resource may have many ResourceUses. Phase 0 will model these as
+// first-class records; here they're rolled up read-only for the prototype.
+//
+// Resource fields:   title, author?, type, status, notes?
+// ResourceUse fields: usedBy (participants), usedIn (card/loop/sequence name),
+//                     type (standalone/loop-item/sequence-item/coop/optional),
+//                     subjectFamilyId, loopItemLabel?, next?, position?,
+//                     audience, scheduleSummary
+// ---------------------------------------------------------------------------
+var STATUS_LABELS = {
+  'have-it': 'Have it', 'need-to-buy': 'Need to buy', 'need-library': 'Need to reserve at library',
+  'reserved-library': 'Reserved at library', 'ordered': 'Ordered, not arrived', 'borrowed': 'Borrowed',
+  'digital': 'Digital / online', 'coop-provided': 'Provided by co-op', 'no-resource': 'No resource needed',
+  'undecided': 'Maybe / undecided'
+};
+function statusPriority(s) { return { 'need-to-buy': 3, 'undecided': 2, 'coop-provided': 1, 'have-it': 0 }[s] || 0; }
+
+function buildResourceRollup() {
+  var resources = {};
+  function addUse(title, status, use) {
+    if (!title) return;
+    var key = title.toLowerCase();
+    if (!resources[key]) resources[key] = { title: title, status: status, uses: [] };
+    else if (statusPriority(status) > statusPriority(resources[key].status)) resources[key].status = status;
+    resources[key].uses.push(use);
+  }
+
+  items().forEach(function (it) {
+    var title = it.resource || (it.needsBook ? it.label : null);
+    if (!title) return;
+    var status = it.status === 'coop' ? 'coop-provided' : (it.needsBook ? 'need-to-buy' : (it.hasBook ? 'have-it' : 'undecided'));
+    addUse(title, status, {
+      type: 'standalone', usedIn: it.label, subjectFamilyId: it.subjectFamilyId, audience: it.audience,
+      participants: resolveParticipants(it), scheduleSummary: it.frequencyLabel
+    });
+  });
+
+  loops().forEach(function (loop) {
+    loop.items.forEach(function (li) {
+      if (!li.resource || li.resource === 'no resource needed') return;
+      var status = li.needsBook ? 'need-to-buy' : 'have-it';
+      addUse(li.resource, status, {
+        type: 'loop-item', usedIn: loop.label, loopItemLabel: li.label, next: li.next,
+        subjectFamilyId: loop.subjectFamilyId, audience: loop.audience, participants: resolveParticipants(loop),
+        scheduleSummary: loop.turnsPerWeek + ' turns/week'
+      });
+    });
+  });
+
+  sequences().forEach(function (seq) {
+    seq.items.forEach(function (si, idx) {
+      if (!si.hasBook && !si.needsBook) return;
+      var status = si.needsBook ? 'need-to-buy' : 'have-it';
+      addUse(si.label, status, {
+        type: 'sequence-item', usedIn: seq.label, position: idx + 1, current: !!si.current,
+        subjectFamilyId: seq.subjectFamilyId, audience: seq.audience, participants: resolveParticipants(seq),
+        scheduleSummary: seq.frequencyLabel
+      });
+    });
+  });
+
+  return Object.keys(resources).map(function (k) { return resources[k]; }).sort(function (a, b) { return a.title.localeCompare(b.title); });
+}
+
+function audienceCategory(rowId) {
+  if (rowId === 'together') return 'together';
+  if (rowId === 'littles' || rowId === 'older') return 'group';
+  if (rowId === 'coop') return 'coop';
+  if (rowId === 'optional') return 'optional';
+  if (rowId === 'unplaced') return 'unplaced';
+  return 'individual';
+}
+
+function resourceUseMatchesInclude(use, includeMap) {
+  var cat = audienceCategory(use.audience);
+  return includeMap[cat] !== false;
+}
+function resourceMatchesFilter(r, filter) {
+  if (filter === 'need') return r.status === 'need-to-buy';
+  if (filter === 'missing') return r.status === 'need-to-buy' || r.status === 'undecided';
+  return true;
+}
+
+function resourceUseLine(u) {
+  var bits = [];
+  if (u.type === 'loop-item') bits.push('Loop: ' + u.usedIn + (u.loopItemLabel ? ' — ' + u.loopItemLabel : '') + (u.next ? ', next: ' + u.next : ''));
+  else if (u.type === 'sequence-item') bits.push('Sequence: ' + u.usedIn + (u.current ? ' (current)' : ' (#' + u.position + ')'));
+  else bits.push('Used in: ' + u.usedIn);
+  if (u.scheduleSummary) bits.push(u.scheduleSummary);
+  return bits.join(' · ');
+}
+
+function resourceCardHTML(r) {
+  var usesHTML = r.uses.map(function (u) {
+    var who = (u.participants && u.participants.length) ? u.participants.map(function (id) { var s = studentsById(id); return s ? s.name : id; }).join(', ') : 'Everyone';
+    return '<div class="res-use-line">' + escapeHtml(resourceUseLine(u)) + ' <span class="res-use-who">(' + escapeHtml(who) + ')</span></div>';
+  }).join('');
+  return '<div class="res-card"><div class="res-card-title">' + escapeHtml(r.title) +
+    '<span class="res-status-tag status-' + r.status + '">' + STATUS_LABELS[r.status] + '</span></div>' +
+    usesHTML + '</div>';
+}
+
+function filterRollup(resources, includeMap, filter) {
+  return resources.map(function (r) {
+    var uses = r.uses.filter(function (u) { return resourceUseMatchesInclude(u, includeMap); });
+    if (!uses.length) return null;
+    return { title: r.title, status: r.status, uses: uses };
+  }).filter(Boolean).filter(function (r) { return resourceMatchesFilter(r, filter); });
+}
+
+function groupResourcesBySubject(resources) {
+  var groups = {};
+  resources.forEach(function (r) {
+    r.uses.forEach(function (u) {
+      var subj = u.subjectFamilyId || 'other';
+      if (!groups[subj]) groups[subj] = [];
+      if (groups[subj].indexOf(r) === -1) groups[subj].push(r);
+    });
+  });
+  return groups;
+}
+function groupResourcesByStudent(resources) {
+  var groups = {};
+  STUDENTS.forEach(function (s) { groups[s.id] = []; });
+  resources.forEach(function (r) {
+    var seen = {};
+    r.uses.forEach(function (u) { (u.participants || []).forEach(function (id) { seen[id] = true; }); });
+    Object.keys(seen).forEach(function (id) { if (groups[id] && groups[id].indexOf(r) === -1) groups[id].push(r); });
+  });
+  return groups;
+}
+function groupResourcesByStatus(resources) {
+  var groups = {};
+  resources.forEach(function (r) {
+    if (!groups[r.status]) groups[r.status] = [];
+    groups[r.status].push(r);
+  });
+  return groups;
+}
+
+function renderResourceList(groupBy, includeMap, filter) {
+  includeMap = includeMap || {};
+  filter = filter || 'all';
+  var resources = filterRollup(buildResourceRollup(), includeMap, filter);
+  var html = '';
+  if (groupBy === 'student') {
+    var byStudent = groupResourcesByStudent(resources);
+    STUDENTS.forEach(function (s) {
+      var list = byStudent[s.id] || [];
+      if (!list.length) return;
+      html += '<div class="res-group"><h5 style="background:' + s.color + ';">' + escapeHtml(s.name) + '</h5>' + list.map(resourceCardHTML).join('') + '</div>';
+    });
+  } else if (groupBy === 'status') {
+    var byStatus = groupResourcesByStatus(resources);
+    Object.keys(STATUS_LABELS).forEach(function (st) {
+      var list = byStatus[st]; if (!list || !list.length) return;
+      html += '<div class="res-group"><h5 class="status-head">' + STATUS_LABELS[st] + '</h5>' + list.map(resourceCardHTML).join('') + '</div>';
+    });
+  } else {
+    var bySubj = groupResourcesBySubject(resources);
+    cols().forEach(function (c) {
+      var list = bySubj[c.id] || [];
+      if (!list.length) return;
+      html += '<div class="res-group"><h5 style="background:var(' + SUBJECT_COLOR_VAR[c.id] + ');">' + escapeHtml(c.label) + '</h5>' + list.map(resourceCardHTML).join('') + '</div>';
+    });
+  }
+  return html || '<p style="font-size:11px;color:var(--muted);">No resources match this view.</p>';
+}
+
+// ---- Book & Resource List panel (interactive tabs — by subject / student / status) ----
+window.openResourceList = function (groupBy) {
+  closePanels();
+  groupBy = groupBy || 'subject';
+  document.querySelectorAll('#res-group-tabs button').forEach(function (b) { b.classList.toggle('active', b.dataset.group === groupBy); });
+  document.getElementById('resource-list-body').innerHTML = renderResourceList(groupBy, {}, 'all');
+  document.getElementById('resource-list-panel').classList.add('show');
+};
+document.getElementById('res-group-tabs').addEventListener('click', function (e) {
+  var btn = e.target.closest('button'); if (!btn) return;
+  openResourceList(btn.dataset.group);
+});
+
+// ---- Print mockup: calm top-level choice, everything else tucked under "More print settings" ----
 window.openPrintOptions = function () {
   closePanels();
-  document.querySelectorAll('.print-opt-radio').forEach(function (r) { r.classList.toggle('selected', r.dataset.mode === state.printMode); });
-  document.getElementById('print-student-select').style.display = state.printMode === 'student' ? '' : 'none';
   var studentSel = document.getElementById('print-student-pick');
   studentSel.innerHTML = STUDENTS.map(function (s) { return '<option value="' + s.id + '">' + escapeHtml(s.name) + '</option>'; }).join('');
   document.getElementById('print-row-checks').innerHTML = ROWS.map(function (r) {
@@ -1086,25 +1357,54 @@ window.openPrintOptions = function () {
   document.getElementById('print-col-checks').innerHTML = cols().map(function (c) {
     return '<label><input type="checkbox" checked style="width:auto;display:inline;"> ' + escapeHtml(c.label) + '</label>';
   }).join('');
+  document.getElementById('more-settings-body').classList.remove('show');
+  selectPrintMode(state.printMode || 'overview');
   document.getElementById('print-options-panel').classList.add('show');
+};
+window.toggleMoreSettings = function () {
+  document.getElementById('more-settings-body').classList.toggle('show');
 };
 window.selectPrintMode = function (mode) {
   state.printMode = mode;
-  document.querySelectorAll('.print-opt-radio').forEach(function (r) { r.classList.toggle('selected', r.dataset.mode === mode); });
-  document.getElementById('print-student-select').style.display = mode === 'student' ? '' : 'none';
+  document.querySelectorAll('.print-mode-card').forEach(function (c) { c.classList.toggle('selected', c.dataset.mode === mode); });
+  document.getElementById('print-student-block').style.display = mode === 'student' ? '' : 'none';
+  document.getElementById('print-resource-block').style.display = mode === 'resources' ? '' : 'none';
+  document.getElementById('more-settings-toggle').style.display = mode === 'resources' ? 'none' : '';
+  if (mode === 'resources') document.getElementById('more-settings-body').classList.remove('show');
+  document.getElementById('print-apply-btn').textContent = mode === 'resources' ? 'Print Book & Resource List' : 'Print preview';
 };
 window.applyPrintOptionsAndPrint = function () {
-  document.body.classList.remove('print-overview', 'print-student-only');
+  document.body.classList.remove('print-overview', 'print-student-only', 'print-resources');
+  document.querySelectorAll('#map-body tr').forEach(function (tr) { tr.classList.remove('row-hidden-print'); });
+
   if (state.printMode === 'overview') {
+    document.getElementById('lens-select').value = 'all';
+    onLensChange();
     document.body.classList.add('print-overview');
   } else if (state.printMode === 'student') {
     var pick = document.getElementById('print-student-pick').value;
     document.getElementById('lens-select').value = 'student:' + pick;
     onLensChange();
     document.body.classList.add('print-student-only');
+    var includeMap = {};
+    document.querySelectorAll('.pinc').forEach(function (c) { includeMap[c.dataset.key] = c.checked; });
+    document.querySelectorAll('#map-body tr').forEach(function (tr) {
+      var cat = audienceCategory(tr.dataset.rowId);
+      if (includeMap[cat] === false) tr.classList.add('row-hidden-print');
+    });
+  } else if (state.printMode === 'resources') {
+    var groupBy = document.getElementById('print-res-groupby').value;
+    var resInclude = {};
+    document.querySelectorAll('.rinc').forEach(function (c) { resInclude[c.dataset.key] = c.checked; });
+    var filter = document.getElementById('print-res-filter').value;
+    document.getElementById('resource-print-render').innerHTML = renderResourceList(groupBy, resInclude, filter);
+    document.body.classList.add('print-resources');
   }
-  if (document.getElementById('print-hide-optional').checked) document.body.classList.add('print-hide-optional');
-  else document.body.classList.remove('print-hide-optional');
+
+  if (state.printMode !== 'resources') {
+    if (document.getElementById('print-hide-optional').checked) document.body.classList.add('print-hide-optional');
+    else document.body.classList.remove('print-hide-optional');
+  }
   closePanels();
   window.print();
 };
