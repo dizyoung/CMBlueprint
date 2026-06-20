@@ -7,6 +7,7 @@
   :root {
     --bible: #b5404f; --la: #e0b23c; --lit: #c97b6a; --hist: #7a8fae;
     --sci: #5c9e8f; --math: #3f7a82; --beauty: #8a6fae; --geo: #2f6b5e;
+    --art: #b5708a; --pe: #6b9bd1;
     --border: #d8d8d8; --ink: #2c2c2c; --muted: #777;
   }
   * { box-sizing: border-box; }
@@ -15,10 +16,12 @@
   h1 { font-size: 20px; margin: 0 0 4px; }
   .sub { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
 
-  .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
   .toggle-group { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
   .toggle-group button { border: none; background: #fff; padding: 6px 12px; font-size: 12px; cursor: pointer; }
   .toggle-group button.active { background: var(--ink); color: #fff; }
+  .util-btn-proto { font-size: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }
+  select.lens-select { font-size: 12px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; }
   .legend { display: flex; gap: 12px; font-size: 11px; color: var(--muted); flex-wrap: wrap; margin-left: auto; }
   .legend span { display: inline-flex; align-items: center; gap: 4px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
@@ -29,13 +32,13 @@
   .dot.optional { background: #c9a45c; }
   .dot.unplaced { background: #d9534f; border: 1px dashed #a33; }
 
-  .print-btn { font-size: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }
+  .sample-note { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
 
   table.map { border-collapse: collapse; width: 100%; background: #fff; table-layout: fixed; }
   table.map th, table.map td { border: 1px solid var(--border); vertical-align: top; }
   table.map thead th { padding: 8px 6px; font-size: 12px; color: #fff; text-align: center; }
   table.map th.row-head { background: #eee; color: var(--ink); text-align: left; padding: 8px; font-size: 12px; font-weight: 600; width: 110px; }
-  table.map td { padding: 6px; min-height: 40px; }
+  table.map td { padding: 6px; min-height: 40px; transition: background 0.15s; }
   table.map td.unplaced-row { background: #fff7f6; }
   table.map td.empty-cell { background: #fafafa; }
   table.map td.drag-target { background: #e9f3ff; outline: 2px dashed #5c8fc9; }
@@ -44,9 +47,9 @@
   th.col-lit { background: var(--lit); } th.col-hist { background: var(--hist); }
   th.col-sci { background: var(--sci); } th.col-math { background: var(--math); }
   th.col-beauty { background: var(--beauty); } th.col-geo { background: var(--geo); }
-  th.col-art { background: #b5708a; } th.col-pe { background: #6b9bd1; }
+  th.col-art { background: var(--art); } th.col-pe { background: var(--pe); }
 
-  .chip { border-radius: 6px; padding: 4px 6px; margin-bottom: 4px; font-size: 11px; line-height: 1.3; cursor: grab; position: relative; }
+  .chip { border-radius: 6px; padding: 4px 6px; margin-bottom: 4px; font-size: 11px; line-height: 1.3; cursor: grab; position: relative; transition: opacity 0.15s, box-shadow 0.15s; }
   .chip:last-child { margin-bottom: 0; }
   .chip.dragging { opacity: 0.4; }
   .chip-bible { background: #f7e3e5; border-left: 3px solid var(--bible); }
@@ -57,8 +60,12 @@
   .chip-math { background: #e1eef0; border-left: 3px solid var(--math); }
   .chip-beauty { background: #ece6f5; border-left: 3px solid var(--beauty); }
   .chip-geo { background: #e1ede8; border-left: 3px solid var(--geo); }
-  .chip-art { background: #f5e3ec; border-left: 3px solid #b5708a; }
-  .chip-pe { background: #e3edf7; border-left: 3px solid #6b9bd1; }
+  .chip-art { background: #f5e3ec; border-left: 3px solid var(--art); }
+  .chip-pe { background: #e3edf7; border-left: 3px solid var(--pe); }
+
+  /* Student Lens highlighting — overrides subject tint to make the lens obvious */
+  body.lens-active .chip { opacity: 0.28; filter: grayscale(40%); }
+  body.lens-active .chip.lens-match { opacity: 1; filter: none; box-shadow: 0 0 0 2px var(--lens-color, #333) inset; }
 
   .chip-title { font-weight: 600; display: flex; align-items: center; gap: 4px; }
   .chip-sub { color: var(--muted); font-size: 10px; margin-top: 1px; }
@@ -73,21 +80,25 @@
   .seq-item.done { color: var(--muted); text-decoration: line-through; }
   .seq-item.upnext { color: var(--muted); }
 
+  .participants-row { display: none; gap: 3px; margin-top: 3px; }
+  .detailed .participants-row { display: flex; }
+  .p-dot { width: 14px; height: 14px; border-radius: 50%; font-size: 8px; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
+
   .compact .chip-sub.full-detail { display: none; }
   .compact .chip { padding: 3px 5px; }
 
   .add-cell { font-size: 11px; color: var(--muted); text-align: center; padding: 8px 4px; border: 1px dashed var(--border); border-radius: 6px; cursor: pointer; }
   .add-cell:hover { background: #eef4ff; color: #3568b0; border-color: #3568b0; }
-  td.empty-cell .add-cell { margin: 0; }
   td:not(.empty-cell) .add-cell { margin-top: 4px; font-size: 9px; padding: 2px 4px; opacity: 0.6; }
   td:not(.empty-cell) .add-cell:hover { opacity: 1; }
 
   /* ---- card editor mockup ---- */
-  .editor-mock { position: fixed; right: 20px; bottom: 20px; width: 280px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 14px; font-size: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); display: none; max-height: 80vh; overflow-y: auto; }
+  .editor-mock { position: fixed; right: 20px; bottom: 20px; width: 300px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 14px; font-size: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); display: none; max-height: 85vh; overflow-y: auto; }
   .editor-mock.show { display: block; }
   .editor-mock h4 { margin: 0 0 10px; font-size: 13px; }
-  .editor-mock .field { margin-bottom: 10px; }
-  .editor-mock label { display: block; font-size: 10px; color: var(--muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.02em; }
+  .editor-mock h5 { margin: 12px 0 6px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); border-top: 1px solid var(--border); padding-top: 10px; }
+  .editor-mock .field { margin-bottom: 8px; }
+  .editor-mock label { display: block; font-size: 10px; color: var(--muted); margin-bottom: 3px; }
   .editor-mock select, .editor-mock input { width: 100%; font-size: 11px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; }
   .editor-mock .close { position: absolute; top: 8px; right: 10px; cursor: pointer; color: var(--muted); font-size: 14px; }
   .editor-mock .conditional { padding: 8px; background: #f5f8fc; border-radius: 6px; margin-top: -2px; }
@@ -96,17 +107,38 @@
   .seq-edit-row { display: flex; align-items: center; gap: 6px; font-size: 10px; padding: 3px 0; }
   .seq-edit-row .grip { cursor: grab; color: var(--muted); }
   .seq-edit-row.current-seq { font-weight: 600; }
+  .res-row { display: flex; gap: 6px; align-items: baseline; font-size: 10px; padding: 2px 0; }
+  .res-row .marker { width: 16px; flex-shrink: 0; }
+  .res-row .res-detail { color: var(--muted); }
+  .participant-checks { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pcheck { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; border: 1px solid var(--border); border-radius: 12px; padding: 2px 8px 2px 4px; }
+  .pcheck .p-dot { width: 14px; height: 14px; }
 
-  .sample-note { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  /* ---- customize panels (students/groups/subjects) ---- */
+  .customize-panel { position: fixed; left: 20px; bottom: 20px; width: 300px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 14px; font-size: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); display: none; max-height: 75vh; overflow-y: auto; }
+  .customize-panel.show { display: block; }
+  .customize-panel h4 { margin: 0 0 10px; font-size: 13px; }
+  .customize-panel .close { position: absolute; top: 8px; right: 10px; cursor: pointer; color: var(--muted); font-size: 14px; }
+  .cust-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid #f0f0f0; }
+  .cust-row .swatch { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; cursor: pointer; }
+  .cust-row .name { flex: 1; font-size: 12px; }
+  .cust-row .members { font-size: 10px; color: var(--muted); }
+  .cust-row .actions { display: flex; gap: 4px; }
+  .cust-row .actions button { font-size: 10px; border: none; background: none; color: #3568b0; cursor: pointer; padding: 2px 4px; }
+  .cust-add { width: 100%; margin-top: 8px; padding: 6px; border: 1px dashed var(--border); border-radius: 6px; background: none; color: var(--muted); font-size: 11px; cursor: pointer; }
+  .cust-add:hover { background: #eef4ff; color: #3568b0; }
+  .cust-visible { margin-left: auto; font-size: 9px; color: var(--muted); }
 
   @media print {
     body { background: #fff; padding: 0; }
     @page { size: landscape; margin: 0.4in; }
-    .proto-banner, .toolbar, .editor-mock, .add-cell, .sample-note { display: none !important; }
+    .proto-banner, .toolbar, .editor-mock, .customize-panel, .add-cell, .sample-note { display: none !important; }
+    body.lens-active .chip { opacity: 1 !important; filter: none !important; box-shadow: none !important; }
     table.map { font-size: 10px; }
     .chip { cursor: default; }
     .chip-detail { display: block !important; }
     .chip-sub.full-detail { display: block !important; }
+    .participants-row { display: flex !important; }
   }
 </style>
 </head>
@@ -114,7 +146,7 @@
 
 <div class="proto-banner">
   <strong>Static prototype — hardcoded sample data only.</strong> Nothing here is wired to real app state, localStorage, or logic.mjs.
-  This is a visual checkpoint for the Family School Map layout before any data-model migration happens.
+  Visual checkpoint for customization, audience-vs-participants, the Student Lens, and resource placement before any data-model migration.
 </div>
 
 <h1>Family School Map</h1>
@@ -129,7 +161,14 @@
     <button class="active" data-sample="simple">Simple sample</button>
     <button data-sample="full">Full family sample</button>
   </div>
-  <button class="print-btn" onclick="window.print()">Print preview</button>
+  <label style="font-size:12px;display:flex;align-items:center;gap:6px;">Student Lens
+    <select class="lens-select" id="lens-select" onchange="onLensChange()">
+      <option value="all">View all</option>
+    </select>
+  </label>
+  <button class="util-btn-proto" onclick="openCustomize('family')">Customize family</button>
+  <button class="util-btn-proto" onclick="openCustomize('subjects')">Customize subjects</button>
+  <button class="util-btn-proto" onclick="window.print()">Print preview</button>
   <div class="legend">
     <span><span class="dot book"></span> has book</span>
     <span><span class="dot needbook"></span> needs book</span>
@@ -147,20 +186,26 @@
   <tbody id="map-body"></tbody>
 </table>
 
+<!-- ===================== Card editor mockup ===================== -->
 <div class="editor-mock" id="editor-mock">
   <span class="close" onclick="closeEditor()">✕</span>
   <h4 id="editor-title">Card details</h4>
 
   <div class="field">
-    <label>Who does this?</label>
+    <label>Who does this? (audience — where the card lives on the map)</label>
     <select id="ed-audience" onchange="renderEditorConditionals()">
       <option value="together">Together</option>
-      <option value="group">A group (e.g. Littles Together)</option>
+      <option value="group">A group (e.g. Older Students)</option>
       <option value="form">A Form</option>
       <option value="child">One child</option>
       <option value="coop">Outside / co-op</option>
       <option value="optional">Optional / not this year</option>
     </select>
+  </div>
+
+  <div class="field">
+    <label>Participants (which children are actually included — may differ from audience)</label>
+    <div class="participant-checks" id="ed-participants"></div>
   </div>
 
   <div class="field">
@@ -188,9 +233,7 @@
 
   <div class="field conditional" id="ed-seq-fields">
     <label>Sequence order (drag to reorder)</label>
-    <div class="seq-edit-row current-seq"><span class="grip">⠿</span> ▶ 2. Charlotte's Web (current)</div>
-    <div class="seq-edit-row"><span class="grip">⠿</span> 3. My Side of the Mountain</div>
-    <div class="seq-edit-row"><span class="grip">⠿</span> + Add another book…</div>
+    <div id="ed-seq-list"></div>
   </div>
 
   <div class="field">
@@ -204,9 +247,28 @@
     </select>
   </div>
 
-  <div class="field">
-    <label>Books / resources</label>
-    <input type="text" placeholder="Search or add a book…">
+  <h5 id="ed-resource-heading">Resources</h5>
+
+  <!-- standalone card: one resource -->
+  <div id="ed-res-standalone" class="conditional hidden">
+    <div class="field"><label>Resource title</label><input type="text" value="Math-U-See Delta"></div>
+    <div class="field"><label>Type</label>
+      <select><option>Lesson book</option><option>Book</option><option>Practice</option><option>Website</option><option>External</option><option>No book needed</option></select>
+    </div>
+    <div class="field"><label>Pacing</label><input type="text" value="4 lessons/week"></div>
+    <div class="field"><label>Need to buy?</label><select><option>No</option><option>Yes</option></select></div>
+  </div>
+
+  <!-- sequence card: ordered resource list -->
+  <div id="ed-res-sequence" class="conditional hidden">
+    <div id="ed-res-seq-list"></div>
+    <button class="cust-add" style="margin-top:6px;" onclick="alert('Mockup only: would add another book to this sequence.')">+ Add another book</button>
+  </div>
+
+  <!-- loop card: resource per loop item -->
+  <div id="ed-res-loop" class="conditional hidden">
+    <div id="ed-res-loop-list"></div>
+    <div class="editor-note" style="margin-top:6px;">Frequency belongs to the loop, not to each item — each item just has its own next assignment.</div>
   </div>
 
   <div class="field">
@@ -214,29 +276,65 @@
     <input type="text" placeholder="Optional note">
   </div>
 
-  <div class="editor-note">Mockup only — fields are not functional in this prototype. Advanced scheduling detail stays out of the main grid; this panel is as deep as the grid view goes.</div>
+  <div class="editor-note">Mockup only — fields are not functional in this prototype.</div>
+</div>
+
+<!-- ===================== Customize family mockup ===================== -->
+<div class="customize-panel" id="customize-family">
+  <span class="close" onclick="closeCustomize()">✕</span>
+  <h4>Customize family</h4>
+  <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Students</div>
+  <div id="cust-students"></div>
+  <button class="cust-add" onclick="alert('Mockup only: would add a new student.')">+ Add student</button>
+
+  <div style="font-size:11px;color:var(--muted);margin:14px 0 6px;">Groups</div>
+  <div id="cust-groups"></div>
+  <button class="cust-add" onclick="alert('Mockup only: would add a new custom group.')">+ Add group</button>
+</div>
+
+<!-- ===================== Customize subjects mockup ===================== -->
+<div class="customize-panel" id="customize-subjects">
+  <span class="close" onclick="closeCustomize()">✕</span>
+  <h4>Customize subjects</h4>
+  <div id="cust-subjects"></div>
+  <button class="cust-add" onclick="alert('Mockup only: would add a new subject column.')">+ Add subject column</button>
 </div>
 
 <script>
 // ---------------------------------------------------------------------------
-// HARDCODED SAMPLE DATA — internal shape mirrors PlanItem / PlanStrand, but
-// all user-facing text below uses parent-facing language only.
-// Not parsed from or written to any real app state.
+// HARDCODED SAMPLE DATA — internal shape mirrors PlanItem / PlanStrand /
+// Student / Group / Subject / Resource, but all visible UI text below uses
+// parent-facing language only. Not parsed from or written to real app state.
 // ---------------------------------------------------------------------------
 
+var STUDENTS = [
+  { id: 'charis', name: 'Charis', color: '#e08a3c', initials: 'C' },
+  { id: 'kayla', name: 'Kayla', color: '#5c9e8f', initials: 'K' },
+  { id: 'lucy', name: 'Lucy', color: '#b5708a', initials: 'L' },
+  { id: 'jeremiah', name: 'Jeremiah', color: '#3f7a82', initials: 'J' }
+];
+function studentsById(id) { return STUDENTS.find(function (s) { return s.id === id; }); }
+function allStudentIds() { return STUDENTS.map(function (s) { return s.id; }); }
+
+var GROUPS = [
+  { id: 'littles', label: 'Littles Together', studentIds: ['charis', 'kayla'] },
+  { id: 'older', label: 'Older Students', studentIds: ['lucy', 'jeremiah'] }
+];
+function groupById(id) { return GROUPS.find(function (g) { return g.id === id; }); }
+
 var COLS_SIMPLE = [
-  { id: 'bible', label: 'Bible' },
-  { id: 'la', label: 'Language Arts' },
-  { id: 'lit', label: 'Literature' },
-  { id: 'hist', label: 'History' },
-  { id: 'sci', label: 'Science / Nat. History' },
-  { id: 'math', label: 'Math' },
-  { id: 'beauty', label: 'Beauty' },
-  { id: 'geo', label: 'Geography / Citizenship' }
+  { id: 'bible', label: 'Bible', visible: true },
+  { id: 'la', label: 'Language Arts', visible: true },
+  { id: 'lit', label: 'Literature', visible: true },
+  { id: 'hist', label: 'History', visible: true },
+  { id: 'sci', label: 'Science / Nat. History', visible: true },
+  { id: 'math', label: 'Math', visible: true },
+  { id: 'beauty', label: 'Beauty', visible: true },
+  { id: 'geo', label: 'Geography / Citizenship', visible: true }
 ];
 var COLS_FULL = COLS_SIMPLE.concat([
-  { id: 'art', label: 'Art / Handicrafts' },
-  { id: 'pe', label: 'PE / Health' }
+  { id: 'art', label: 'Art / Handicrafts', visible: true },
+  { id: 'pe', label: 'PE / Health', visible: true }
 ]);
 
 var ROWS = [
@@ -250,25 +348,36 @@ var ROWS = [
   { id: 'unplaced', label: 'Needs Placement' }
 ];
 
-// loops: turns/week belongs to the loop, not to any one item inside it
+// Resolve participants for a card: explicit list wins, otherwise inferred from audience row.
+function resolveParticipants(card) {
+  if (card.participants) return card.participants;
+  if (card.audience === 'together') return allStudentIds();
+  if (card.audience === 'littles') return groupById('littles').studentIds;
+  if (card.audience === 'older') return groupById('older').studentIds;
+  if (card.audience === 'lucy') return ['lucy'];
+  if (card.audience === 'jeremiah') return ['jeremiah'];
+  return [];
+}
+
+// ---- loops: turns/week belongs to the loop; each item has its own resource + next assignment ----
 var LOOPS_SIMPLE = [
   {
     id: 'loop-bible', subjectFamilyId: 'bible', audience: 'together',
     label: 'Bible Loop', turnsPerWeek: 4,
     items: [
-      { label: 'Matthew', next: 'ch. 1', current: true, hasBook: true },
-      { label: 'Psalms + Proverbs', next: 'ch. 1', hasBook: true },
-      { label: 'Theology', next: 'lesson 1', hasBook: true },
-      { label: 'Old Testament', next: 'ch. 1', hasBook: true }
+      { label: 'Matthew', next: 'ch. 1', current: true, hasBook: true, resource: 'Bible' },
+      { label: 'Psalms + Proverbs', next: 'Psalm 1', hasBook: true, resource: 'Bible' },
+      { label: 'Theology', next: 'lesson 1', hasBook: true, resource: 'Theology book' },
+      { label: 'Old Testament', next: 'Genesis 1', hasBook: true, resource: 'Bible' }
     ]
   },
   {
     id: 'loop-beauty', subjectFamilyId: 'beauty', audience: 'together',
     label: 'Beauty Loop', turnsPerWeek: 2,
     items: [
-      { label: 'Picture Study', next: 'this week\'s painting', current: true, practice: true },
-      { label: 'Hymn Study', next: 'verse 2', practice: true },
-      { label: 'Handicraft', next: 'continue project', practice: true }
+      { label: 'Picture Study', next: 'this week\'s painting', current: true, practice: true, resource: 'no book needed' },
+      { label: 'Hymn Study', next: 'verse 2', practice: true, resource: 'no book needed' },
+      { label: 'Handicraft', next: 'continue project', practice: true, resource: 'no book needed' }
     ]
   }
 ];
@@ -304,12 +413,12 @@ var SEQUENCES_SIMPLE = [
 ];
 
 var ITEMS_SIMPLE = [
-  { subjectFamilyId: 'math', audience: 'lucy', label: 'Math', status: 'active', hasBook: true, frequencyLabel: '5x/week' },
-  { subjectFamilyId: 'math', audience: 'jeremiah', label: 'Math (with Mom)', status: 'active', hasBook: true, frequencyLabel: '5x/week' },
-  { subjectFamilyId: 'la', audience: 'littles', label: 'Handwriting', status: 'active', hasBook: true, frequencyLabel: '3x/week' },
-  { subjectFamilyId: 'la', audience: 'littles', label: 'Phonics', status: 'active', hasBook: true, frequencyLabel: '4x/week' },
-  { subjectFamilyId: 'sci', audience: 'coop', label: 'Co-op Science Class', status: 'coop', frequencyLabel: 'weekly' },
-  { subjectFamilyId: 'hist', audience: 'older', label: 'American History Spine', status: 'active', hasBook: true, frequencyLabel: '2x/week' },
+  { subjectFamilyId: 'math', audience: 'lucy', label: 'Math', status: 'active', hasBook: true, frequencyLabel: '5x/week', resource: 'Math-U-See Epsilon' },
+  { subjectFamilyId: 'math', audience: 'jeremiah', label: 'Math (with Mom)', status: 'active', hasBook: true, frequencyLabel: '5x/week', resource: 'Math-U-See Delta' },
+  { subjectFamilyId: 'la', audience: 'littles', label: 'Handwriting', status: 'active', hasBook: true, frequencyLabel: '3x/week', resource: 'Handwriting Without Tears' },
+  { subjectFamilyId: 'la', audience: 'littles', label: 'Phonics', status: 'active', hasBook: true, frequencyLabel: '4x/week', resource: 'All About Reading' },
+  { subjectFamilyId: 'sci', audience: 'coop', label: 'Co-op Science Class', status: 'coop', frequencyLabel: 'weekly', participants: ['jeremiah'], resource: 'co-op provided' },
+  { subjectFamilyId: 'hist', audience: 'older', label: 'American History Spine', status: 'active', hasBook: true, frequencyLabel: '2x/week', resource: 'This Country of Ours' },
   { subjectFamilyId: 'geo', audience: 'optional', label: 'Map Quizzing', status: 'optional', frequencyLabel: '—' },
   { subjectFamilyId: 'hist', audience: 'unplaced', label: 'Neighboring Lands Spine', status: 'active', needsBook: true, frequencyLabel: 'not set' }
 ];
@@ -320,27 +429,27 @@ var LOOPS_FULL = LOOPS_SIMPLE.concat([
     id: 'loop-writing', subjectFamilyId: 'la', audience: 'older',
     label: 'Writing Loop', turnsPerWeek: 3,
     items: [
-      { label: 'Copywork', next: 'passage 4', current: true, hasBook: true },
-      { label: 'Dictation', next: 'passage 2', hasBook: true },
-      { label: 'Composition', next: 'essay draft', hasBook: false, practice: true }
+      { label: 'Copywork', next: 'passage 4', current: true, hasBook: true, resource: 'Copywork book' },
+      { label: 'Dictation', next: 'passage 2', hasBook: true, resource: 'Dictation passages' },
+      { label: 'Composition', next: 'essay draft', practice: true, resource: 'no book needed' }
     ]
   },
   {
     id: 'loop-reading', subjectFamilyId: 'la', audience: 'littles',
     label: 'Reading Loop', turnsPerWeek: 4,
     items: [
-      { label: 'Phonics readers', next: 'lesson 9', current: true, hasBook: true },
-      { label: 'Fairy Tales', next: 'next story', hasBook: true },
-      { label: 'Picture book read-aloud', next: 'continue book', hasBook: true },
-      { label: 'Sight words', next: 'set 3', practice: true }
+      { label: 'Phonics readers', next: 'lesson 9', current: true, hasBook: true, resource: 'All About Reading' },
+      { label: 'Fairy Tales', next: 'next story', hasBook: true, resource: 'Favorite Fairy Tales' },
+      { label: 'Picture book read-aloud', next: 'continue book', hasBook: true, resource: 'rotating picture books' },
+      { label: 'Sight words', next: 'set 3', practice: true, resource: 'no book needed' }
     ]
   },
   {
     id: 'loop-histnat', subjectFamilyId: 'hist', audience: 'together',
     label: 'History + Natural History Loop', turnsPerWeek: 2,
     items: [
-      { label: 'American History', next: 'ch. 6', current: true, hasBook: true },
-      { label: 'Nature Study', next: 'this week\'s walk', practice: true }
+      { label: 'American History', next: 'ch. 6', current: true, hasBook: true, resource: 'This Country of Ours' },
+      { label: 'Nature Study', next: 'this week\'s walk', practice: true, resource: 'no book needed' }
     ]
   }
 ]);
@@ -348,7 +457,7 @@ var LOOPS_FULL = LOOPS_SIMPLE.concat([
 var SEQUENCES_FULL = SEQUENCES_SIMPLE.concat([
   {
     id: 'seq-older-sci', subjectFamilyId: 'sci', audience: 'older',
-    label: 'Older Students\' Science', frequencyLabel: '3x/week',
+    label: 'Older Students\' Science', frequencyLabel: '3x/week', participants: ['lucy', 'jeremiah'],
     items: [
       { label: 'Astronomy', status: 'done', hasBook: true },
       { label: 'Chemistry', status: 'current', hasBook: true, current: true },
@@ -359,22 +468,22 @@ var SEQUENCES_FULL = SEQUENCES_SIMPLE.concat([
 
 var ITEMS_FULL = ITEMS_SIMPLE.concat([
   { subjectFamilyId: 'bible', audience: 'littles', label: 'Bible Memory Verses', status: 'active', practice: true, frequencyLabel: '2x/week' },
-  { subjectFamilyId: 'bible', audience: 'jeremiah', label: 'Personal Spiritual Reading', status: 'active', hasBook: true, frequencyLabel: '2x/week' },
+  { subjectFamilyId: 'bible', audience: 'jeremiah', label: 'Personal Spiritual Reading', status: 'active', hasBook: true, frequencyLabel: '2x/week', resource: 'Devotional' },
   { subjectFamilyId: 'bible', audience: 'lucy', label: 'Catechism', status: 'active', practice: true, frequencyLabel: '1x/week' },
-  { subjectFamilyId: 'art', audience: 'together', label: 'Art History', status: 'active', hasBook: true, frequencyLabel: '1x/week' },
+  { subjectFamilyId: 'art', audience: 'together', label: 'Art History', status: 'active', hasBook: true, frequencyLabel: '1x/week', resource: 'Picture Study cards' },
   { subjectFamilyId: 'art', audience: 'lucy', label: 'Personal Instrument Practice', status: 'optional', practice: true, frequencyLabel: 'daily' },
   { subjectFamilyId: 'pe', audience: 'together', label: 'Outdoor Free Play', status: 'active', practice: true, frequencyLabel: 'daily' },
-  { subjectFamilyId: 'pe', audience: 'coop', label: 'Co-op PE Class', status: 'coop', frequencyLabel: 'weekly' },
-  { subjectFamilyId: 'geo', audience: 'older', label: 'Mapping Notebook', status: 'active', hasBook: true, frequencyLabel: '1x/week' },
+  { subjectFamilyId: 'pe', audience: 'coop', label: 'Co-op PE Class', status: 'coop', frequencyLabel: 'weekly', participants: ['lucy', 'kayla'] },
+  { subjectFamilyId: 'geo', audience: 'older', label: 'Mapping Notebook', status: 'active', hasBook: true, frequencyLabel: '1x/week', resource: 'Blank maps' },
   { subjectFamilyId: 'math', audience: 'littles', label: 'Family Math Games', status: 'active', practice: true, frequencyLabel: '3x/week' },
   { subjectFamilyId: 'geo', audience: 'unplaced', label: 'Citizenship Spine', status: 'active', needsBook: true, frequencyLabel: 'not set' },
   { subjectFamilyId: 'sci', audience: 'unplaced', label: 'Lucy\'s Health/Botany unit', status: 'active', needsBook: true, frequencyLabel: 'not set' },
   { subjectFamilyId: 'art', audience: 'unplaced', label: 'Handicraft (TBD)', status: 'active', needsBook: false, frequencyLabel: 'not set' }
 ]);
 
-var state = { density: 'compact', sample: 'simple' };
+var state = { density: 'compact', sample: 'simple', lens: 'all' };
 
-function cols() { return state.sample === 'full' ? COLS_FULL : COLS_SIMPLE; }
+function cols() { return (state.sample === 'full' ? COLS_FULL : COLS_SIMPLE).filter(function (c) { return c.visible; }); }
 function loops() { return state.sample === 'full' ? LOOPS_FULL : LOOPS_SIMPLE; }
 function sequences() { return state.sample === 'full' ? SEQUENCES_FULL : SEQUENCES_SIMPLE; }
 function items() { return state.sample === 'full' ? ITEMS_FULL : ITEMS_SIMPLE; }
@@ -392,6 +501,20 @@ function statusDot(it) {
   return 'needbook';
 }
 
+function participantsRowHTML(card) {
+  var ids = resolveParticipants(card);
+  if (!ids.length) return '';
+  var dots = ids.map(function (id) {
+    var s = studentsById(id); if (!s) return '';
+    return '<span class="p-dot" style="background:' + s.color + ';" title="' + escapeHtml(s.name) + '">' + s.initials + '</span>';
+  }).join('');
+  return '<div class="participants-row">' + dots + '</div>';
+}
+function cardMatchesLens(card) {
+  if (state.lens === 'all') return true;
+  return resolveParticipants(card).indexOf(state.lens) !== -1;
+}
+
 function loopChipHTML(loop) {
   var current = loop.items.find(function (i) { return i.current; }) || loop.items[0];
   var dot = statusDot(current);
@@ -401,13 +524,15 @@ function loopChipHTML(loop) {
     return '<div class="seq-item ' + cls + '"><span><span class="marker">' + marker + '</span>' + escapeHtml(i.label) +
       ' — next: ' + escapeHtml(i.next) + '</span></div>';
   }).join('');
+  var lensCls = cardMatchesLens(loop) ? ' lens-match' : '';
   return (
-    '<div class="chip ' + chipClass(loop.subjectFamilyId) + '" draggable="true" ' +
+    '<div class="chip ' + chipClass(loop.subjectFamilyId) + lensCls + '" draggable="true" ' +
       'ondragstart="onDragStart(event,\'' + loop.id + '\')" onclick="toggleExpand(this)" ' +
-      'ondblclick="openEditor(\'' + escapeHtml(loop.label) + '\',true,false)">' +
+      'ondblclick="openEditor(\'' + escapeHtml(loop.label) + '\',\'loop\',' + JSON.stringify(loop).replace(/"/g, '&quot;') + ')">' +
       '<div class="chip-title"><span class="dot ' + dot + '"></span>' + escapeHtml(loop.label) +
         '<span class="strand-badge">Loop</span></div>' +
       '<div class="chip-sub">' + loop.turnsPerWeek + ' turns/week · next: ' + escapeHtml(current.label) + ' — ' + escapeHtml(current.next) + '</div>' +
+      participantsRowHTML(loop) +
       '<div class="chip-detail">' +
         '<div style="margin-bottom:3px;font-weight:600;">' + escapeHtml(loop.label) + ' · ' + loop.turnsPerWeek + ' turns/week</div>' +
         seqHTML +
@@ -424,14 +549,16 @@ function seqChipHTML(seq) {
     var marker = i.status === 'done' ? '✓' : (i.current ? '▶' : (idx + 1) + '.');
     return '<div class="seq-item ' + cls + '"><span><span class="marker">' + marker + '</span>' + escapeHtml(i.label) + '</span></div>';
   }).join('');
+  var lensCls = cardMatchesLens(seq) ? ' lens-match' : '';
   return (
-    '<div class="chip ' + chipClass(seq.subjectFamilyId) + '" draggable="true" ' +
+    '<div class="chip ' + chipClass(seq.subjectFamilyId) + lensCls + '" draggable="true" ' +
       'ondragstart="onDragStart(event,\'' + seq.id + '\')" onclick="toggleExpand(this)" ' +
-      'ondblclick="openEditor(\'' + escapeHtml(seq.label) + '\',false,true)">' +
+      'ondblclick="openEditor(\'' + escapeHtml(seq.label) + '\',\'sequence\',' + JSON.stringify(seq).replace(/"/g, '&quot;') + ')">' +
       '<div class="chip-title"><span class="dot ' + dot + '"></span>' + escapeHtml(seq.label) +
         '<span class="strand-badge">Sequence</span></div>' +
       '<div class="chip-sub">Current: ' + escapeHtml(current.label) + '</div>' +
       '<div class="chip-sub full-detail">' + seq.frequencyLabel + '</div>' +
+      participantsRowHTML(seq) +
       '<div class="chip-detail">' + seqHTML + '</div>' +
     '</div>'
   );
@@ -440,13 +567,15 @@ function seqChipHTML(seq) {
 function itemChipHTML(it) {
   var dot = statusDot(it);
   var tag = it.status === 'coop' ? 'Co-op' : (it.status === 'optional' ? 'Optional' : (it.audience === 'unplaced' ? 'Needs placement' : (it.practice ? 'Practice' : '')));
+  var lensCls = cardMatchesLens(it) ? ' lens-match' : '';
   return (
-    '<div class="chip ' + chipClass(it.subjectFamilyId) + '" draggable="true" ' +
-      'ondragstart="onDragStart(event,\'item-' + items().indexOf(it) + '\')" onclick="toggleExpand(this)" ' +
-      'ondblclick="openEditor(\'' + escapeHtml(it.label) + '\',false,false)">' +
+    '<div class="chip ' + chipClass(it.subjectFamilyId) + lensCls + '" draggable="true" ' +
+      'ondragstart="onDragStart(event,\'item\')" onclick="toggleExpand(this)" ' +
+      'ondblclick="openEditor(\'' + escapeHtml(it.label) + '\',\'standalone\',' + JSON.stringify(it).replace(/"/g, '&quot;') + ')">' +
       '<div class="chip-title"><span class="dot ' + dot + '"></span>' + escapeHtml(it.label) + (tag ? '<span class="chip-tag">' + tag + '</span>' : '') + '</div>' +
       '<div class="chip-sub full-detail">' + escapeHtml(it.frequencyLabel || '') + '</div>' +
-      '<div class="chip-detail">Single card — not part of a loop or sequence.</div>' +
+      participantsRowHTML(it) +
+      '<div class="chip-detail">Single card — not part of a loop or sequence.' + (it.resource ? ' Resource: ' + escapeHtml(it.resource) : '') + '</div>' +
     '</div>'
   );
 }
@@ -493,8 +622,7 @@ function buildGrid() {
 }
 
 // ---- drag and drop mockup (visual only — does not persist a move) ----
-var draggedId = null;
-window.onDragStart = function (e, id) { draggedId = id; e.target.classList.add('dragging'); };
+window.onDragStart = function (e, id) { e.target.classList.add('dragging'); };
 window.onDragOver = function (e) { e.preventDefault(); e.currentTarget.classList.add('drag-target'); };
 window.onDragLeave = function (e) { e.currentTarget.classList.remove('drag-target'); };
 window.onDrop = function (e) {
@@ -507,22 +635,113 @@ window.onDrop = function (e) {
 
 window.toggleExpand = function (el) { el.classList.toggle('expanded'); };
 
-window.openEditor = function (title, isLoop, isSeq) {
+// ---- Student Lens ----
+function populateLensSelect() {
+  var sel = document.getElementById('lens-select');
+  STUDENTS.forEach(function (s) {
+    var o = document.createElement('option'); o.value = s.id; o.textContent = s.name;
+    sel.appendChild(o);
+  });
+}
+window.onLensChange = function () {
+  state.lens = document.getElementById('lens-select').value;
+  document.body.classList.toggle('lens-active', state.lens !== 'all');
+  if (state.lens !== 'all') {
+    document.body.style.setProperty('--lens-color', studentsById(state.lens).color);
+  }
+  buildGrid();
+};
+
+// ---- card editor mockup ----
+window.openEditor = function (title, kind, data) {
   document.getElementById('editor-title').textContent = title;
-  document.getElementById('ed-schedule').value = isLoop ? 'loop' : 'direct';
-  renderEditorConditionals(isLoop, isSeq);
+  document.getElementById('ed-schedule').value = kind === 'loop' ? 'loop' : 'direct';
+  renderParticipantChecks(data ? resolveParticipants(data) : []);
+  renderEditorConditionals(kind, data);
   document.getElementById('editor-mock').classList.add('show');
 };
 window.closeEditor = function () { document.getElementById('editor-mock').classList.remove('show'); };
-window.renderEditorConditionals = function (forceLoop, forceSeq) {
+
+function renderParticipantChecks(activeIds) {
+  var html = STUDENTS.map(function (s) {
+    var checked = activeIds.indexOf(s.id) !== -1 ? 'checked' : '';
+    return '<label class="pcheck"><input type="checkbox" ' + checked + ' disabled><span class="p-dot" style="background:' + s.color + ';">' + s.initials + '</span>' + escapeHtml(s.name) + '</label>';
+  }).join('');
+  document.getElementById('ed-participants').innerHTML = html;
+}
+
+window.renderEditorConditionals = function (kind, data) {
   var scheduleVal = document.getElementById('ed-schedule').value;
-  var showLoop = forceLoop !== undefined ? forceLoop : scheduleVal === 'loop';
-  var showSeq = forceSeq !== undefined ? forceSeq : false;
-  document.getElementById('ed-loop-fields').classList.toggle('hidden', !showLoop);
-  document.getElementById('ed-seq-fields').classList.toggle('hidden', !showSeq);
+  var isLoop = kind === 'loop' || scheduleVal === 'loop';
+  var isSeq = kind === 'sequence';
+  var isStandalone = kind === 'standalone' || (!isLoop && !isSeq);
+
+  document.getElementById('ed-loop-fields').classList.toggle('hidden', !isLoop);
+  document.getElementById('ed-seq-fields').classList.toggle('hidden', !isSeq);
+  document.getElementById('ed-res-loop').classList.toggle('hidden', !isLoop);
+  document.getElementById('ed-res-sequence').classList.toggle('hidden', !isSeq);
+  document.getElementById('ed-res-standalone').classList.toggle('hidden', !isStandalone);
+
+  if (isSeq && data) {
+    document.getElementById('ed-seq-list').innerHTML = data.items.map(function (i, idx) {
+      var cls = i.status === 'done' ? '' : (i.current ? 'current-seq' : '');
+      var marker = i.status === 'done' ? '✓' : (i.current ? '▶' : (idx + 1) + '.');
+      return '<div class="seq-edit-row ' + cls + '"><span class="grip">⠿</span> ' + marker + ' ' + escapeHtml(i.label) + (i.current ? ' (current)' : '') + '</div>';
+    }).join('') + '<div class="seq-edit-row"><span class="grip">⠿</span> + Add another book…</div>';
+
+    document.getElementById('ed-res-seq-list').innerHTML =
+      '<div style="font-weight:600;margin-bottom:4px;">' + escapeHtml(data.label) + '</div>' +
+      data.items.map(function (i, idx) {
+        return '<div class="res-row"><span class="marker">' + (idx + 1) + '.</span><span>' + escapeHtml(i.label) + '</span></div>';
+      }).join('');
+  }
+  if (isLoop && data) {
+    document.getElementById('ed-res-loop-list').innerHTML =
+      '<div style="font-weight:600;margin-bottom:4px;">' + escapeHtml(data.label) + ' · ' + data.turnsPerWeek + ' turns/week</div>' +
+      data.items.map(function (i, idx) {
+        return '<div class="res-row"><span class="marker">' + (idx + 1) + '.</span><span>' + escapeHtml(i.label) + ' → <span class="res-detail">' +
+          escapeHtml(i.resource || 'no resource set') + ', next: ' + escapeHtml(i.next) + '</span></span></div>';
+      }).join('');
+  }
+  if (isStandalone && data && data.resource) {
+    document.querySelector('#ed-res-standalone input').value = data.resource;
+  }
 };
+
 window.onAddCard = function (rowId, colId) {
-  openEditor('New card — ' + rowId + ' / ' + colId, false, false);
+  openEditor('New card — ' + rowId + ' / ' + colId, 'standalone', null);
+};
+
+// ---- Customize family / subjects mockups ----
+window.openCustomize = function (which) {
+  closeCustomize();
+  if (which === 'family') {
+    document.getElementById('cust-students').innerHTML = STUDENTS.map(function (s) {
+      return '<div class="cust-row"><span class="swatch" style="background:' + s.color + ';" onclick="alert(\'Mockup only: would open a color picker for ' + escapeHtml(s.name) + '.\')"></span>' +
+        '<span class="name">' + escapeHtml(s.name) + '</span>' +
+        '<span class="actions"><button onclick="alert(\'Mockup only: rename.\')">Rename</button><button onclick="alert(\'Mockup only: archive.\')">Archive</button></span></div>';
+    }).join('');
+    document.getElementById('cust-groups').innerHTML = GROUPS.map(function (g) {
+      var members = g.studentIds.map(function (id) { return studentsById(id).name; }).join(', ');
+      return '<div class="cust-row"><span class="swatch" style="background:linear-gradient(90deg,' +
+        g.studentIds.map(function (id) { return studentsById(id).color; }).join(',') + ');"></span>' +
+        '<span class="name">' + escapeHtml(g.label) + '<br><span class="members">' + escapeHtml(members) + '</span></span>' +
+        '<span class="actions"><button onclick="alert(\'Mockup only: edit members.\')">Edit</button><button onclick="alert(\'Mockup only: archive.\')">Archive</button></span></div>';
+    }).join('');
+    document.getElementById('customize-family').classList.add('show');
+  } else {
+    document.getElementById('cust-subjects').innerHTML = cols().concat((state.sample === 'full' ? COLS_FULL : COLS_SIMPLE).filter(function(c){return !c.visible;})).map(function (c) {
+      return '<div class="cust-row"><span class="swatch" style="background:var(--' + c.id + ', #ccc);"></span>' +
+        '<span class="name">' + escapeHtml(c.label) + '</span>' +
+        '<span class="cust-visible">' + (c.visible ? 'Visible' : 'Hidden') + '</span>' +
+        '<span class="actions"><button onclick="alert(\'Mockup only: rename.\')">Rename</button><button onclick="alert(\'Mockup only: toggle visibility.\')">' + (c.visible ? 'Hide' : 'Show') + '</button></span></div>';
+    }).join('');
+    document.getElementById('customize-subjects').classList.add('show');
+  }
+};
+window.closeCustomize = function () {
+  document.getElementById('customize-family').classList.remove('show');
+  document.getElementById('customize-subjects').classList.remove('show');
 };
 
 document.getElementById('density-toggle').addEventListener('click', function (e) {
@@ -531,6 +750,7 @@ document.getElementById('density-toggle').addEventListener('click', function (e)
   btn.classList.add('active');
   state.density = btn.dataset.mode;
   document.body.classList.toggle('compact', state.density === 'compact');
+  document.body.classList.toggle('detailed', state.density === 'detailed');
 });
 document.getElementById('sample-toggle').addEventListener('click', function (e) {
   var btn = e.target.closest('button'); if (!btn) return;
@@ -540,9 +760,15 @@ document.getElementById('sample-toggle').addEventListener('click', function (e) 
   buildGrid();
 });
 
+populateLensSelect();
 buildGrid();
 document.body.classList.add('compact');
 window.renderEditorConditionals();
+
+// Demo state per spec: pre-select Jeremiah in the lens so reviewers immediately
+// see Together + Older Students + individual cards light up together.
+document.getElementById('lens-select').value = 'jeremiah';
+window.onLensChange();
 </script>
 
 </body>
