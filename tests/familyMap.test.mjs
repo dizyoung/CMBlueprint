@@ -172,6 +172,54 @@ test('advanceSequence completes current and promotes next upcoming to current', 
   assert.equal(advanced.find(i => i.id === '3').status, 'upcoming');
 });
 
+test('reverseSequence moves current back to upcoming and promotes previous completed to current', () => {
+  const items = [
+    M.makeSequenceItem({ id: '1', position: 0, status: 'completed' }),
+    M.makeSequenceItem({ id: '2', position: 1, status: 'current' }),
+    M.makeSequenceItem({ id: '3', position: 2, status: 'upcoming' })
+  ];
+  const reversed = M.reverseSequence(items);
+  assert.equal(reversed.find(i => i.id === '1').status, 'current');
+  assert.equal(reversed.find(i => i.id === '2').status, 'upcoming');
+  assert.equal(reversed.find(i => i.id === '3').status, 'upcoming');
+});
+
+test('reverseSequence cannot move before the first item', () => {
+  const items = [
+    M.makeSequenceItem({ id: '1', position: 0, status: 'current' }),
+    M.makeSequenceItem({ id: '2', position: 1, status: 'upcoming' })
+  ];
+  const reversed = M.reverseSequence(items);
+  assert.equal(reversed.find(i => i.id === '1').status, 'current');
+  assert.equal(reversed.find(i => i.id === '2').status, 'upcoming');
+});
+
+test('advanceSequence cannot move past the last item (sequence finishes, no new current)', () => {
+  const items = [
+    M.makeSequenceItem({ id: '1', position: 0, status: 'completed' }),
+    M.makeSequenceItem({ id: '2', position: 1, status: 'current' })
+  ];
+  const advanced = M.advanceSequence(items);
+  assert.equal(advanced.find(i => i.id === '2').status, 'completed');
+  assert.equal(M.resolveSequenceProgress(advanced).current, null);
+});
+
+test('reverseSequence on a finished sequence brings the last completed item back to current', () => {
+  const items = [
+    M.makeSequenceItem({ id: '1', position: 0, status: 'completed' }),
+    M.makeSequenceItem({ id: '2', position: 1, status: 'completed' })
+  ];
+  const reversed = M.reverseSequence(items);
+  assert.equal(reversed.find(i => i.id === '2').status, 'current');
+  assert.equal(reversed.find(i => i.id === '1').status, 'completed');
+});
+
+test('autoInitials generates initials from one or more name parts', () => {
+  assert.equal(M.autoInitials('Charis'), 'C');
+  assert.equal(M.autoInitials('Mary Jane Watson'), 'MW');
+  assert.equal(M.autoInitials(''), '');
+});
+
 // ---------------------------------------------------------------------------
 // Resources
 // ---------------------------------------------------------------------------

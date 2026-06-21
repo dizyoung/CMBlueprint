@@ -86,6 +86,13 @@
     <label for="ed-label">Label</label>
     <input type="text" id="ed-label" placeholder="e.g. Jeremiah independent">
 
+    <h3 style="margin:14px 0 6px;font-size:13px;color:var(--wonder-marine);">Move this rhythm item</h3>
+    <label for="ed-day">Day</label>
+    <select id="ed-day"></select>
+
+    <label for="ed-block">Rhythm block</label>
+    <select id="ed-block"></select>
+
     <label for="ed-type">Type</label>
     <select id="ed-type"></select>
 
@@ -185,6 +192,16 @@ function openEditor(dayId, blockId, assignment) {
   document.getElementById('ed-showprint').checked = assignment ? assignment.showOnPrint !== false : true;
   document.getElementById('ed-delete').style.display = assignment ? '' : 'none';
 
+  var daySel = document.getElementById('ed-day');
+  daySel.innerHTML = rhythm.days.slice().sort(function (a, b) { return a.sortOrder - b.sortOrder; })
+    .map(function (d) { return '<option value="' + escapeHtml(d.id) + '">' + escapeHtml(d.label) + '</option>'; }).join('');
+  daySel.value = dayId;
+
+  var blockSel = document.getElementById('ed-block');
+  blockSel.innerHTML = rhythm.blocks.slice().sort(function (a, b) { return a.sortOrder - b.sortOrder; })
+    .map(function (b) { return '<option value="' + escapeHtml(b.id) + '">' + escapeHtml(b.label) + '</option>'; }).join('');
+  blockSel.value = blockId;
+
   var typeSel = document.getElementById('ed-type');
   typeSel.innerHTML = R.RHYTHM_ASSIGNMENT_TYPES.map(function (t) {
     return '<option value="' + t + '">' + escapeHtml(TYPE_LABELS[t] || t) + '</option>';
@@ -229,14 +246,14 @@ function saveEditor() {
     notes: document.getElementById('ed-notes').value,
     isAllDay: document.getElementById('ed-allday').checked,
     isFlexible: document.getElementById('ed-flexible').checked,
-    showOnPrint: document.getElementById('ed-showprint').checked
+    showOnPrint: document.getElementById('ed-showprint').checked,
+    dayId: document.getElementById('ed-day').value,
+    blockId: document.getElementById('ed-block').value
   };
 
   if (editingState.assignmentId) {
     A.updateRhythmAssignmentInState(appState, editingState.assignmentId, fields);
   } else {
-    fields.dayId = editingState.dayId;
-    fields.blockId = editingState.blockId;
     A.addRhythmAssignmentToState(appState, fields);
   }
   saveBar.scheduleSave(appState);

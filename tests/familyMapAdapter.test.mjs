@@ -282,6 +282,97 @@ test('addCardToRhythm returns null for an unknown card id and does not modify th
   assert.equal(state.weeklyRhythm.assignments.length, before);
 });
 
+// ---------------------------------------------------------------------------
+// Phase 1D.8 — sequence previous/next, learners, subjects, card row movement
+// ---------------------------------------------------------------------------
+test('reverseSequenceInState moves the sequence position backward', () => {
+  const state = A.buildSampleAppState();
+  A.advanceSequenceInState(state, 'seq_readaloud'); // si_2 -> completed, si_3 -> current
+  let progress = A.sequenceProgress(state, 'seq_readaloud');
+  assert.equal(progress.current.id, 'si_3');
+
+  progress = A.reverseSequenceInState(state, 'seq_readaloud');
+  assert.equal(progress.current.id, 'si_2');
+});
+
+test('sequenceCanAdvance/sequenceCanReverse guard against moving before first or past last item', () => {
+  const state = A.buildSampleAppState();
+  // seq_readaloud starts with si_2 current, si_1 completed, si_3 upcoming
+  assert.equal(A.sequenceCanReverse(state, 'seq_readaloud'), true);
+  assert.equal(A.sequenceCanAdvance(state, 'seq_readaloud'), true);
+
+  A.reverseSequenceInState(state, 'seq_readaloud'); // back to si_1 current
+  assert.equal(A.sequenceCanReverse(state, 'seq_readaloud'), false);
+
+  A.advanceSequenceInState(state, 'seq_readaloud'); // si_1 completed, si_2 current
+  A.advanceSequenceInState(state, 'seq_readaloud'); // si_2 completed, si_3 current
+  A.advanceSequenceInState(state, 'seq_readaloud'); // si_3 completed, nothing current
+  assert.equal(A.sequenceCanAdvance(state, 'seq_readaloud'), false);
+  assert.equal(A.sequenceCanReverse(state, 'seq_readaloud'), true);
+});
+
+test('addStudent auto-generates initials and appears in map rows / participant resolution', () => {
+  const state = A.buildSampleAppState();
+  const student = A.addStudent(state, { name: 'Noah', gradeBand: 'form1', color: '#445566' });
+  assert.equal(student.initials, 'N');
+  assert.equal(student.active, true);
+
+  const rows = A.buildMapRows(state).map((r) => r.id);
+  assert.ok(rows.includes('individual:' + student.id));
+
+  // "Together" cards resolve to active learners, including the new one
+  const togetherIds = M.resolveParticipants(M.makeCard({ participantMode: 'together' }), state.students, state.groups);
+  assert.ok(togetherIds.includes(student.id));
+});
+
+test('updateStudent and setStudentActive edit a learner; inactive learner is excluded from Together by default', () => {
+  const state = A.buildSampleAppState();
+  const student = A.addStudent(state, { name: 'Noah' });
+  A.updateStudent(state, student.id, { grade: '4th' });
+  assert.equal(A.findStudent(state, student.id).grade, '4th');
+
+  A.setStudentActive(state, student.id, false);
+  const togetherIds = M.resolveParticipants(M.makeCard({ participantMode: 'together' }), state.students, state.groups);
+  assert.ok(!togetherIds.includes(student.id));
+
+  const rows = A.buildMapRows(state).map((r) => r.id);
+  assert.ok(!rows.includes('individual:' + student.id), 'inactive learner should not get a map row');
+});
+
+test('addSubjectColumn appears on the map and can receive cards; updateSubjectColumn/setSubjectVisible edit it', () => {
+  const state = A.buildSampleAppState();
+  const subject = A.addSubjectColumn(state, { label: 'Art', color: '#aa5500' });
+  let { columns } = A.buildMapGrid(state);
+  assert.ok(columns.some((c) => c.id === subject.id));
+
+  A.moveCardToSubject(state, 'card_mapquiz', subject.id);
+  assert.ok(A.subjectLensCards(state, subject.id).some((c) => c.id === 'card_mapquiz'));
+
+  A.updateSubjectColumn(state, subject.id, { label: 'Art & Handicrafts' });
+  assert.equal(A.findSubject(state, subject.id).label, 'Art & Handicrafts');
+
+  A.setSubjectVisible(state, subject.id, false);
+  columns = A.buildMapGrid(state).columns;
+  assert.ok(!columns.some((c) => c.id === subject.id), 'hidden subject should not appear as a map column');
+  assert.ok(A.findSubject(state, subject.id), 'hidden subject data should be preserved, not deleted');
+});
+
+test('moveCardToRow moves a card to another audience/row and updates participant resolution', () => {
+  const state = A.buildSampleAppState();
+  A.moveCardToRow(state, 'card_mapquiz', 'individual:kayla');
+  const card = A.findCard(state, 'card_mapquiz');
+  assert.equal(card.audience, 'individual');
+  assert.deepEqual(card.participantIds, ['kayla']);
+  assert.ok(A.studentLensCards(state, 'kayla', { includeOptional: true }).some((c) => c.id === 'card_mapquiz'));
+
+  A.moveCardToRow(state, 'card_mapquiz', 'group:older');
+  assert.equal(A.findCard(state, 'card_mapquiz').audience, 'group');
+  assert.ok(A.groupLensCards(state, 'older').some((c) => c.id === 'card_mapquiz'));
+
+  A.moveCardToRow(state, 'card_mapquiz', 'together');
+  assert.equal(A.findCard(state, 'card_mapquiz').audience, 'together');
+});
+
 let passed = 0;
 let failed = 0;
 for (const t of tests) {

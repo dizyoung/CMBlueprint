@@ -55,9 +55,20 @@
   .loop-row, .seq-row { padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
   .loop-row:last-child, .seq-row:last-child { border-bottom: none; }
   .seq-item { font-size: 12px; padding: 2px 0; }
-  .seq-item.done { color: var(--muted); text-decoration: line-through; }
-  .seq-item.current { font-weight: 600; color: var(--wonder-marine); }
+  .seq-item.completed { color: var(--muted); text-decoration: line-through; }
+  .seq-item.current { font-weight: 600; color: var(--wonder-marine); background: var(--field-mint); border-radius: 5px; padding: 2px 6px; display: inline-block; }
   .seq-item.upcoming { color: var(--muted); }
+  .seq-controls { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .seq-current-label { font-size: 12px; color: var(--muted); }
+
+  .manage-panel { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; background: var(--field-mint); display: none; }
+  .manage-panel.show { display: block; }
+  .manage-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .manage-row:last-child { border-bottom: none; }
+  .manage-row.inactive { opacity: 0.5; }
+  .manage-meta { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .swatch { width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+  .swatch-sq { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; display: inline-block; }
 
   .res-group { margin-bottom: 18px; }
   .res-group h3 { font-size: 12px; margin: 0 0 8px; letter-spacing: 0.3px; color: var(--wonder-marine); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
@@ -68,7 +79,7 @@
   .res-dupe-note { font-size: 11px; font-weight: 400; color: var(--muted); font-style: italic; }
 
   @media print {
-    .app-header, .banner, .toolbar, .save-area, .overlay, .legend, .filters-row, .starter-panel { display: none !important; }
+    .app-header, .banner, .toolbar, .save-area, .overlay, .legend, .filters-row, .starter-panel, .manage-panel { display: none !important; }
     @page { size: landscape; margin: 0.4in; }
     @page resources { size: portrait; margin: 0.5in; }
     body.print-resources table.map, body.print-resources #loops-panel, body.print-resources #sequences-panel { display: none !important; }
@@ -104,6 +115,8 @@
   <button class="accent" onclick="document.body.classList.remove('print-resources'); window.print();">Print map</button>
   <button class="accent" onclick="document.body.classList.add('print-resources'); window.print();">Print Book &amp; Resource List</button>
   <button type="button" id="starter-toggle-btn">Add from starter card</button>
+  <button type="button" id="learners-toggle-btn">Family members</button>
+  <button type="button" id="subjects-toggle-btn">Subjects</button>
 </div>
 
 <div class="legend">
@@ -120,6 +133,18 @@
 <div class="starter-panel" id="starter-panel">
   <p class="sub" style="margin:0 0 8px;">Add a starter card to the map. You can edit it afterward.</p>
   <div id="starter-list"></div>
+</div>
+
+<div class="manage-panel" id="learners-panel">
+  <p class="sub" style="margin:0 0 8px;">Family members shown on the map and in lenses.</p>
+  <div id="learners-list"></div>
+  <button type="button" id="add-learner-btn" style="margin-top:8px;">Add learner</button>
+</div>
+
+<div class="manage-panel" id="subjects-panel">
+  <p class="sub" style="margin:0 0 8px;">Subjects shown as columns on the map.</p>
+  <div id="subjects-list"></div>
+  <button type="button" id="add-subject-btn" style="margin-top:8px;">Add subject</button>
 </div>
 
 <div id="review-panel"></div>
@@ -168,28 +193,70 @@
     <label for="ed-title">Title</label>
     <input type="text" id="ed-title">
 
-    <label for="ed-audience">Audience</label>
-    <select id="ed-audience">
-      <option value="together">Together</option>
-      <option value="group">Group</option>
-      <option value="individual">Individual</option>
-      <option value="coop-outside">Co-op / Outside</option>
-      <option value="optional">Optional</option>
-      <option value="unplaced">Needs placement</option>
-    </select>
-
-    <label>Who is included?</label>
-    <div class="checkrow"><input type="checkbox" id="ed-use-default" checked><label for="ed-use-default" style="margin:0;font-weight:400;">Use audience default</label></div>
-    <div id="ed-participants-checks" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
+    <h3 style="margin:14px 0 6px;font-size:13px;color:var(--wonder-marine);">Move this card</h3>
+    <label for="ed-row">Who is this for?</label>
+    <select id="ed-row"></select>
 
     <label for="ed-subject">Subject</label>
     <select id="ed-subject"></select>
+
+    <label>Who is included?</label>
+    <div class="checkrow"><input type="checkbox" id="ed-use-default" checked><label for="ed-use-default" style="margin:0;font-weight:400;">Use default for who this is for</label></div>
+    <div id="ed-participants-checks" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
 
     <div class="modal-actions">
       <span></span>
       <div class="right">
         <button id="ed-cancel">Cancel</button>
         <button class="accent" id="ed-save">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="learner-editor-overlay" style="display:none;">
+  <div class="modal-card">
+    <h2 id="learner-editor-title">Add learner</h2>
+    <label for="lr-name">Name</label>
+    <input type="text" id="lr-name">
+
+    <label for="lr-initials">Initials</label>
+    <input type="text" id="lr-initials" maxlength="3">
+
+    <label for="lr-color">Color</label>
+    <input type="color" id="lr-color" value="#5c8fc9">
+
+    <label for="lr-grade">Grade / Form</label>
+    <input type="text" id="lr-grade" placeholder="e.g. Form II">
+
+    <div class="checkrow"><input type="checkbox" id="lr-active" checked><label for="lr-active" style="margin:0;font-weight:400;">Active (include in Together/Family work)</label></div>
+
+    <div class="modal-actions">
+      <span></span>
+      <div class="right">
+        <button id="lr-cancel">Cancel</button>
+        <button class="accent" id="lr-save">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="subject-editor-overlay" style="display:none;">
+  <div class="modal-card">
+    <h2 id="subject-editor-title">Add subject</h2>
+    <label for="sj-label">Subject name</label>
+    <input type="text" id="sj-label">
+
+    <label for="sj-color">Color</label>
+    <input type="color" id="sj-color" value="#5c8fc9">
+
+    <div class="checkrow"><input type="checkbox" id="sj-visible" checked><label for="sj-visible" style="margin:0;font-weight:400;">Show on map</label></div>
+
+    <div class="modal-actions">
+      <span></span>
+      <div class="right">
+        <button id="sj-cancel">Cancel</button>
+        <button class="accent" id="sj-save">Save</button>
       </div>
     </div>
   </div>
@@ -218,8 +285,13 @@ window.closeEditor = closeEditor;
 window.saveEditor = saveEditor;
 window.advanceLoop = advanceLoopUI;
 window.advanceSequence = advanceSequenceUI;
+window.reverseSequence = reverseSequenceUI;
 window.addStarterCard = addStarterCard;
 window.setResourceStatusUI = setResourceStatusUI;
+window.openLearnerEditor = openLearnerEditor;
+window.openSubjectEditor = openSubjectEditor;
+window.setLearnerActiveUI = setLearnerActiveUI;
+window.setSubjectVisibleUI = setSubjectVisibleUI;
 
 var saveBar = createSaveBar({
   onStateReplaced: function (newState, source) {
@@ -227,6 +299,8 @@ var saveBar = createSaveBar({
     populateLensSelect();
     populateSubjectSelect();
     populateStarterSelect();
+    renderLearnersPanel();
+    renderSubjectsPanel();
     render();
     saveBar.setStatus(source === 'sample' ? 'Using sample plan' : 'Saved in this browser', source === 'sample' ? 'sample' : 'saved');
   }
@@ -345,13 +419,23 @@ function renderSequences() {
   var html = '';
   state.sequences.forEach(function (seq) {
     var progress = A.sequenceProgress(state, seq.id);
+    var canAdvance = A.sequenceCanAdvance(state, seq.id);
+    var canReverse = A.sequenceCanReverse(state, seq.id);
     var itemsHtml = state.sequenceItems.filter(function (i) { return i.sequenceId === seq.id; })
       .sort(function (a, b) { return a.position - b.position; })
-      .map(function (i) { return '<div class="seq-item ' + i.status + '">' + escapeHtml(i.title) + '</div>'; })
+      .map(function (i) {
+        var label = i.status === 'current' ? 'Current' : (i.status === 'completed' ? 'Finished' : 'Up next');
+        return '<div class="seq-item ' + i.status + '">' + escapeHtml(i.title) + ' <span style="font-size:10px;color:var(--muted);">(' + label + ')</span></div>';
+      })
       .join('');
+    var currentLabel = progress.current ? escapeHtml(progress.current.title) : (progress.completed.length ? 'Finished' : '—');
     html += '<div class="seq-row">' +
-      '<strong>' + escapeHtml(seq.title) + '</strong> <span style="color:var(--muted);font-size:12px;">— current: ' + escapeHtml(progress.current ? progress.current.title : '—') + '</span> ' +
-      '<button onclick="advanceSequence(\'' + seq.id + '\')">Advance</button>' +
+      '<strong>' + escapeHtml(seq.title) + '</strong>' +
+      '<div class="seq-controls">' +
+        '<button' + (canReverse ? '' : ' disabled') + ' onclick="reverseSequence(\'' + seq.id + '\')">Previous</button>' +
+        '<button' + (canAdvance ? '' : ' disabled') + ' onclick="advanceSequence(\'' + seq.id + '\')">Next</button>' +
+        '<span class="seq-current-label">Current: ' + currentLabel + '</span>' +
+      '</div>' +
       itemsHtml +
     '</div>';
   });
@@ -402,13 +486,20 @@ function populateSubjectSelect() {
   sel.innerHTML = state.subjectColumns.map(function (c) { return '<option value="' + c.id + '">' + escapeHtml(c.label) + '</option>'; }).join('');
 }
 
+function populateRowSelect() {
+  var sel = document.getElementById('ed-row');
+  var rows = A.buildMapRows(state);
+  sel.innerHTML = rows.map(function (r) { return '<option value="' + r.id + '">' + escapeHtml(r.label) + '</option>'; }).join('');
+}
+
 function openEditor(cardId) {
   var card = A.findCard(state, cardId);
   if (!card) return;
   editingCardId = cardId;
   document.getElementById('editor-title').textContent = 'Edit card';
   document.getElementById('ed-title').value = card.title || '';
-  document.getElementById('ed-audience').value = card.audience;
+  populateRowSelect();
+  document.getElementById('ed-row').value = A.rowIdForCard(card);
   var isOverride = card.participantMode === 'override' && Array.isArray(card.participantIds) && card.participantIds.length > 0;
   var checksBox = document.getElementById('ed-participants-checks');
   var activeStudents = state.students.filter(function (s) { return s.active; });
@@ -433,7 +524,7 @@ function closeEditor() {
 function saveEditor() {
   if (!editingCardId) return;
   A.setCardTitle(state, editingCardId, document.getElementById('ed-title').value);
-  A.setCardAudience(state, editingCardId, document.getElementById('ed-audience').value);
+  A.moveCardToRow(state, editingCardId, document.getElementById('ed-row').value);
   A.moveCardToSubject(state, editingCardId, document.getElementById('ed-subject').value);
   var card = A.findCard(state, editingCardId);
   var useDefault = document.getElementById('ed-use-default').checked;
@@ -455,7 +546,154 @@ document.getElementById('card-editor-overlay').addEventListener('click', functio
 
 function advanceLoopUI(loopId) { A.advanceLoopInState(state, loopId); render(); markDirtyAndSave(); }
 function advanceSequenceUI(sequenceId) { A.advanceSequenceInState(state, sequenceId); render(); markDirtyAndSave(); }
+function reverseSequenceUI(sequenceId) { A.reverseSequenceInState(state, sequenceId); render(); markDirtyAndSave(); }
 function setResourceStatusUI(resourceId, status) { A.setResourceStatus(state, resourceId, status); render(); markDirtyAndSave(); }
+
+// ---------------------------------------------------------------------------
+// Family members / Learners management
+// ---------------------------------------------------------------------------
+window.editingLearnerId = null;
+
+function renderLearnersPanel() {
+  var list = document.getElementById('learners-list');
+  list.innerHTML = state.students.map(function (s) {
+    return '<div class="manage-row' + (s.active ? '' : ' inactive') + '">' +
+      '<div class="manage-meta"><span class="swatch" style="background:' + s.color + ';"></span>' +
+        escapeHtml(s.name) + ' <span style="color:var(--muted);">(' + escapeHtml(s.initials || '') + (s.grade ? ', ' + escapeHtml(s.grade) : '') + ')</span>' +
+        (s.active ? '' : ' <span style="color:var(--muted);font-style:italic;">inactive</span>') +
+      '</div>' +
+      '<div>' +
+        '<button onclick="openLearnerEditor(\'' + s.id + '\')">Edit</button> ' +
+        '<button onclick="setLearnerActiveUI(\'' + s.id + '\', ' + (s.active ? 'false' : 'true') + ')">' + (s.active ? 'Deactivate' : 'Reactivate') + '</button>' +
+      '</div>' +
+    '</div>';
+  }).join('') || '<p style="color:var(--muted);font-size:13px;">No family members yet.</p>';
+}
+
+function openLearnerEditor(studentId) {
+  window.editingLearnerId = studentId || null;
+  var s = studentId ? A.findStudent(state, studentId) : null;
+  document.getElementById('learner-editor-title').textContent = s ? 'Edit learner' : 'Add learner';
+  document.getElementById('lr-name').value = s ? s.name : '';
+  document.getElementById('lr-initials').value = s ? (s.initials || '') : '';
+  document.getElementById('lr-color').value = s ? s.color : '#5c8fc9';
+  document.getElementById('lr-grade').value = s ? (s.grade || '') : '';
+  document.getElementById('lr-active').checked = s ? !!s.active : true;
+  document.getElementById('learner-editor-overlay').style.display = 'flex';
+}
+
+function closeLearnerEditor() {
+  window.editingLearnerId = null;
+  document.getElementById('learner-editor-overlay').style.display = 'none';
+}
+
+function saveLearnerEditor() {
+  var name = document.getElementById('lr-name').value.trim();
+  if (!name) return;
+  var fields = {
+    name: name,
+    initials: document.getElementById('lr-initials').value.trim() || M.autoInitials(name),
+    color: document.getElementById('lr-color').value,
+    grade: document.getElementById('lr-grade').value.trim(),
+    active: document.getElementById('lr-active').checked
+  };
+  if (window.editingLearnerId) {
+    A.updateStudent(state, window.editingLearnerId, fields);
+  } else {
+    A.addStudent(state, fields);
+  }
+  closeLearnerEditor();
+  populateLensSelect();
+  renderLearnersPanel();
+  render();
+  markDirtyAndSave();
+}
+
+function setLearnerActiveUI(studentId, active) {
+  A.setStudentActive(state, studentId, active);
+  populateLensSelect();
+  renderLearnersPanel();
+  render();
+  markDirtyAndSave();
+}
+
+document.getElementById('add-learner-btn').addEventListener('click', function () { openLearnerEditor(null); });
+document.getElementById('lr-cancel').addEventListener('click', closeLearnerEditor);
+document.getElementById('lr-save').addEventListener('click', saveLearnerEditor);
+document.getElementById('learner-editor-overlay').addEventListener('click', function (e) {
+  if (e.target.id === 'learner-editor-overlay') closeLearnerEditor();
+});
+
+// ---------------------------------------------------------------------------
+// Subjects management
+// ---------------------------------------------------------------------------
+window.editingSubjectId = null;
+
+function renderSubjectsPanel() {
+  var list = document.getElementById('subjects-list');
+  list.innerHTML = state.subjectColumns.map(function (c) {
+    return '<div class="manage-row' + (c.visible === false ? ' inactive' : '') + '">' +
+      '<div class="manage-meta"><span class="swatch-sq" style="background:' + c.color + ';"></span>' +
+        escapeHtml(c.label) + (c.visible === false ? ' <span style="color:var(--muted);font-style:italic;">hidden</span>' : '') +
+      '</div>' +
+      '<div>' +
+        '<button onclick="openSubjectEditor(\'' + c.id + '\')">Edit</button> ' +
+        '<button onclick="setSubjectVisibleUI(\'' + c.id + '\', ' + (c.visible === false ? 'true' : 'false') + ')">' + (c.visible === false ? 'Show' : 'Hide') + '</button>' +
+      '</div>' +
+    '</div>';
+  }).join('') || '<p style="color:var(--muted);font-size:13px;">No subjects yet.</p>';
+}
+
+function openSubjectEditor(subjectId) {
+  window.editingSubjectId = subjectId || null;
+  var c = subjectId ? A.findSubject(state, subjectId) : null;
+  document.getElementById('subject-editor-title').textContent = c ? 'Edit subject' : 'Add subject';
+  document.getElementById('sj-label').value = c ? c.label : '';
+  document.getElementById('sj-color').value = c ? c.color : '#5c8fc9';
+  document.getElementById('sj-visible').checked = c ? c.visible !== false : true;
+  document.getElementById('subject-editor-overlay').style.display = 'flex';
+}
+
+function closeSubjectEditor() {
+  window.editingSubjectId = null;
+  document.getElementById('subject-editor-overlay').style.display = 'none';
+}
+
+function saveSubjectEditor() {
+  var label = document.getElementById('sj-label').value.trim();
+  if (!label) return;
+  var fields = {
+    label: label,
+    color: document.getElementById('sj-color').value,
+    visible: document.getElementById('sj-visible').checked
+  };
+  if (window.editingSubjectId) {
+    A.updateSubjectColumn(state, window.editingSubjectId, fields);
+  } else {
+    A.addSubjectColumn(state, fields);
+  }
+  closeSubjectEditor();
+  populateLensSelect();
+  populateSubjectSelect();
+  renderSubjectsPanel();
+  render();
+  markDirtyAndSave();
+}
+
+function setSubjectVisibleUI(subjectId, visible) {
+  A.setSubjectVisible(state, subjectId, visible);
+  populateSubjectSelect();
+  renderSubjectsPanel();
+  render();
+  markDirtyAndSave();
+}
+
+document.getElementById('add-subject-btn').addEventListener('click', function () { openSubjectEditor(null); });
+document.getElementById('sj-cancel').addEventListener('click', closeSubjectEditor);
+document.getElementById('sj-save').addEventListener('click', saveSubjectEditor);
+document.getElementById('subject-editor-overlay').addEventListener('click', function (e) {
+  if (e.target.id === 'subject-editor-overlay') closeSubjectEditor();
+});
 
 function populateStarterSelect() {
   var list = document.getElementById('starter-list');
@@ -530,10 +768,18 @@ document.getElementById('density-toggle').addEventListener('click', function (e)
 document.getElementById('starter-toggle-btn').addEventListener('click', function () {
   document.getElementById('starter-panel').classList.toggle('show');
 });
+document.getElementById('learners-toggle-btn').addEventListener('click', function () {
+  document.getElementById('learners-panel').classList.toggle('show');
+});
+document.getElementById('subjects-toggle-btn').addEventListener('click', function () {
+  document.getElementById('subjects-panel').classList.toggle('show');
+});
 
 populateLensSelect();
 populateSubjectSelect();
 populateStarterSelect();
+renderLearnersPanel();
+renderSubjectsPanel();
 document.getElementById('res-groupby').addEventListener('change', renderResources);
 document.getElementById('res-filter').addEventListener('change', renderResources);
 document.getElementById('lens-select').addEventListener('change', onLensChange);
