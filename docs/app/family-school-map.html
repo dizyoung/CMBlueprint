@@ -229,6 +229,14 @@
     <label for="lr-grade">Grade / Form</label>
     <input type="text" id="lr-grade" placeholder="e.g. Form II">
 
+    <label for="lr-gradeband">Form / stage (for suggested lesson lengths &amp; starter cards)</label>
+    <select id="lr-gradeband">
+      <option value="form1">Form I (younger)</option>
+      <option value="form2">Form II (middle)</option>
+      <option value="form3">Form III (older)</option>
+      <option value="custom">Custom / not sure yet</option>
+    </select>
+
     <div class="checkrow"><input type="checkbox" id="lr-active" checked><label for="lr-active" style="margin:0;font-weight:400;">Active (include in Together/Family work)</label></div>
 
     <div class="modal-actions">
@@ -262,9 +270,35 @@
   </div>
 </div>
 
+<div class="overlay" id="learner-wizard-overlay" style="display:none;">
+  <div class="modal-card">
+    <div id="wizard-step-cards">
+      <h2>Add starter cards for this learner?</h2>
+      <p class="sub" style="margin:0 0 10px;">Charlotte Mason-inspired, form-aware suggestions — just a starting point. Nothing is added until you choose.</p>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button type="button" id="wiz-add-core">Add core subjects</button>
+        <button type="button" id="wiz-add-riches">Add beauty &amp; riches</button>
+        <button type="button" id="wiz-add-skills">Add skill subjects</button>
+        <button type="button" id="wiz-add-light">Add a light full starter set</button>
+        <button type="button" id="wiz-skip-cards">Skip for now</button>
+      </div>
+    </div>
+    <div id="wizard-step-rhythm" style="display:none;">
+      <h2>Place these into a weekly rhythm?</h2>
+      <p class="sub" style="margin:0 0 10px;">This only creates a suggested rhythm placement — fully editable afterward.</p>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button type="button" id="wiz-use-rhythm">Use a gentle CM/PNEU-inspired rhythm for this form</button>
+        <button type="button" id="wiz-map-only">Add cards to the map only</button>
+        <button type="button" id="wiz-place-later">I'll place them myself later</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import * as A from '../../lib/familyMapAdapter.mjs';
 import * as M from '../../lib/familyMap.mjs';
+import * as R from '../../lib/weeklyRhythm.mjs';
 import { createSaveBar, loadInitialState } from './saveBar.mjs';
 import { appHeaderHTML } from './nav.mjs';
 
@@ -578,6 +612,7 @@ function openLearnerEditor(studentId) {
   document.getElementById('lr-initials').value = s ? (s.initials || '') : '';
   document.getElementById('lr-color').value = s ? s.color : '#5c8fc9';
   document.getElementById('lr-grade').value = s ? (s.grade || '') : '';
+  document.getElementById('lr-gradeband').value = s ? (s.gradeBand || 'form1') : 'form1';
   document.getElementById('lr-active').checked = s ? !!s.active : true;
   document.getElementById('learner-editor-overlay').style.display = 'flex';
 }
@@ -590,24 +625,104 @@ function closeLearnerEditor() {
 function saveLearnerEditor() {
   var name = document.getElementById('lr-name').value.trim();
   if (!name) return;
+  var isNew = !window.editingLearnerId;
   var fields = {
     name: name,
     initials: document.getElementById('lr-initials').value.trim() || M.autoInitials(name),
     color: document.getElementById('lr-color').value,
     grade: document.getElementById('lr-grade').value.trim(),
+    gradeBand: document.getElementById('lr-gradeband').value,
     active: document.getElementById('lr-active').checked
   };
+  var student;
   if (window.editingLearnerId) {
-    A.updateStudent(state, window.editingLearnerId, fields);
+    student = A.updateStudent(state, window.editingLearnerId, fields);
   } else {
-    A.addStudent(state, fields);
+    student = A.addStudent(state, fields);
   }
   closeLearnerEditor();
   populateLensSelect();
   renderLearnersPanel();
   render();
   markDirtyAndSave();
+  if (isNew && student) openLearnerWizard(student.id);
 }
+
+// ---------------------------------------------------------------------------
+// Learner onboarding wizard — offered once, right after adding a new learner.
+// Separates "add starter cards to the map" from "place them in the weekly
+// rhythm" per Phase 1D.9: never silently creates a pile of cards/rhythm
+// assignments without asking.
+// ---------------------------------------------------------------------------
+window.learnerWizardStudentId = null;
+window.learnerWizardCardIds = [];
+
+function openLearnerWizard(studentId) {
+  window.learnerWizardStudentId = studentId;
+  window.learnerWizardCardIds = [];
+  document.getElementById('wizard-step-cards').style.display = 'block';
+  document.getElementById('wizard-step-rhythm').style.display = 'none';
+  document.getElementById('learner-wizard-overlay').style.display = 'flex';
+}
+
+function closeLearnerWizard() {
+  document.getElementById('learner-wizard-overlay').style.display = 'none';
+  window.learnerWizardStudentId = null;
+  window.learnerWizardCardIds = [];
+}
+
+function addWizardCardsByCategory(category) {
+  var student = A.findStudent(state, window.learnerWizardStudentId);
+  if (!student) { closeLearnerWizard(); return; }
+  var templates = A.getStarterTemplatesByCategory(state, student.gradeBand, category);
+  var cards = A.addStarterCardsBulk(state, templates.map(function (t) { return t.id; }), student.id);
+  window.learnerWizardCardIds = window.learnerWizardCardIds.concat(cards.map(function (c) { return c.id; }));
+  render();
+  markDirtyAndSave();
+  goToWizardRhythmStep();
+}
+
+function addWizardLightStarterSet() {
+  var student = A.findStudent(state, window.learnerWizardStudentId);
+  if (!student) { closeLearnerWizard(); return; }
+  var core = A.getStarterTemplatesByCategory(state, student.gradeBand, 'core').slice(0, 3);
+  var riches = A.getStarterTemplatesByCategory(state, student.gradeBand, 'riches').slice(0, 1);
+  var ids = core.concat(riches).map(function (t) { return t.id; });
+  var cards = A.addStarterCardsBulk(state, ids, student.id);
+  window.learnerWizardCardIds = window.learnerWizardCardIds.concat(cards.map(function (c) { return c.id; }));
+  render();
+  markDirtyAndSave();
+  goToWizardRhythmStep();
+}
+
+function goToWizardRhythmStep() {
+  document.getElementById('wizard-step-cards').style.display = 'none';
+  document.getElementById('wizard-step-rhythm').style.display = 'block';
+}
+
+function useWizardRhythmPreset() {
+  var student = A.findStudent(state, window.learnerWizardStudentId);
+  if (student && window.learnerWizardCardIds.length) {
+    var presets = R.getRhythmPresetsForForm(student.gradeBand);
+    var preset = presets.find(function (p) { return p.id === 'preset_' + student.gradeBand; }) || presets[0];
+    if (preset) A.placeStarterCardsWithRhythmPreset(state, preset.id, window.learnerWizardCardIds);
+  }
+  render();
+  markDirtyAndSave();
+  closeLearnerWizard();
+}
+
+document.getElementById('wiz-add-core').addEventListener('click', function () { addWizardCardsByCategory('core'); });
+document.getElementById('wiz-add-riches').addEventListener('click', function () { addWizardCardsByCategory('riches'); });
+document.getElementById('wiz-add-skills').addEventListener('click', function () { addWizardCardsByCategory('skills'); });
+document.getElementById('wiz-add-light').addEventListener('click', addWizardLightStarterSet);
+document.getElementById('wiz-skip-cards').addEventListener('click', closeLearnerWizard);
+document.getElementById('wiz-use-rhythm').addEventListener('click', useWizardRhythmPreset);
+document.getElementById('wiz-map-only').addEventListener('click', closeLearnerWizard);
+document.getElementById('wiz-place-later').addEventListener('click', closeLearnerWizard);
+document.getElementById('learner-wizard-overlay').addEventListener('click', function (e) {
+  if (e.target.id === 'learner-wizard-overlay') closeLearnerWizard();
+});
 
 function setLearnerActiveUI(studentId, active) {
   A.setStudentActive(state, studentId, active);

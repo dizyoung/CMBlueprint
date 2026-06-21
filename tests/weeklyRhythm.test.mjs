@@ -254,6 +254,30 @@ test('rhythm edits remain plain JSON-serializable', () => {
   assert.deepEqual(back, rhythm);
 });
 
+test('RHYTHM_PRESETS are form-aware and PNEU-inspired, not exact schedules', () => {
+  assert.ok(R.RHYTHM_PRESETS.length >= 5);
+  const form1 = R.findRhythmPreset('preset_form1');
+  const form2 = R.findRhythmPreset('preset_form2');
+  const form3 = R.findRhythmPreset('preset_form3');
+  assert.ok(form1.suggestedLessonMinutes < form2.suggestedLessonMinutes);
+  assert.ok(form2.suggestedLessonMinutes < form3.suggestedLessonMinutes);
+});
+
+test('getRhythmPresetsForForm returns presets that apply to a given form', () => {
+  const form1Presets = R.getRhythmPresetsForForm('form1');
+  assert.ok(form1Presets.some((p) => p.id === 'preset_form1'));
+  assert.ok(!form1Presets.some((p) => p.id === 'preset_form3'));
+  assert.ok(form1Presets.some((p) => p.id === 'preset_mixed_family'));
+});
+
+test('placeCardsUsingRhythmPreset places given cards as card-referencing rhythm assignments', () => {
+  const rhythm = R.buildSampleWeeklyRhythm();
+  const created = R.placeCardsUsingRhythmPreset(rhythm, 'preset_form1', ['card_a', 'card_b'], { card_a: 'Card A' });
+  assert.equal(created.length, 2);
+  created.forEach((a) => assert.equal(a.assignmentType, 'card'));
+  assert.equal(rhythm.assignments.some((a) => a.referencedId === 'card_a' && a.label === 'Card A'), true);
+});
+
 let passed = 0;
 let failed = 0;
 for (const t of tests) {

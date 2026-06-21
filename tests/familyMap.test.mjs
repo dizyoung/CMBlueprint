@@ -444,6 +444,58 @@ test('module exposes no browser globals (document/window/localStorage untouched)
 });
 
 // ---------------------------------------------------------------------------
+// Phase 1D.9 — broad CM defaults, form-aware starter library, lesson guidance
+// ---------------------------------------------------------------------------
+test('SUBJECT_LIBRARY is broader than DEFAULT_VISIBLE_SUBJECT_COLUMNS', () => {
+  assert.ok(M.SUBJECT_LIBRARY.length > M.DEFAULT_VISIBLE_SUBJECT_COLUMNS.length);
+});
+
+test('DEFAULT_VISIBLE_SUBJECT_COLUMNS stays a manageable, broad set of columns', () => {
+  assert.ok(M.DEFAULT_VISIBLE_SUBJECT_COLUMNS.length <= 12);
+  const ids = M.DEFAULT_VISIBLE_SUBJECT_COLUMNS.map((c) => c.id);
+  ['bible', 'language-arts', 'literature', 'history', 'geography', 'science', 'math', 'beauty', 'arts', 'pe', 'languages', 'custom']
+    .forEach((id) => assert.ok(ids.includes(id), 'missing column: ' + id));
+});
+
+test('every SUBJECT_LIBRARY entry rolls up to a visible column', () => {
+  const visibleIds = M.DEFAULT_VISIBLE_SUBJECT_COLUMNS.map((c) => c.id);
+  M.SUBJECT_LIBRARY.forEach((entry) => assert.ok(visibleIds.includes(entry.column), entry.id + ' -> ' + entry.column));
+});
+
+test('Hymn/Folk Song/Picture Study/Composer Study roll up to Beauty/Riches', () => {
+  ['hymn', 'folk-song', 'picture-study', 'composer-study'].forEach((id) => {
+    const entry = M.SUBJECT_LIBRARY.find((e) => e.id === id);
+    assert.equal(entry.column, 'beauty');
+  });
+});
+
+test('lessonLengthGuidance gives parent-facing phrases, not rigid blocks', () => {
+  assert.equal(M.lessonLengthGuidance('form1', 10).label, 'Usually short for this form');
+  assert.equal(M.lessonLengthGuidance('form1', 20).isLong, false);
+  const long = M.lessonLengthGuidance('form1', 35);
+  assert.ok(long.isLong);
+  assert.match(long.label, /may be long for this form/);
+});
+
+test('defaultStarterTemplateLibrary is form-aware and categorized', () => {
+  const lib = M.defaultStarterTemplateLibrary();
+  assert.ok(lib.length > 10);
+  lib.forEach((t) => {
+    assert.ok(['core', 'riches', 'skills', 'other'].includes(t.category));
+  });
+  const plutarch = lib.find((t) => t.id === 'tpl_plutarch');
+  assert.deepEqual(plutarch.ageStageApplicability, ['form3']);
+  assert.ok(plutarch.tags.includes('older-form-optional'));
+});
+
+test('defaultStarterTemplateLibrary includes core, riches, and skills categories', () => {
+  const lib = M.defaultStarterTemplateLibrary();
+  ['core', 'riches', 'skills'].forEach((cat) => {
+    assert.ok(lib.some((t) => t.category === cat), 'missing category: ' + cat);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
 let passed = 0, failed = 0;

@@ -16,7 +16,7 @@ test('sample state builds rows, columns, and card groupings as expected', () => 
   ]);
 
   const { grid, columns } = A.buildMapGrid(state);
-  assert.equal(columns.length, 5);
+  assert.equal(columns.length, 12);
 
   const togetherRow = grid.find((g) => g.row.id === 'together');
   assert.ok(togetherRow.cells.bible.some((c) => c.id === 'card_bible'));
@@ -371,6 +371,48 @@ test('moveCardToRow moves a card to another audience/row and updates participant
 
   A.moveCardToRow(state, 'card_mapquiz', 'together');
   assert.equal(A.findCard(state, 'card_mapquiz').audience, 'together');
+});
+
+test('getStarterTemplatesForForm filters by gradeBand without exploding columns', () => {
+  const state = A.buildSampleAppState();
+  const form1Templates = A.getStarterTemplatesForForm(state, 'form1');
+  assert.ok(form1Templates.length > 0);
+  assert.ok(!form1Templates.some((t) => t.id === 'tpl_plutarch'));
+  const form3Templates = A.getStarterTemplatesForForm(state, 'form3');
+  assert.ok(form3Templates.some((t) => t.id === 'tpl_plutarch'));
+});
+
+test('getStarterTemplatesByCategory groups starter templates for the onboarding wizard', () => {
+  const state = A.buildSampleAppState();
+  const riches = A.getStarterTemplatesByCategory(state, 'form1', 'riches');
+  assert.ok(riches.length > 0);
+  riches.forEach((t) => assert.equal(t.category, 'riches'));
+});
+
+test('addStarterCardsBulk adds cards for a learner without adding new visible columns', () => {
+  const state = A.buildSampleAppState();
+  const before = state.subjectColumns.length;
+  const cards = A.addStarterCardsBulk(state, ['tpl_bible', 'tpl_math'], 'kayla');
+  assert.equal(cards.length, 2);
+  assert.equal(state.subjectColumns.length, before);
+  const mathCard = cards.find((c) => c.subjectColumnId === 'math');
+  assert.equal(mathCard.audience, 'individual');
+  assert.deepEqual(mathCard.participantIds, ['kayla']);
+});
+
+test('starter cards can be added to the map without being placed in the weekly rhythm', () => {
+  const state = A.buildSampleAppState();
+  const cards = A.addStarterCardsBulk(state, ['tpl_hymn'], 'charis');
+  assert.equal(A.cardHasRhythmPlacement(state, cards[0].id), false);
+});
+
+test('placeStarterCardsWithRhythmPreset places selected cards using a PNEU-inspired preset', () => {
+  const state = A.buildSampleAppState();
+  const cards = A.addStarterCardsBulk(state, ['tpl_hymn', 'tpl_handicraft'], 'charis');
+  const cardIds = cards.map((c) => c.id);
+  const created = A.placeStarterCardsWithRhythmPreset(state, 'preset_form1', cardIds);
+  assert.equal(created.length, 2);
+  cardIds.forEach((id) => assert.equal(A.cardHasRhythmPlacement(state, id), true));
 });
 
 let passed = 0;
