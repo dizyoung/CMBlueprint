@@ -18,20 +18,22 @@ export function createSaveBar(opts) {
   var saveTimer = null;
   var statusEl = null;
 
-  function setStatus(text) {
-    if (statusEl) statusEl.textContent = text;
+  function setStatus(text, kind) {
+    if (!statusEl) return;
+    statusEl.textContent = text;
+    statusEl.className = 'save-status' + (kind ? ' status-' + kind : '');
   }
 
   function scheduleSave(state) {
-    setStatus('Unsaved changes…');
+    setStatus('Unsaved changes…', 'unsaved');
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(function () { saveNow(state); }, AUTOSAVE_DEBOUNCE_MS);
   }
 
   function saveNow(state) {
-    setStatus('Saving…');
+    setStatus('Saving…', 'unsaved');
     var result = saveAppStateToStorage(state);
-    setStatus(result.ok ? 'Saved in this browser' : 'Save failed — ' + result.error);
+    setStatus(result.ok ? 'Saved in this browser' : 'Save failed — ' + result.error, result.ok ? 'saved' : 'failed');
   }
 
   function exportBackup(state) {

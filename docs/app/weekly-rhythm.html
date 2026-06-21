@@ -9,14 +9,23 @@
   table.rhythm th, table.rhythm td { border: 1px solid var(--border); vertical-align: top; padding: 10px; font-size: 12px; }
   table.rhythm thead th { background: var(--navy-story); color: var(--milk-white); text-align: center; padding: 10px 6px; font-size: 13px; font-weight: 600; }
   table.rhythm th.row-head { background: var(--field-mint); color: var(--navy-story); text-align: left; font-weight: 600; width: 150px; font-size: 13px; }
-  table.rhythm td.dim-cell .rasn { opacity: 0.3; }
+  table.rhythm td.dim-cell .rasn { opacity: 0.28; }
 
-  .rasn { border-radius: 8px; padding: 7px 9px; margin-bottom: 6px; font-size: 12px; border-left: 4px solid var(--lagoon-light); background: var(--field-mint); cursor: pointer; }
+  .rasn { border-radius: 8px; padding: 7px 9px; margin-bottom: 6px; font-size: 12px; border-left: 4px solid var(--lagoon-light); background: var(--field-mint); cursor: pointer; box-shadow: 0 1px 2px rgba(9,69,78,0.04); }
   .rasn:hover { background: #e6f3f3; }
   .rasn:last-child { margin-bottom: 0; }
   .rasn .tag { display: block; font-size: 10px; color: var(--muted); margin-top: 2px; }
   .rasn.allday { border-left-color: var(--navy-story); background: #eaf0f8; }
   .rasn.flexible { border-style: dashed; }
+  .rasn.type-together { border-left-color: var(--navy-story); }
+  .rasn.type-student { border-left-color: var(--lagoon-light); }
+  .rasn.type-group { border-left-color: var(--wonder-marine); }
+  .rasn.type-coop { border-left-color: var(--poppy); }
+  .rasn.type-custom { border-left-color: var(--sunshine); }
+
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; margin-bottom: 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 
   .add-cell-btn {
     display: block; width: 100%; margin-top: 4px; font-size: 11px; padding: 6px;
@@ -26,7 +35,7 @@
   .add-cell-btn:hover { opacity: 1; background: var(--field-mint); color: var(--wonder-marine); border-color: var(--lagoon-light); }
 
   @media print {
-    .app-header, .banner, .toolbar, .save-area, .add-cell-btn { display: none !important; }
+    .app-header, .banner, .toolbar, .save-area, .add-cell-btn, .legend { display: none !important; }
     @page { size: landscape; margin: 0.4in; }
   }
 </style>
@@ -51,6 +60,14 @@
     <select id="lens-select"></select>
   </label>
   <button class="accent" onclick="window.print();">Print weekly rhythm</button>
+</div>
+
+<div class="legend">
+  <span><span class="dot" style="background:var(--navy-story);"></span>Together</span>
+  <span><span class="dot" style="background:var(--lagoon-light);"></span>Student</span>
+  <span><span class="dot" style="background:var(--wonder-marine);"></span>Group</span>
+  <span><span class="dot" style="background:var(--poppy);"></span>Co-op / external</span>
+  <span><span class="dot" style="background:var(--sunshine);"></span>Custom label</span>
 </div>
 
 <table class="rhythm" id="rhythm-table">
@@ -111,17 +128,18 @@ var lens = { type: 'all' };
 window.onLensChange = onLensChange;
 
 var saveBar = createSaveBar({
-  onStateReplaced: function (newState) {
+  onStateReplaced: function (newState, source) {
     appState = newState;
     rhythm = appState.weeklyRhythm;
     context = A.rhythmContext(appState);
     populateLensSelect();
     render();
+    saveBar.setStatus(source === 'sample' ? 'Using sample plan' : 'Saved in this browser', source === 'sample' ? 'sample' : 'saved');
   }
 });
 saveBar.mountControls(document.getElementById('save-bar'));
 saveBar.wire(function () { return appState; });
-saveBar.setStatus(initial.source === 'saved' ? 'Saved in this browser' : 'Using sample plan');
+saveBar.setStatus(initial.source === 'saved' ? 'Saved in this browser' : 'Using sample plan', initial.source === 'saved' ? 'saved' : 'sample');
 if (initial.source === 'reset-after-invalid') {
   saveBar.saveNow(appState);
   window.alert('Your saved plan could not be opened, so the sample plan was loaded instead.');
@@ -274,7 +292,8 @@ function assignmentMatchesLens(a) {
 }
 
 function assignmentHTML(a) {
-  var cls = 'rasn' + (a.isAllDay ? ' allday' : '') + (a.isFlexible ? ' flexible' : '');
+  var typeCls = ['together', 'student', 'group', 'coop', 'custom'].indexOf(a.assignmentType) > -1 ? ' type-' + a.assignmentType : ' type-custom';
+  var cls = 'rasn' + typeCls + (a.isAllDay ? ' allday' : '') + (a.isFlexible ? ' flexible' : '');
   var tags = [];
   if (a.isAllDay) tags.push('all day');
   if (a.isFlexible) tags.push('flexible');
@@ -341,7 +360,7 @@ function renderReviewPanel() {
   }
   var placement = cardsNoPlacement.length + loopsNoPlacement.length + seqNoPlacement.length;
   if (placement) {
-    html += '<div class="notice"><strong>Still need a weekly home (' + placement + ')</strong><ul>';
+    html += '<div class="notice"><strong>Not placed in weekly rhythm yet (' + placement + ')</strong><ul>';
     cardsNoPlacement.forEach(function (c) { html += '<li>' + escapeHtml(c.title) + '</li>'; });
     loopsNoPlacement.forEach(function (l) { html += '<li>' + escapeHtml(l.title || l.id) + ' (loop)</li>'; });
     seqNoPlacement.forEach(function (s) { html += '<li>' + escapeHtml(s.title || s.id) + ' (sequence)</li>'; });

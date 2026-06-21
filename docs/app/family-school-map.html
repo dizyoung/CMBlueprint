@@ -11,12 +11,46 @@
   table.map th.row-head { background: var(--field-mint); color: var(--navy-story); text-align: left; font-weight: 600; width: 140px; font-size: 14px; }
   table.map td:empty { background: repeating-linear-gradient(45deg, var(--milk-white), var(--milk-white) 10px, #fafdfd 10px, #fafdfd 20px); }
 
-  .chip { border: 1px solid var(--border); border-left: 4px solid var(--lagoon-light); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; background: var(--milk-white); box-shadow: 0 1px 2px rgba(9,69,78,0.04); }
-  .chip:hover { background: var(--field-mint); border-color: var(--lagoon-light); }
+  .chip { border: 1px solid var(--border); border-left: 4px solid var(--lagoon-light); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; background: var(--milk-white); box-shadow: 0 1px 2px rgba(9,69,78,0.04); transition: opacity 0.15s, box-shadow 0.15s; }
+  .chip:hover { background: var(--field-mint); }
   .chip:last-child { margin-bottom: 0; }
-  .chip.lens-dim { opacity: 0.3; }
-  .chip-title { font-weight: 600; font-size: 14px; color: var(--ink); line-height: 1.3; }
+  .chip.lens-dim { opacity: 0.28; }
+  .chip.lens-match { box-shadow: 0 0 0 2px var(--wonder-marine) inset; }
+  .chip.filtered-out { display: none; }
+  .chip-title { font-weight: 600; font-size: 14px; color: var(--ink); line-height: 1.3; display: flex; align-items: center; gap: 6px; }
   .chip-sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  body.compact .chip { padding: 6px 8px; }
+  body.compact .chip-sub, body.compact .participants-row { display: none; }
+
+  .status-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+  .status-dot.dot-book { background: #4a9b5e; }
+  .status-dot.dot-needbook { background: #d9534f; }
+  .status-dot.dot-practice { background: #999; }
+  .status-dot.dot-coop { background: #5c8fc9; }
+  .status-dot.dot-optional { background: #c9a45c; }
+  .status-dot.dot-unplaced { background: #d9534f; border: 1px dashed #a33; }
+
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; margin-bottom: 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+
+  .filters-row { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .filter-chip { font-size: 12px; padding: 5px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--milk-white); cursor: pointer; color: var(--muted); }
+  .filter-chip.active { background: var(--wonder-marine); color: var(--milk-white); border-color: var(--wonder-marine); }
+
+  .participants-row { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+  .p-dot { width: 18px; height: 18px; border-radius: 50%; font-size: 9px; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
+
+  .density-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .density-toggle button { border: none; background: var(--milk-white); padding: 6px 12px; font-size: 12px; cursor: pointer; }
+  .density-toggle button.active { background: var(--wonder-marine); color: var(--milk-white); }
+
+  .starter-panel { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; background: var(--field-mint); display: none; }
+  .starter-panel.show { display: block; }
+  .starter-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .starter-row:last-child { border-bottom: none; }
+  .starter-row .starter-meta { font-size: 12px; color: var(--ink); }
+  .starter-row .starter-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .starter-row button { flex-shrink: 0; }
 
   .loop-row, .seq-row { padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
   .loop-row:last-child, .seq-row:last-child { border-bottom: none; }
@@ -27,14 +61,14 @@
 
   .res-group { margin-bottom: 18px; }
   .res-group h3 { font-size: 12px; margin: 0 0 8px; letter-spacing: 0.3px; color: var(--wonder-marine); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
-  .res-card { border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; margin-bottom: 8px; font-size: 12px; background: var(--milk-white); }
+  .res-card { border: 1px solid var(--border); border-left: 4px solid var(--lagoon-light); border-radius: 8px; padding: 9px 12px; margin-bottom: 8px; font-size: 12px; background: var(--milk-white); }
   .res-card-title { font-weight: 600; display: flex; align-items: center; gap: 8px; font-size: 13px; }
   .res-status { font-size: 11px; border-radius: 7px; padding: 4px 8px; margin-left: auto; background: var(--field-mint); border: 1px solid var(--border); }
   .res-use { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .res-dupe-note { font-size: 11px; font-weight: 400; color: var(--muted); font-style: italic; }
 
   @media print {
-    .app-header, .banner, .toolbar, .save-area, .overlay { display: none !important; }
+    .app-header, .banner, .toolbar, .save-area, .overlay, .legend, .filters-row, .starter-panel { display: none !important; }
     @page { size: landscape; margin: 0.4in; }
     @page resources { size: portrait; margin: 0.5in; }
     body.print-resources table.map, body.print-resources #loops-panel, body.print-resources #sequences-panel { display: none !important; }
@@ -62,13 +96,30 @@
   <label>View for
     <select id="lens-select"></select>
   </label>
+  <div class="density-toggle" id="density-toggle">
+    <button type="button" data-density="detailed" class="active">Detailed</button>
+    <button type="button" data-density="compact">Compact</button>
+  </div>
   <button onclick="render()">Refresh</button>
   <button class="accent" onclick="document.body.classList.remove('print-resources'); window.print();">Print map</button>
   <button class="accent" onclick="document.body.classList.add('print-resources'); window.print();">Print Book &amp; Resource List</button>
-  <label>Add from starter card
-    <select id="starter-select"></select>
-  </label>
-  <button onclick="addStarterCard()">Add</button>
+  <button type="button" id="starter-toggle-btn">Add from starter card</button>
+</div>
+
+<div class="legend">
+  <span><span class="status-dot dot-book"></span>Have resource</span>
+  <span><span class="status-dot dot-needbook"></span>Need resource</span>
+  <span><span class="status-dot dot-practice"></span>Practice / no resource</span>
+  <span><span class="status-dot dot-coop"></span>Co-op / outside</span>
+  <span><span class="status-dot dot-optional"></span>Optional</span>
+  <span><span class="status-dot dot-unplaced"></span>Needs placement</span>
+</div>
+
+<div class="filters-row" id="filters-row"></div>
+
+<div class="starter-panel" id="starter-panel">
+  <p class="sub" style="margin:0 0 8px;">Add a starter card to the map. You can edit it afterward.</p>
+  <div id="starter-list"></div>
 </div>
 
 <div id="review-panel"></div>
@@ -177,12 +228,12 @@ var saveBar = createSaveBar({
     populateSubjectSelect();
     populateStarterSelect();
     render();
-    saveBar.setStatus(source === 'sample' ? 'Using sample plan' : 'Saved in this browser');
+    saveBar.setStatus(source === 'sample' ? 'Using sample plan' : 'Saved in this browser', source === 'sample' ? 'sample' : 'saved');
   }
 });
 saveBar.mountControls(document.getElementById('save-bar'));
 saveBar.wire(function () { return window.state; });
-saveBar.setStatus(initial.source === 'saved' ? 'Saved in this browser' : 'Using sample plan');
+saveBar.setStatus(initial.source === 'saved' ? 'Saved in this browser' : 'Using sample plan', initial.source === 'saved' ? 'saved' : 'sample');
 if (initial.source === 'reset-after-invalid') {
   saveBar.saveNow(window.state);
   window.alert('Your saved plan could not be opened, so the sample plan was loaded instead.');
@@ -212,18 +263,47 @@ function onLensChange() {
   render();
 }
 
+var FILTER_AUDIENCES = [
+  { value: 'together', label: 'Together' },
+  { value: 'group', label: 'Group' },
+  { value: 'individual', label: 'Individual' },
+  { value: 'coop-outside', label: 'Co-op' },
+  { value: 'optional', label: 'Optional' },
+  { value: 'unplaced', label: 'Needs placement' }
+];
+var activeFilters = new Set();
+
+function cardStatusDot(card) {
+  if (card.audience === 'coop-outside') return 'dot-coop';
+  if (card.audience === 'optional') return 'dot-optional';
+  if (card.audience === 'unplaced') return 'dot-unplaced';
+  var useIds = card.resourceUseIds || [];
+  if (!useIds.length) return 'dot-practice';
+  var needsSomething = useIds.some(function (uid) {
+    var use = state.resourceUses.find(function (u) { return u.id === uid; });
+    var res = use ? A.findResource(state, use.resourceId) : null;
+    return res && ['need-to-buy', 'need-to-choose', 'need-library', 'undecided'].indexOf(res.status) > -1;
+  });
+  return needsSomething ? 'dot-needbook' : 'dot-book';
+}
+
 function cardChipHTML(card) {
   var participants = M.resolveParticipants(card, state.students, state.groups);
-  var names = participants.map(function (id) {
-    var s = A.findStudent(state, id);
-    return s ? s.name : id;
-  }).join(', ');
   var matches = A.cardMatchesLens(card, lens, state);
-  var dim = (lens.type !== 'all' && !matches) ? ' lens-dim' : '';
+  var lensCls = lens.type === 'all' ? '' : (matches ? ' lens-match' : ' lens-dim');
+  var filterCls = (activeFilters.size && !activeFilters.has(card.audience)) ? ' filtered-out' : '';
+  var pillsHtml = participants.map(function (id) {
+    var s = A.findStudent(state, id);
+    if (!s) return '';
+    return '<span class="p-dot" style="background:' + s.color + ';" title="' + escapeHtml(s.name) + '">' + escapeHtml(s.initials || s.name.charAt(0)) + '</span>';
+  }).join('');
+  var subject = A.findSubject(state, card.subjectColumnId);
+  var borderStyle = subject ? ' style="border-left-color:' + subject.color + ';"' : '';
   return (
-    '<div class="chip' + dim + '" onclick="openEditor(\'' + card.id + '\')">' +
-      '<div class="chip-title">' + escapeHtml(card.title || '(untitled)') + '</div>' +
-      '<div class="chip-sub">' + escapeHtml(card.audience) + (names ? ' · ' + escapeHtml(names) : '') + '</div>' +
+    '<div class="chip' + lensCls + filterCls + '"' + borderStyle + ' onclick="openEditor(\'' + card.id + '\')">' +
+      '<div class="chip-title"><span class="status-dot ' + cardStatusDot(card) + '"></span>' + escapeHtml(card.title || '(untitled)') + '</div>' +
+      '<div class="chip-sub">' + escapeHtml(card.audience) + '</div>' +
+      '<div class="participants-row">' + pillsHtml + '</div>' +
     '</div>'
   );
 }
@@ -297,7 +377,11 @@ function renderResources() {
     resources.forEach(function (r) {
       var dupeNote = titleCounts[(r.title || '').trim().toLowerCase()] > 1
         ? ' <span class="res-dupe-note">Same title, separate uses</span>' : '';
-      html += '<div class="res-card"><div class="res-card-title">' + escapeHtml(r.title) + dupeNote +
+      var firstSubject = r.uses.length ? A.findSubject(state, r.uses[0].subjectColumnId) : null;
+      var borderStyle = firstSubject ? ' style="border-left-color:' + firstSubject.color + ';"' : '';
+      html += '<div class="res-card"' + borderStyle + '><div class="res-card-title">' +
+        '<span class="status-dot ' + (['need-to-buy', 'need-to-choose', 'need-library', 'undecided'].indexOf(r.status) > -1 ? 'dot-needbook' : (r.status === 'no-resource' ? 'dot-practice' : 'dot-book')) + '"></span>' +
+        escapeHtml(r.title) + dupeNote +
         '<select class="res-status" onchange="window.setResourceStatusUI(\'' + r.id + '\', this.value)">' +
         M.RESOURCE_STATUSES.map(function (st) {
           return '<option value="' + st + '"' + (st === r.status ? ' selected' : '') + '>' + escapeHtml(M.RESOURCE_STATUS_LABELS[st] || st) + '</option>';
@@ -374,18 +458,43 @@ function advanceSequenceUI(sequenceId) { A.advanceSequenceInState(state, sequenc
 function setResourceStatusUI(resourceId, status) { A.setResourceStatus(state, resourceId, status); render(); markDirtyAndSave(); }
 
 function populateStarterSelect() {
-  var sel = document.getElementById('starter-select');
-  sel.innerHTML = state.starterTemplates.map(function (t) {
-    return '<option value="' + t.id + '">' + escapeHtml(t.title) + '</option>';
-  }).join('');
+  var list = document.getElementById('starter-list');
+  list.innerHTML = state.starterTemplates.map(function (t) {
+    var subject = A.findSubject(state, t.subjectColumnId);
+    var descBits = [];
+    descBits.push(subject ? subject.label : 'No subject');
+    descBits.push(t.suggestedAudience);
+    descBits.push(t.suggestedResourceExpectation === 'none' ? 'no resource expected' : t.suggestedResourceExpectation + ' expected');
+    return '<div class="starter-row">' +
+      '<div class="starter-meta">' + escapeHtml(t.title) +
+        '<div class="starter-desc">' + escapeHtml(descBits.join(' · ')) + '</div>' +
+      '</div>' +
+      '<button onclick="addStarterCard(\'' + t.id + '\')">Add</button>' +
+    '</div>';
+  }).join('') || '<p style="color:var(--muted);font-size:13px;">No starter cards yet.</p>';
 }
 
-function addStarterCard() {
-  var templateId = document.getElementById('starter-select').value;
+function addStarterCard(templateId) {
   if (!templateId) return;
   A.addCardFromTemplate(state, templateId);
   render();
   markDirtyAndSave();
+}
+
+function renderFilterChips() {
+  var row = document.getElementById('filters-row');
+  row.innerHTML = FILTER_AUDIENCES.map(function (f) {
+    var active = activeFilters.has(f.value) ? ' active' : '';
+    return '<button type="button" class="filter-chip' + active + '" data-audience="' + f.value + '">' + escapeHtml(f.label) + '</button>';
+  }).join('');
+  row.querySelectorAll('.filter-chip').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var v = btn.getAttribute('data-audience');
+      if (activeFilters.has(v)) activeFilters.delete(v); else activeFilters.add(v);
+      renderFilterChips();
+      renderMap();
+    });
+  });
 }
 
 function renderReviewPanel() {
@@ -403,12 +512,24 @@ function renderReviewPanel() {
 }
 
 function render() {
+  renderFilterChips();
   renderMap();
   renderLoops();
   renderSequences();
   renderResources();
   renderReviewPanel();
 }
+
+document.getElementById('density-toggle').addEventListener('click', function (e) {
+  var btn = e.target.closest('button[data-density]');
+  if (!btn) return;
+  document.querySelectorAll('#density-toggle button').forEach(function (b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  document.body.classList.toggle('compact', btn.getAttribute('data-density') === 'compact');
+});
+document.getElementById('starter-toggle-btn').addEventListener('click', function () {
+  document.getElementById('starter-panel').classList.toggle('show');
+});
 
 populateLensSelect();
 populateSubjectSelect();
