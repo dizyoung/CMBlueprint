@@ -82,13 +82,19 @@ export function createSaveBar(opts) {
   }
 
   function mountControls(container) {
+    container.className = 'save-area';
     container.innerHTML =
-      '<span id="save-status" style="font-size:11px;color:#777;margin-right:8px;"></span>' +
-      '<button id="save-now-btn" type="button">Save now</button>' +
-      '<button id="export-btn" type="button">Export Backup</button>' +
-      '<label style="font-size:12px;display:inline-flex;align-items:center;gap:6px;">Import Backup' +
-      '<input id="import-input" type="file" accept="application/json" style="font-size:11px;"></label>' +
-      '<button id="reset-btn" type="button">Reset to sample plan</button>';
+      '<div class="save-row">' +
+        '<span id="save-status" class="save-status"></span>' +
+        '<div class="save-buttons">' +
+          '<button id="save-now-btn" type="button">Save now</button>' +
+          '<button id="export-btn" type="button" class="accent">Export Backup</button>' +
+          '<label style="display:inline-flex;align-items:center;gap:6px;">Import Backup' +
+          '<input id="import-input" type="file" accept="application/json" style="font-size:12px;"></label>' +
+          '<button id="reset-btn" type="button" class="quiet">Reset to sample plan</button>' +
+        '</div>' +
+      '</div>' +
+      '<p class="save-explain">Saved in this browser as you go. Export a backup if you want to protect your work or move it to another device.</p>';
     statusEl = container.querySelector('#save-status');
   }
 

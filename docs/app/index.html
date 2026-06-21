@@ -2,25 +2,48 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Family School Map — App Preview</title>
-<style>
-  body { font-family: -apple-system, Segoe UI, sans-serif; margin: 0; padding: 32px; background: #f7f7f5; color: #2c2c2c; }
-  h1 { font-size: 22px; margin: 0 0 8px; }
-  p.sub { color: #777; font-size: 13px; margin: 0 0 24px; }
-  ul { list-style: none; padding: 0; max-width: 480px; }
-  li { margin-bottom: 10px; }
-  a.card { display: block; border: 1px solid #d8d8d8; border-radius: 8px; padding: 14px 16px; background: #fff; text-decoration: none; color: #2c2c2c; }
-  a.card strong { display: block; font-size: 14px; margin-bottom: 2px; }
-  a.card span { font-size: 12px; color: #777; }
-</style>
+<title>Family School Map — Home</title>
+<link rel="stylesheet" href="./shared.css">
 </head>
 <body>
-<h1>Family School Map — App Preview</h1>
-<p class="sub">In-memory preview pages, wired to the same shared <code>AppState</code> (no persistence yet — refreshing resets state).</p>
-<ul>
-  <li><a class="card" href="./family-school-map.html"><strong>Family School Map</strong><span>What are we doing, and who is it for? Also includes loops, sequences, and the Book &amp; Resource List.</span></a></li>
-  <li><a class="card" href="./weekly-rhythm.html"><strong>Weekly Rhythm Builder</strong><span>When do the big buckets happen, in broad daily strokes?</span></a></li>
-  <li><a class="card" href="../prototypes/family-school-map-prototype.html"><strong>Original static prototype</strong><span>Unmodified reference prototype, kept separate from the in-memory app.</span></a></li>
-</ul>
+<div id="app-header"></div>
+
+<div class="page-wrap">
+  <h1 class="page-title">Family School Map</h1>
+  <p class="sub">A calm place to see what your family is doing, who it's for, and when the big pieces of the week happen.</p>
+
+  <div class="banner">
+    <strong>Beta.</strong> Your plan saves in this browser as you go. Use <strong>Export Backup</strong> any time you want to
+    protect your work or move it to another device. <strong>Today</strong>, <strong>Term Plan</strong>, <strong>Progress</strong>,
+    accounts, and cloud sync are not built yet — this is the map and the weekly rhythm only.
+  </div>
+
+  <h2 class="section-title">Choose a page</h2>
+  <ul style="list-style:none;padding:0;max-width:560px;display:flex;flex-direction:column;gap:12px;">
+    <li>
+      <a class="panel" style="display:block;text-decoration:none;color:inherit;" href="./family-school-map.html">
+        <strong style="display:block;font-size:15px;color:var(--navy-story);margin-bottom:4px;">Family School Map</strong>
+        <span style="font-size:13px;color:var(--muted);">What are we doing, and who is it for? Also includes Loops, Sequences, and the Book &amp; Resource List.</span>
+      </a>
+    </li>
+    <li>
+      <a class="panel" style="display:block;text-decoration:none;color:inherit;" href="./weekly-rhythm.html">
+        <strong style="display:block;font-size:15px;color:var(--navy-story);margin-bottom:4px;">Weekly Rhythm Builder</strong>
+        <span style="font-size:13px;color:var(--muted);">When do the big buckets happen, in broad daily strokes? Not Today, not a minute-by-minute schedule.</span>
+      </a>
+    </li>
+    <li>
+      <a class="panel" style="display:block;text-decoration:none;color:inherit;opacity:0.7;" href="../prototypes/family-school-map-prototype.html">
+        <strong style="display:block;font-size:14px;color:var(--muted);margin-bottom:4px;">Original static prototype (reference only)</strong>
+        <span style="font-size:12px;color:var(--muted);">An earlier, unmodified reference version — kept separate from the working app.</span>
+      </a>
+    </li>
+  </ul>
+</div>
+
+<script type="module">
+import { appHeaderHTML } from './nav.mjs';
+document.getElementById('app-header').outerHTML = appHeaderHTML('home');
+</script>
 </body>
 </html>

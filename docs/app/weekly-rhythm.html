@@ -2,67 +2,51 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Weekly Rhythm Builder — Phase 1A.5 (wired to real in-memory state)</title>
+<title>Weekly Rhythm — Family School Map</title>
+<link rel="stylesheet" href="./shared.css">
 <style>
-  :root { --border: #d8d8d8; --ink: #2c2c2c; --muted: #777; }
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, Segoe UI, sans-serif; margin: 0; padding: 20px; background: #f7f7f5; color: var(--ink); }
-  .banner { background: #e3f3e6; border: 1px solid #8fcf9e; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  .sub { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
-
-  .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-  select, input[type=text] { font-size: 12px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; }
-  button { font-size: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }
-  button.accent { border-color: #3568b0; color: #3568b0; }
-
-  table.rhythm { border-collapse: collapse; width: 100%; background: #fff; table-layout: fixed; }
-  table.rhythm th, table.rhythm td { border: 1px solid var(--border); vertical-align: top; padding: 6px; font-size: 11px; }
-  table.rhythm thead th { background: #2c2c2c; color: #fff; text-align: center; padding: 8px 4px; }
-  table.rhythm th.row-head { background: #eee; color: var(--ink); text-align: left; font-weight: 600; width: 140px; }
+  table.rhythm { border-collapse: collapse; width: 100%; background: var(--milk-white); table-layout: fixed; border-radius: 10px; overflow: hidden; }
+  table.rhythm th, table.rhythm td { border: 1px solid var(--border); vertical-align: top; padding: 10px; font-size: 12px; }
+  table.rhythm thead th { background: var(--navy-story); color: var(--milk-white); text-align: center; padding: 10px 6px; font-size: 13px; font-weight: 600; }
+  table.rhythm th.row-head { background: var(--field-mint); color: var(--navy-story); text-align: left; font-weight: 600; width: 150px; font-size: 13px; }
   table.rhythm td.dim-cell .rasn { opacity: 0.3; }
 
-  .rasn { border-radius: 6px; padding: 4px 6px; margin-bottom: 4px; font-size: 11px; border-left: 3px solid #888; background: #f5f5f5; cursor: pointer; position: relative; }
-  .rasn:hover { background: #ececec; }
+  .rasn { border-radius: 8px; padding: 7px 9px; margin-bottom: 6px; font-size: 12px; border-left: 4px solid var(--lagoon-light); background: var(--field-mint); cursor: pointer; }
+  .rasn:hover { background: #e6f3f3; }
   .rasn:last-child { margin-bottom: 0; }
-  .rasn .tag { font-size: 9px; color: var(--muted); margin-left: 4px; }
-  .rasn.allday { border-left-color: #5c8fc9; }
+  .rasn .tag { display: block; font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .rasn.allday { border-left-color: var(--navy-story); background: #eaf0f8; }
   .rasn.flexible { border-style: dashed; }
 
-  .add-cell-btn { display: block; width: 100%; margin-top: 2px; font-size: 10px; padding: 3px; border: 1px dashed var(--border); border-radius: 5px; background: #fafafa; color: var(--muted); cursor: pointer; }
-  .add-cell-btn:hover { background: #f0f0f0; }
-
-  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 50; }
-  .editor { background: #fff; border-radius: 10px; padding: 18px 20px; width: 380px; max-height: 88vh; overflow-y: auto; box-shadow: 0 8px 30px rgba(0,0,0,0.25); }
-  .editor h2 { font-size: 16px; margin: 0 0 12px; }
-  .editor label { display: block; font-size: 12px; font-weight: 600; margin: 10px 0 4px; }
-  .editor input[type=text], .editor select, .editor textarea { width: 100%; font-size: 13px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; }
-  .editor textarea { resize: vertical; min-height: 50px; }
-  .checkrow { display: flex; align-items: center; gap: 6px; margin: 8px 0; font-size: 12px; font-weight: 400; }
-  .editor-actions { display: flex; justify-content: space-between; margin-top: 16px; gap: 8px; }
-  .editor-actions .right { display: flex; gap: 8px; }
-  button.danger { border-color: #c0524a; color: #c0524a; }
+  .add-cell-btn {
+    display: block; width: 100%; margin-top: 4px; font-size: 11px; padding: 6px;
+    border: 1px dashed var(--border); border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .add-cell-btn:hover { background: var(--field-mint); color: var(--wonder-marine); border-color: var(--lagoon-light); }
 
   @media print {
-    .banner, .toolbar, .add-cell-btn { display: none !important; }
+    .app-header, .banner, .toolbar, .save-area, .add-cell-btn { display: none !important; }
     @page { size: landscape; margin: 0.4in; }
   }
 </style>
 </head>
 <body>
+<div id="app-header"></div>
+
+<div class="page-wrap">
 
 <div class="banner">
-  <strong>Beta.</strong> This saves in this browser only. Use <strong>Export Backup</strong> if you want to move or protect your plan.
-  This is the broad "when do the big buckets happen" layer — not Today, not minute-by-minute scheduling.
+  <strong>Beta.</strong> Your plan saves in this browser as you go — see the save area below for backup options.
+  This is the broad "when do the big buckets happen" layer — not Today, not a minute-by-minute schedule.
 </div>
 
-<div class="toolbar" id="save-bar"></div>
+<div id="save-bar"></div>
 
-<h1>Weekly Rhythm</h1>
-<p class="sub">Days across the top, rhythm blocks down the side. Each cell can hold several broad pieces of the day. Click an item to edit it, or use "Add to this block" to add something new.</p>
+<h1 class="page-title">Weekly Rhythm</h1>
+<p class="sub">Days across the top, rhythm blocks down the side. Each box can hold a few broad pieces of the day. Click an item to edit it, or "Add rhythm item" to add something new.</p>
 
 <div class="toolbar">
-  <label style="font-size:12px;display:flex;align-items:center;gap:6px;">Lens
+  <label>View for
     <select id="lens-select"></select>
   </label>
   <button class="accent" onclick="window.print();">Print weekly rhythm</button>
@@ -73,10 +57,12 @@
   <tbody id="rhythm-body"></tbody>
 </table>
 
-<div id="review-panel" style="margin-top:16px;font-size:12px;"></div>
+<div id="review-panel" style="margin-top:18px;"></div>
+
+</div>
 
 <div id="editor-overlay" class="overlay" style="display:none;">
-  <div class="editor">
+  <div class="modal-card">
     <h2 id="editor-title">Edit rhythm item</h2>
 
     <label for="ed-label">Label</label>
@@ -93,11 +79,11 @@
     <label for="ed-notes">Notes</label>
     <textarea id="ed-notes"></textarea>
 
-    <div class="checkrow"><input type="checkbox" id="ed-allday"><label for="ed-allday" style="margin:0;font-weight:400;">All day</label></div>
+    <div class="checkrow"><input type="checkbox" id="ed-allday"><label for="ed-allday" style="margin:0;font-weight:400;">This happens all day</label></div>
     <div class="checkrow"><input type="checkbox" id="ed-flexible"><label for="ed-flexible" style="margin:0;font-weight:400;">Flexible</label></div>
-    <div class="checkrow"><input type="checkbox" id="ed-showprint" checked><label for="ed-showprint" style="margin:0;font-weight:400;">Show on print</label></div>
+    <div class="checkrow"><input type="checkbox" id="ed-showprint" checked><label for="ed-showprint" style="margin:0;font-weight:400;">Show when printing</label></div>
 
-    <div class="editor-actions">
+    <div class="modal-actions">
       <button class="danger" id="ed-delete" style="display:none;">Delete</button>
       <div class="right">
         <button id="ed-cancel">Cancel</button>
@@ -111,6 +97,9 @@
 import * as R from '../../lib/weeklyRhythm.mjs';
 import * as A from '../../lib/familyMapAdapter.mjs';
 import { createSaveBar, loadInitialState } from './saveBar.mjs';
+import { appHeaderHTML } from './nav.mjs';
+
+document.getElementById('app-header').outerHTML = appHeaderHTML('rhythm');
 
 var initial = loadInitialState();
 var appState = initial.state;
@@ -140,7 +129,7 @@ if (initial.source === 'reset-after-invalid') {
 function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
 
 // ---------------------------------------------------------------------------
-// Phase 1D — friendly type labels + reference picker config
+// Friendly type labels + reference picker config
 // ---------------------------------------------------------------------------
 var TYPE_LABELS = {
   custom: 'Custom label',
@@ -169,7 +158,7 @@ var editingState = { dayId: null, blockId: null, assignmentId: null };
 function openEditor(dayId, blockId, assignment) {
   editingState = { dayId: dayId, blockId: blockId, assignmentId: assignment ? assignment.id : null };
 
-  document.getElementById('editor-title').textContent = assignment ? 'Edit rhythm item' : 'Add to this block';
+  document.getElementById('editor-title').textContent = assignment ? 'Edit rhythm item' : 'Add rhythm item';
   document.getElementById('ed-label').value = assignment ? assignment.label : '';
   document.getElementById('ed-notes').value = assignment ? (assignment.notes || '') : '';
   document.getElementById('ed-allday').checked = assignment ? !!assignment.isAllDay : false;
@@ -238,6 +227,8 @@ function saveEditor() {
 
 function deleteEditorAssignment() {
   if (!editingState.assignmentId) return;
+  var confirmed = window.confirm('Remove this item from the weekly rhythm? This will not delete any linked card, loop, or sequence.');
+  if (!confirmed) return;
   A.deleteRhythmAssignmentFromState(appState, editingState.assignmentId);
   saveBar.scheduleSave(appState);
   closeEditor();
@@ -254,9 +245,9 @@ document.getElementById('editor-overlay').addEventListener('click', function (e)
 
 function populateLensSelect() {
   var sel = document.getElementById('lens-select');
-  var html = '<option value="all">View all</option>';
-  appState.students.forEach(function (s) { html += '<option value="student:' + s.id + '">Student: ' + escapeHtml(s.name) + '</option>'; });
-  appState.groups.forEach(function (g) { html += '<option value="group:' + g.id + '">Group: ' + escapeHtml(g.label) + '</option>'; });
+  var html = '<option value="all">Everyone</option>';
+  appState.students.forEach(function (s) { html += '<option value="student:' + s.id + '">' + escapeHtml(s.name) + '</option>'; });
+  appState.groups.forEach(function (g) { html += '<option value="group:' + g.id + '">' + escapeHtml(g.label) + '</option>'; });
   sel.innerHTML = html;
 }
 
@@ -283,8 +274,12 @@ function assignmentMatchesLens(a) {
 
 function assignmentHTML(a) {
   var cls = 'rasn' + (a.isAllDay ? ' allday' : '') + (a.isFlexible ? ' flexible' : '');
-  var tag = a.isAllDay ? 'all day' : (a.assignmentType !== 'custom' ? (TYPE_LABELS[a.assignmentType] || a.assignmentType) : '');
-  return '<div class="' + cls + '" data-asn-id="' + escapeHtml(a.id) + '">' + escapeHtml(a.label) + (tag ? '<span class="tag">' + escapeHtml(tag) + '</span>' : '') + '</div>';
+  var tags = [];
+  if (a.isAllDay) tags.push('all day');
+  if (a.isFlexible) tags.push('flexible');
+  if (!a.isAllDay && a.assignmentType !== 'custom') tags.push(TYPE_LABELS[a.assignmentType] || a.assignmentType);
+  return '<div class="' + cls + '" data-asn-id="' + escapeHtml(a.id) + '">' + escapeHtml(a.label) +
+    (tags.length ? '<span class="tag">' + escapeHtml(tags.join(' · ')) + '</span>' : '') + '</div>';
 }
 
 function render() {
@@ -299,14 +294,14 @@ function render() {
   var body = document.getElementById('rhythm-body');
   var html = '';
   blocks.forEach(function (block) {
-    html += '<tr><th class="row-head" style="border-left:4px solid ' + (block.color || '#888') + ';">' + escapeHtml(block.label) + '</th>';
+    html += '<tr><th class="row-head" style="border-left:4px solid ' + (block.color || 'var(--lagoon-light)') + ';">' + escapeHtml(block.label) + '</th>';
     days.forEach(function (day) {
       var cell = R.getAssignmentsForCell(rhythm, day.id, block.id);
       var anyMatch = cell.some(assignmentMatchesLens);
       var cellCls = (lens.type !== 'all' && !anyMatch) ? ' dim-cell' : '';
       html += '<td class="' + cellCls + '" data-day-id="' + escapeHtml(day.id) + '" data-block-id="' + escapeHtml(block.id) + '">'
         + cell.map(assignmentHTML).join('')
-        + '<button class="add-cell-btn" data-day-id="' + escapeHtml(day.id) + '" data-block-id="' + escapeHtml(block.id) + '">+ Add to this block</button>'
+        + '<button class="add-cell-btn" data-day-id="' + escapeHtml(day.id) + '" data-block-id="' + escapeHtml(block.id) + '">+ Add rhythm item</button>'
         + '</td>';
     });
     html += '</tr>';
@@ -337,19 +332,19 @@ function renderReviewPanel() {
 
   var html = '';
   if (reviewItems.length) {
-    html += '<p><strong>Needs rhythm review (' + reviewItems.length + ')</strong></p><ul>';
+    html += '<div class="notice"><strong>Worth a second look (' + reviewItems.length + ')</strong><ul>';
     reviewItems.forEach(function (a) {
       html += '<li>' + escapeHtml(a.label || a.id) + ' — ' + escapeHtml(a.rhythmReviewReason) + '</li>';
     });
-    html += '</ul>';
+    html += '</ul></div>';
   }
   var placement = cardsNoPlacement.length + loopsNoPlacement.length + seqNoPlacement.length;
   if (placement) {
-    html += '<p><strong>Needs rhythm placement (' + placement + ')</strong></p><ul>';
-    cardsNoPlacement.forEach(function (c) { html += '<li>Card: ' + escapeHtml(c.title) + '</li>'; });
-    loopsNoPlacement.forEach(function (l) { html += '<li>Loop: ' + escapeHtml(l.title || l.id) + '</li>'; });
-    seqNoPlacement.forEach(function (s) { html += '<li>Sequence: ' + escapeHtml(s.title || s.id) + '</li>'; });
-    html += '</ul>';
+    html += '<div class="notice"><strong>Still need a weekly home (' + placement + ')</strong><ul>';
+    cardsNoPlacement.forEach(function (c) { html += '<li>' + escapeHtml(c.title) + '</li>'; });
+    loopsNoPlacement.forEach(function (l) { html += '<li>' + escapeHtml(l.title || l.id) + ' (loop)</li>'; });
+    seqNoPlacement.forEach(function (s) { html += '<li>' + escapeHtml(s.title || s.id) + ' (sequence)</li>'; });
+    html += '</ul></div>';
   }
   panel.innerHTML = html;
 }
