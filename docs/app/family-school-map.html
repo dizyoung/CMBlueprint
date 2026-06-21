@@ -6,16 +6,17 @@
 <link rel="stylesheet" href="./shared.css">
 <style>
   table.map { border-collapse: collapse; width: 100%; background: var(--milk-white); table-layout: fixed; margin-bottom: 26px; border-radius: 10px; overflow: hidden; }
-  table.map th, table.map td { border: 1px solid var(--border); vertical-align: top; padding: 10px; font-size: 12px; }
-  table.map thead th { background: var(--navy-story); color: var(--milk-white); text-align: center; padding: 9px 6px; font-size: 13px; font-weight: 600; }
-  table.map th.row-head { background: var(--field-mint); color: var(--navy-story); text-align: left; font-weight: 600; width: 130px; font-size: 13px; }
+  table.map th, table.map td { border: 1px solid var(--border); vertical-align: top; padding: 12px; font-size: 13px; min-height: 56px; }
+  table.map thead th { background: var(--navy-story); color: var(--milk-white); text-align: center; padding: 11px 8px; font-size: 14px; font-weight: 600; }
+  table.map th.row-head { background: var(--field-mint); color: var(--navy-story); text-align: left; font-weight: 600; width: 140px; font-size: 14px; }
+  table.map td:empty { background: repeating-linear-gradient(45deg, var(--milk-white), var(--milk-white) 10px, #fafdfd 10px, #fafdfd 20px); }
 
-  .chip { border: 1px solid var(--border); border-left: 4px solid var(--lagoon-light); border-radius: 8px; padding: 8px 10px; margin-bottom: 7px; cursor: pointer; background: var(--milk-white); }
-  .chip:hover { background: var(--field-mint); }
+  .chip { border: 1px solid var(--border); border-left: 4px solid var(--lagoon-light); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; background: var(--milk-white); box-shadow: 0 1px 2px rgba(9,69,78,0.04); }
+  .chip:hover { background: var(--field-mint); border-color: var(--lagoon-light); }
   .chip:last-child { margin-bottom: 0; }
   .chip.lens-dim { opacity: 0.3; }
-  .chip-title { font-weight: 600; font-size: 13px; color: var(--ink); }
-  .chip-sub { color: var(--muted); font-size: 11px; margin-top: 3px; }
+  .chip-title { font-weight: 600; font-size: 14px; color: var(--ink); line-height: 1.3; }
+  .chip-sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
 
   .loop-row, .seq-row { padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
   .loop-row:last-child, .seq-row:last-child { border-bottom: none; }
@@ -30,6 +31,7 @@
   .res-card-title { font-weight: 600; display: flex; align-items: center; gap: 8px; font-size: 13px; }
   .res-status { font-size: 11px; border-radius: 7px; padding: 4px 8px; margin-left: auto; background: var(--field-mint); border: 1px solid var(--border); }
   .res-use { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .res-dupe-note { font-size: 11px; font-weight: 400; color: var(--muted); font-style: italic; }
 
   @media print {
     .app-header, .banner, .toolbar, .save-area, .overlay { display: none !important; }
@@ -47,8 +49,8 @@
 <div class="page-wrap">
 
 <div class="banner">
-  <strong>Beta.</strong> Your plan saves in this browser as you go — see the save area below for backup options.
-  Today, Term Plan, Progress, and accounts are not built yet.
+  Beta preview: your plan saves in this browser as you go. Use <strong>Export Backup</strong> to protect your work or move it
+  to another device. Today, Term Plan, Progress, accounts, and cloud sync are not built yet.
 </div>
 
 <div id="save-bar"></div>
@@ -125,8 +127,9 @@
       <option value="unplaced">Needs placement</option>
     </select>
 
-    <label for="ed-participants">Participants <span style="font-weight:400;color:var(--muted);">(comma-separated; blank = based on audience)</span></label>
-    <input type="text" id="ed-participants">
+    <label>Who is included?</label>
+    <div class="checkrow"><input type="checkbox" id="ed-use-default" checked><label for="ed-use-default" style="margin:0;font-weight:400;">Use audience default</label></div>
+    <div id="ed-participants-checks" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
 
     <label for="ed-subject">Subject</label>
     <select id="ed-subject"></select>
@@ -279,13 +282,22 @@ function renderResources() {
   var groupBy = document.getElementById('res-groupby').value;
   var filter = document.getElementById('res-filter').value;
   var grouped = A.getResourceList(state, { groupBy: groupBy, filter: filter });
+  var titleCounts = {};
+  Object.keys(grouped).forEach(function (key) {
+    grouped[key].forEach(function (r) {
+      var t = (r.title || '').trim().toLowerCase();
+      titleCounts[t] = (titleCounts[t] || 0) + 1;
+    });
+  });
   var html = '';
   Object.keys(grouped).forEach(function (key) {
     var resources = grouped[key];
     if (!resources.length) return;
     html += '<div class="res-group"><h3>' + escapeHtml(key) + '</h3>';
     resources.forEach(function (r) {
-      html += '<div class="res-card"><div class="res-card-title">' + escapeHtml(r.title) +
+      var dupeNote = titleCounts[(r.title || '').trim().toLowerCase()] > 1
+        ? ' <span class="res-dupe-note">Same title, separate uses</span>' : '';
+      html += '<div class="res-card"><div class="res-card-title">' + escapeHtml(r.title) + dupeNote +
         '<select class="res-status" onchange="window.setResourceStatusUI(\'' + r.id + '\', this.value)">' +
         M.RESOURCE_STATUSES.map(function (st) {
           return '<option value="' + st + '"' + (st === r.status ? ' selected' : '') + '>' + escapeHtml(M.RESOURCE_STATUS_LABELS[st] || st) + '</option>';
@@ -313,7 +325,18 @@ function openEditor(cardId) {
   document.getElementById('editor-title').textContent = 'Edit card';
   document.getElementById('ed-title').value = card.title || '';
   document.getElementById('ed-audience').value = card.audience;
-  document.getElementById('ed-participants').value = (card.participantIds || []).join(', ');
+  var isOverride = card.participantMode === 'override' && Array.isArray(card.participantIds) && card.participantIds.length > 0;
+  var checksBox = document.getElementById('ed-participants-checks');
+  var activeStudents = state.students.filter(function (s) { return s.active; });
+  checksBox.innerHTML = activeStudents.map(function (s) {
+    var checked = isOverride && card.participantIds.indexOf(s.id) !== -1 ? ' checked' : '';
+    return '<label style="display:flex;align-items:center;gap:6px;font-weight:400;margin:0;">' +
+      '<input type="checkbox" class="ed-participant-check" value="' + s.id + '"' + checked + '>' +
+      escapeHtml(s.name) + '</label>';
+  }).join('');
+  var useDefault = document.getElementById('ed-use-default');
+  useDefault.checked = !isOverride;
+  checksBox.style.display = isOverride ? 'flex' : 'none';
   document.getElementById('ed-subject').value = card.subjectColumnId;
   document.getElementById('card-editor-overlay').style.display = 'flex';
 }
@@ -328,15 +351,18 @@ function saveEditor() {
   A.setCardTitle(state, editingCardId, document.getElementById('ed-title').value);
   A.setCardAudience(state, editingCardId, document.getElementById('ed-audience').value);
   A.moveCardToSubject(state, editingCardId, document.getElementById('ed-subject').value);
-  var raw = document.getElementById('ed-participants').value.trim();
-  var ids = raw ? raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean) : [];
   var card = A.findCard(state, editingCardId);
+  var useDefault = document.getElementById('ed-use-default').checked;
+  var ids = useDefault ? [] : Array.prototype.slice.call(document.querySelectorAll('.ed-participant-check:checked')).map(function (el) { return el.value; });
   A.setCardParticipants(state, editingCardId, ids.length ? 'override' : card.participantMode, ids);
   closeEditor();
   render();
   markDirtyAndSave();
 }
 
+document.getElementById('ed-use-default').addEventListener('change', function (e) {
+  document.getElementById('ed-participants-checks').style.display = e.target.checked ? 'none' : 'flex';
+});
 document.getElementById('ed-cancel').addEventListener('click', closeEditor);
 document.getElementById('ed-save').addEventListener('click', saveEditor);
 document.getElementById('card-editor-overlay').addEventListener('click', function (e) {

@@ -11,7 +11,6 @@ export function appHeaderHTML(activePage) {
         link('./index.html', 'Home', 'home') +
         link('./family-school-map.html', 'Family School Map', 'map') +
         link('./weekly-rhythm.html', 'Weekly Rhythm', 'rhythm') +
-        link('../prototypes/family-school-map-prototype.html', 'Original prototype (reference)', 'prototype') +
       '</nav>' +
     '</div></header>'
   );

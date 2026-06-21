@@ -21,8 +21,9 @@
   .add-cell-btn {
     display: block; width: 100%; margin-top: 4px; font-size: 11px; padding: 6px;
     border: 1px dashed var(--border); border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer;
+    opacity: 0.55; transition: opacity 0.15s;
   }
-  .add-cell-btn:hover { background: var(--field-mint); color: var(--wonder-marine); border-color: var(--lagoon-light); }
+  .add-cell-btn:hover { opacity: 1; background: var(--field-mint); color: var(--wonder-marine); border-color: var(--lagoon-light); }
 
   @media print {
     .app-header, .banner, .toolbar, .save-area, .add-cell-btn { display: none !important; }
@@ -36,8 +37,8 @@
 <div class="page-wrap">
 
 <div class="banner">
-  <strong>Beta.</strong> Your plan saves in this browser as you go — see the save area below for backup options.
-  This is the broad "when do the big buckets happen" layer — not Today, not a minute-by-minute schedule.
+  Beta preview: your plan saves in this browser as you go. Use <strong>Export Backup</strong> to protect your work or move it
+  to another device. This is the broad "when do the big buckets happen" layer — not Today, not a minute-by-minute schedule.
 </div>
 
 <div id="save-bar"></div>
