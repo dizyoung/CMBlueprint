@@ -78,9 +78,13 @@
 
 /* ---- Notes ---- */
 .work-item-notes { font-size:12px; color:var(--muted); font-style:italic; margin-top:4px; }
+.work-item-guidance { font-size:11px; color:var(--muted); margin-top:3px; }
 
 /* ---- Form badge ---- */
 .badge-form { background:#f0f4ff; color:#2a4a9e; border:1px solid #c8d5f5; }
+@media (prefers-color-scheme: dark) {
+  .badge-form { background:#1a2a5a; color:#a0b8f0; border-color:#2a3a7a; }
+}
 
 /* ---- Section with color dot ---- */
 .col-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; display:inline-block; }
@@ -155,6 +159,25 @@
       <label>Resources (books, curricula, materials)</label>
       <div class="resource-list-editor" id="resource-rows"></div>
       <button class="add-resource-row-btn" id="add-resource-row-btn">+ Add resource</button>
+    </div>
+
+    <div class="form-row">
+      <label for="item-freq">Suggested frequency</label>
+      <input type="text" id="item-freq" placeholder="e.g. 3x/week, daily, 1x/week" maxlength="40">
+    </div>
+
+    <div class="form-row">
+      <label for="item-schedule-style">Rhythm style</label>
+      <select id="item-schedule-style">
+        <option value="">— not specified —</option>
+        <option value="fixed">Fixed rhythm</option>
+        <option value="loop">Loop-friendly</option>
+        <option value="fixed-or-loop">Fixed or loop</option>
+        <option value="family-rhythm">Family rhythm</option>
+        <option value="seasonal">Seasonal</option>
+        <option value="co-op-external">Co-op / External</option>
+        <option value="manual">As scheduled</option>
+      </select>
     </div>
 
     <div class="form-row">
@@ -332,8 +355,14 @@ function renderSubjects() {
         const cs = A.getCoverageStatusForCard(state, card.id);
         const resSummary = cardResourceSummary(card);
         const faLabel = formApplicabilityLabel(card.formApplicability);
-        const formBadgeHtml = faLabel !== 'All forms'
-          ? `<span class="badge badge-form">${faLabel}</span>` : '';
+        const formBadgeHtml = `<span class="badge badge-form">${faLabel}</span>`;
+        const guidanceParts = [];
+        if (card.suggestedWeeklyTouches) guidanceParts.push(card.suggestedWeeklyTouches);
+        if (card.scheduleStyleSuggestion && M.SCHEDULE_STYLE_SUGGESTION_LABELS[card.scheduleStyleSuggestion]) {
+          guidanceParts.push(M.SCHEDULE_STYLE_SUGGESTION_LABELS[card.scheduleStyleSuggestion]);
+        }
+        const guidanceHtml = guidanceParts.length
+          ? `<div class="work-item-guidance">${escapeHtml(guidanceParts.join(' · '))}</div>` : '';
         html += `<div class="work-item" data-card-id="${card.id}">
           <div class="work-item-main">
             <div class="work-item-title">${escapeHtml(card.title)}</div>
@@ -343,6 +372,7 @@ function renderSubjects() {
               ${whoBadge(card)}
               ${formBadgeHtml}
             </div>
+            ${guidanceHtml}
             ${resSummary ? `<div class="work-item-notes">${escapeHtml(resSummary)}</div>` : ''}
             ${card.notes ? `<div class="work-item-notes">${escapeHtml(card.notes)}</div>` : ''}
           </div>
@@ -451,6 +481,8 @@ const selSubject = document.getElementById('item-subject');
 const selPlanning = document.getElementById('item-planning-status');
 const selAudience = document.getElementById('item-audience');
 const inputNotes = document.getElementById('item-notes');
+const inputFreq = document.getElementById('item-freq');
+const selScheduleStyle = document.getElementById('item-schedule-style');
 const deleteBtn = document.getElementById('item-delete-btn');
 
 function populateSubjectSelect(selectedId) {
@@ -480,6 +512,8 @@ function openAddItem(colId) {
   selPlanning.value = 'active';
   selAudience.innerHTML = buildAudienceOptions('together', []);
   inputNotes.value = '';
+  inputFreq.value = '';
+  selScheduleStyle.value = '';
   setFormCheckboxes([]);
   pendingResources = [];
   deleteBtn.style.display = 'none';
@@ -498,6 +532,8 @@ function openEditItem(cardId) {
   selPlanning.value = card.planningStatus || 'active';
   selAudience.innerHTML = buildAudienceOptions(card.participantMode, card.participantIds);
   inputNotes.value = card.notes || '';
+  inputFreq.value = card.suggestedWeeklyTouches || '';
+  selScheduleStyle.value = card.scheduleStyleSuggestion || '';
   setFormCheckboxes(card.formApplicability || []);
   // Load linked resources
   const uses = (state.resourceUses || []).filter(u => u.cardId === cardId);
@@ -557,6 +593,8 @@ document.getElementById('item-save-btn').addEventListener('click', () => {
   const audienceParsed = parseAudienceValue(selAudience.value);
   const notes = inputNotes.value.trim();
   const formApplicability = readFormCheckboxes();
+  const suggestedWeeklyTouches = inputFreq.value.trim() || null;
+  const scheduleStyleSuggestion = selScheduleStyle.value || null;
 
   // Reconcile resources: update existing, add new, remove deleted
   // Collect resIds still present
@@ -566,6 +604,7 @@ document.getElementById('item-save-btn').addEventListener('click', () => {
     // Update card fields
     A.updateCard(state, editingCardId, {
       title, subjectColumnId, planningStatus, notes, formApplicability,
+      suggestedWeeklyTouches, scheduleStyleSuggestion,
       ...audienceParsed
     });
 
@@ -598,6 +637,7 @@ document.getElementById('item-save-btn').addEventListener('click', () => {
     // Add new card
     const card = A.addCard(state, {
       title, subjectColumnId, planningStatus, notes, formApplicability,
+      suggestedWeeklyTouches, scheduleStyleSuggestion,
       ...audienceParsed
     });
     // Add resources

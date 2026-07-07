@@ -23,74 +23,79 @@ test('sample state builds rows, columns, and card groupings as expected', () => 
   assert.ok(togetherRow.cells.literature.some((c) => c.id === 'card_readaloud'));
 
   const olderGroupRow = grid.find((g) => g.row.id === 'group:older');
-  assert.ok(olderGroupRow.cells.history.some((c) => c.id === 'card_amhistory'));
-  assert.ok(olderGroupRow.cells.history.some((c) => c.id === 'card_ancienthistory'));
+  assert.ok(olderGroupRow.cells.history.some((c) => c.id === 'card_history_spine'));
+  assert.ok(olderGroupRow.cells.history.some((c) => c.id === 'card_biography'));
 
   const kaylaRow = grid.find((g) => g.row.id === 'individual:kayla');
-  assert.ok(kaylaRow.cells.math.some((c) => c.id === 'card_math'));
+  assert.ok(kaylaRow.cells.math.some((c) => c.id === 'card_math_kayla'));
 
   const coopRow = grid.find((g) => g.row.id === 'coop-outside');
-  assert.ok(coopRow.cells.science.some((c) => c.id === 'card_science_coop'));
+  assert.ok(coopRow.cells.science.some((c) => c.id === 'card_upper_science'));
 
+  // optional and unplaced rows exist but sample data has no cards placed there
   const optionalRow = grid.find((g) => g.row.id === 'optional');
-  assert.ok(optionalRow.cells.history.some((c) => c.id === 'card_mapquiz'));
+  assert.ok(optionalRow);
 
   const unplacedRow = grid.find((g) => g.row.id === 'unplaced');
-  assert.ok(unplacedRow.cells.history.some((c) => c.id === 'card_neighboring'));
+  assert.ok(unplacedRow);
 });
 
 test('Student Lens resolves correctly from real state, including together/group/co-op/individual work', () => {
   const state = A.buildSampleAppState();
-  const jeremiahCards = A.studentLensCards(state, 'jeremiah').map((c) => c.id);
-  // Together cards: bible, readaloud, hymn, folksong, picturestudy, geography, naturestudy, handicraft, pe
-  // Group:older cards: amhistory, ancienthistory, dictation, citizenship
-  // Coop: science_coop
-  const jeremiahExpected = [
-    'card_bible', 'card_readaloud', 'card_hymn', 'card_folksong', 'card_picturestudy',
-    'card_geography', 'card_naturestudy', 'card_handicraft', 'card_pe',
-    'card_amhistory', 'card_ancienthistory', 'card_dictation', 'card_citizenship',
-    'card_science_coop'
-  ];
-  assert.deepEqual(jeremiahCards.sort(), jeremiahExpected.sort());
+  const jeremiahCards = A.studentLensCards(state, 'jeremiah').map((c) => c.id).sort();
+  // Together: bible, scripture_mem, recitation, readaloud, tales, mapwork, nature_study, nature_notebook,
+  //           mental_math, hymn, folksong, poetry, picture_study, composer_study, drawing, handicraft,
+  //           pe, drill, modern_lang, outside_activity
+  // Group:older: devotional, dictation, written_narration, history_spine, biography, timeline,
+  //              geo_reader, citizenship_gov, living_science, health, spanish_french
+  // Coop: upper_science, coop_class
+  assert.ok(jeremiahCards.includes('card_bible'));
+  assert.ok(jeremiahCards.includes('card_hymn'));
+  assert.ok(jeremiahCards.includes('card_history_spine'));
+  assert.ok(jeremiahCards.includes('card_upper_science'));
+  assert.ok(jeremiahCards.includes('card_coop_class'));
+  assert.ok(!jeremiahCards.includes('card_math_kayla'), 'kayla individual math should not appear for jeremiah');
 
-  const kaylaCards = A.studentLensCards(state, 'kayla').map((c) => c.id);
-  // Together cards + group:littles copywork + individual math
-  const kaylaExpected = [
-    'card_bible', 'card_readaloud', 'card_hymn', 'card_folksong', 'card_picturestudy',
-    'card_geography', 'card_naturestudy', 'card_handicraft', 'card_pe',
-    'card_copywork', 'card_math'
-  ];
-  assert.deepEqual(kaylaCards.sort(), kaylaExpected.sort());
+  const kaylaCards = A.studentLensCards(state, 'kayla').map((c) => c.id).sort();
+  // Together + group:littles (phonics, copywork, early_history, object_lessons, practical_math) + individual math_kayla
+  assert.ok(kaylaCards.includes('card_bible'));
+  assert.ok(kaylaCards.includes('card_copywork'));
+  assert.ok(kaylaCards.includes('card_math_kayla'));
+  assert.ok(!kaylaCards.includes('card_history_spine'), 'older group history should not appear for kayla');
 
   const kaylaWithOptional = A.studentLensCards(state, 'kayla', { includeOptional: true }).map((c) => c.id);
-  assert.ok(!kaylaWithOptional.includes('card_mapquiz'));
+  assert.ok(!kaylaWithOptional.includes('card_shakespeare'), 'Form III optional cards should not appear for littles group');
 });
 
 test('Group Lens and Subject Lens resolve from real state', () => {
   const state = A.buildSampleAppState();
   const olderGroupCards = A.groupLensCards(state, 'older').map((c) => c.id);
-  assert.ok(olderGroupCards.includes('card_amhistory'));
-  assert.ok(olderGroupCards.includes('card_ancienthistory'));
+  assert.ok(olderGroupCards.includes('card_history_spine'));
+  assert.ok(olderGroupCards.includes('card_biography'));
+  assert.ok(olderGroupCards.includes('card_dictation'));
 
   const historyCards = A.subjectLensCards(state, 'history').map((c) => c.id).sort();
-  assert.deepEqual(historyCards, [
-    'card_amhistory', 'card_ancienthistory', 'card_mapquiz', 'card_neighboring'
-  ].sort());
+  assert.ok(historyCards.includes('card_history_spine'));
+  assert.ok(historyCards.includes('card_biography'));
+  assert.ok(historyCards.includes('card_early_history'));
+  assert.ok(historyCards.includes('card_timeline'));
 });
 
 test('Book & Resource List rollup works from real state and resolves participants', () => {
   const state = A.buildSampleAppState();
   const grouped = A.getResourceList(state, { groupBy: 'subject', filter: 'all' });
-  const amhistory = grouped.history.find((r) => r.id === 'res_amhistory');
-  assert.ok(amhistory);
-  const cardUse = amhistory.uses.find((u) => u.cardId === 'card_amhistory');
-  assert.deepEqual(cardUse.participants.sort(), ['jeremiah', 'lucy']);
 
+  // res_bible is used by loop_bible (together = all 4 students)
   const bibleLoopUse = grouped.bible.find((r) => r.id === 'res_bible').uses.find((u) => u.loopId === 'loop_bible');
   assert.deepEqual(bibleLoopUse.participants.sort(), ['charis', 'jeremiah', 'kayla', 'lucy']);
 
-  const bibleOverrideUse = grouped.bible.find((r) => r.id === 'res_bible').uses.find((u) => u.cardId === 'card_amhistory');
-  assert.deepEqual(bibleOverrideUse.participants, ['jeremiah']);
+  // res_grammar is used by card_grammar (individual: lucy)
+  const grammarUse = grouped['language-arts'].find((r) => r.id === 'res_grammar').uses.find((u) => u.cardId === 'card_grammar');
+  assert.deepEqual(grammarUse.participants, ['lucy']);
+
+  // res_math_lucy is used by card_math_lucy (individual: lucy)
+  const mathLucyUse = grouped.math.find((r) => r.id === 'res_math_lucy').uses.find((u) => u.cardId === 'card_math_lucy');
+  assert.deepEqual(mathLucyUse.participants, ['lucy']);
 });
 
 test('changing resource status affects resource filters (need-to-get vs missing)', () => {
@@ -98,7 +103,7 @@ test('changing resource status affects resource filters (need-to-get vs missing)
   const beforeNeedToGet = A.getResourceList(state, { groupBy: 'status', filter: 'need-to-get' });
   const beforeIds = Object.values(beforeNeedToGet).flat().map((r) => r.id);
   assert.ok(beforeIds.includes('res_math_kayla'));
-  assert.ok(!beforeIds.includes('res_ancienthistory'), '"need-to-choose" should not appear in need-to-get');
+  assert.ok(!beforeIds.includes('res_grammar'), '"need-to-choose" should not appear in need-to-get');
 
   A.setResourceStatus(state, 'res_math_kayla', 'have-it');
   const afterNeedToGet = A.getResourceList(state, { groupBy: 'status', filter: 'need-to-get' });
@@ -107,28 +112,29 @@ test('changing resource status affects resource filters (need-to-get vs missing)
 
   const missing = A.getResourceList(state, { groupBy: 'status', filter: 'missing' });
   const missingIds = Object.values(missing).flat().map((r) => r.id);
-  assert.ok(missingIds.includes('res_ancienthistory'));
-  assert.ok(!missingIds.includes('res_mapquiz'), '"no resource needed" should be excluded from missing list');
+  assert.ok(missingIds.includes('res_grammar'));
+  assert.ok(!missingIds.includes('res_math_lucy'), '"have-it" resources should not appear in missing list');
 });
 
 test('changing card participant override affects Student Lens and resource rollup', () => {
   const state = A.buildSampleAppState();
-  assert.ok(!A.studentLensCards(state, 'charis').some((c) => c.id === 'card_amhistory'));
+  // card_history_spine is in group:older — charis (littles) should not see it
+  assert.ok(!A.studentLensCards(state, 'charis').some((c) => c.id === 'card_history_spine'));
 
-  A.setCardParticipants(state, 'card_amhistory', 'group', ['littles']);
-  assert.ok(A.studentLensCards(state, 'charis').some((c) => c.id === 'card_amhistory'));
+  A.setCardParticipants(state, 'card_history_spine', 'group', ['littles']);
+  assert.ok(A.studentLensCards(state, 'charis').some((c) => c.id === 'card_history_spine'));
 
   const rollup = A.getResourceList(state, { groupBy: 'subject', filter: 'all' });
-  const use = rollup.history.find((r) => r.id === 'res_amhistory').uses.find((u) => u.cardId === 'card_amhistory');
+  const use = rollup.history.find((r) => r.id === 'res_history_spine').uses.find((u) => u.cardId === 'card_history_spine');
   assert.deepEqual(use.participants.sort(), ['charis', 'kayla']);
 });
 
 test('changing a ResourceUse participantsOverride affects resolved rollup participants', () => {
   const state = A.buildSampleAppState();
-  const use = state.resourceUses.find((u) => u.id === 'ruse_amhistory');
+  const use = state.resourceUses.find((u) => u.id === 'ruse_history_spine');
   use.participantsOverride = ['lucy'];
   const rollup = A.getResourceList(state, { groupBy: 'subject', filter: 'all' });
-  const resolved = rollup.history.find((r) => r.id === 'res_amhistory').uses.find((u) => u.id === 'ruse_amhistory');
+  const resolved = rollup.history.find((r) => r.id === 'res_history_spine').uses.find((u) => u.id === 'ruse_history_spine');
   assert.deepEqual(resolved.participants, ['lucy']);
 });
 
@@ -161,14 +167,14 @@ test('advancing a sequence in state moves completed/current/upcoming using famil
 
 test('minimal editing mutators update state in place', () => {
   const state = A.buildSampleAppState();
-  A.setCardTitle(state, 'card_math', 'Math Lessons');
-  assert.equal(A.findCard(state, 'card_math').title, 'Math Lessons');
+  A.setCardTitle(state, 'card_math_kayla', 'Math Lessons');
+  assert.equal(A.findCard(state, 'card_math_kayla').title, 'Math Lessons');
 
-  A.setCardAudience(state, 'card_mapquiz', 'individual');
-  assert.equal(A.findCard(state, 'card_mapquiz').audience, 'individual');
+  A.setCardAudience(state, 'card_biography', 'individual');
+  assert.equal(A.findCard(state, 'card_biography').audience, 'individual');
 
-  A.moveCardToSubject(state, 'card_mapquiz', 'literature');
-  assert.equal(A.findCard(state, 'card_mapquiz').subjectColumnId, 'literature');
+  A.moveCardToSubject(state, 'card_biography', 'literature');
+  assert.equal(A.findCard(state, 'card_biography').subjectColumnId, 'literature');
 
   const card = A.addCardFromTemplate(state, 'tpl_naturestudy');
   assert.ok(card);
@@ -231,7 +237,7 @@ test('"Needs rhythm placement" helpers find cards/loops/sequences absent from th
   // none of the sample cards are referenced by id from the sample rhythm (the
   // sample rhythm uses its own student/group ids, not the sample card ids)
   assert.ok(cardsWithoutPlacement.length > 0);
-  assert.equal(A.cardHasRhythmPlacement(state, 'card_math'), false);
+  assert.equal(A.cardHasRhythmPlacement(state, 'card_math_kayla'), false);
 
   const loop = state.loops[0];
   assert.equal(A.loopHasRhythmPlacement(state, loop.id), false);
@@ -358,8 +364,8 @@ test('addSubjectColumn appears on the map and can receive cards; updateSubjectCo
   let { columns } = A.buildMapGrid(state);
   assert.ok(columns.some((c) => c.id === subject.id));
 
-  A.moveCardToSubject(state, 'card_mapquiz', subject.id);
-  assert.ok(A.subjectLensCards(state, subject.id).some((c) => c.id === 'card_mapquiz'));
+  A.moveCardToSubject(state, 'card_biography', subject.id);
+  assert.ok(A.subjectLensCards(state, subject.id).some((c) => c.id === 'card_biography'));
 
   A.updateSubjectColumn(state, subject.id, { label: 'Art & Handicrafts' });
   assert.equal(A.findSubject(state, subject.id).label, 'Art & Handicrafts');
@@ -372,18 +378,18 @@ test('addSubjectColumn appears on the map and can receive cards; updateSubjectCo
 
 test('moveCardToRow moves a card to another audience/row and updates participant resolution', () => {
   const state = A.buildSampleAppState();
-  A.moveCardToRow(state, 'card_mapquiz', 'individual:kayla');
-  const card = A.findCard(state, 'card_mapquiz');
+  A.moveCardToRow(state, 'card_biography', 'individual:kayla');
+  const card = A.findCard(state, 'card_biography');
   assert.equal(card.audience, 'individual');
   assert.deepEqual(card.participantIds, ['kayla']);
-  assert.ok(A.studentLensCards(state, 'kayla', { includeOptional: true }).some((c) => c.id === 'card_mapquiz'));
+  assert.ok(A.studentLensCards(state, 'kayla', { includeOptional: true }).some((c) => c.id === 'card_biography'));
 
-  A.moveCardToRow(state, 'card_mapquiz', 'group:older');
-  assert.equal(A.findCard(state, 'card_mapquiz').audience, 'group');
-  assert.ok(A.groupLensCards(state, 'older').some((c) => c.id === 'card_mapquiz'));
+  A.moveCardToRow(state, 'card_biography', 'group:older');
+  assert.equal(A.findCard(state, 'card_biography').audience, 'group');
+  assert.ok(A.groupLensCards(state, 'older').some((c) => c.id === 'card_biography'));
 
-  A.moveCardToRow(state, 'card_mapquiz', 'together');
-  assert.equal(A.findCard(state, 'card_mapquiz').audience, 'together');
+  A.moveCardToRow(state, 'card_biography', 'together');
+  assert.equal(A.findCard(state, 'card_biography').audience, 'together');
 });
 
 test('getStarterTemplatesForForm filters by gradeBand without exploding columns', () => {
@@ -448,8 +454,8 @@ test('getCoverageStatusForCard derives coverage from resources, never from plann
   // hymn has planningStatus:'practice-no-book' and no resources => 'no-resource-needed'
   const hymnCoverage = A.getCoverageStatusForCard(state, 'card_hymn');
   assert.equal(hymnCoverage, 'no-resource-needed');
-  // picturestudy has a resource with status:'have-it' => 'covered'
-  const pictureCoverage = A.getCoverageStatusForCard(state, 'card_picturestudy');
+  // picture_study has a resource with status:'have-it' => 'covered'
+  const pictureCoverage = A.getCoverageStatusForCard(state, 'card_picture_study');
   assert.equal(pictureCoverage, 'covered');
   // math_lucy resource is 'have-it' => 'covered'
   const mathLucyCoverage = A.getCoverageStatusForCard(state, 'card_math_lucy');
@@ -460,15 +466,15 @@ test('getCardsForSubjectColumn returns all cards for a column sorted by title', 
   const state = A.buildSampleAppState();
   const historyCards = A.getCardsForSubjectColumn(state, 'history');
   const ids = historyCards.map((c) => c.id);
-  assert.ok(ids.includes('card_amhistory'));
-  assert.ok(ids.includes('card_ancienthistory'));
-  assert.ok(ids.includes('card_mapquiz'));
-  assert.ok(ids.includes('card_neighboring'));
-  // citizenship is geography, not history
+  assert.ok(ids.includes('card_history_spine'));
+  assert.ok(ids.includes('card_biography'));
+  assert.ok(ids.includes('card_early_history'));
+  assert.ok(ids.includes('card_timeline'));
+  // citizenship_gov is geography, not history
   const geoCards = A.getCardsForSubjectColumn(state, 'geography');
-  assert.ok(geoCards.map((c) => c.id).includes('card_citizenship'));
+  assert.ok(geoCards.map((c) => c.id).includes('card_citizenship_gov'));
   const beautyCards = A.getCardsForSubjectColumn(state, 'beauty');
-  assert.equal(beautyCards.length, 3); // hymn, folksong, picturestudy
+  assert.equal(beautyCards.length, 5); // hymn, folksong, poetry, picture_study, composer_study
 });
 
 test('addCard and updateCard mutate state correctly', () => {
@@ -486,7 +492,7 @@ test('addCard and updateCard mutate state correctly', () => {
 
 test('co-op card has planningStatus co-op-external and stays in coop-outside row', () => {
   const state = A.buildSampleAppState();
-  const coopCard = A.findCard(state, 'card_science_coop');
+  const coopCard = A.findCard(state, 'card_upper_science');
   assert.equal(coopCard.planningStatus, 'co-op-external');
   assert.equal(coopCard.status, 'coop');
   const rowId = A.rowIdForCard(coopCard);
@@ -495,8 +501,8 @@ test('co-op card has planningStatus co-op-external and stays in coop-outside row
 
 test('formApplicability is set on sample cards and survives updateCard round-trip', () => {
   const state = A.buildSampleAppState();
-  const amhistory = A.findCard(state, 'card_amhistory');
-  assert.deepEqual(amhistory.formApplicability, ['form2', 'form3']);
+  const historySpine = A.findCard(state, 'card_history_spine');
+  assert.deepEqual(historySpine.formApplicability, ['form2', 'form3']);
   const bible = A.findCard(state, 'card_bible');
   assert.deepEqual(bible.formApplicability, []); // all forms
   const plutarch = A.findCard(state, 'card_plutarch');

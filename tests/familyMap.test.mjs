@@ -586,6 +586,40 @@ test('deriveCoverageStatus is independent of planningStatus value', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Phase 1D.10b — suggestedWeeklyTouches, scheduleStyleSuggestion, SCHEDULE_STYLE_SUGGESTIONS
+// ---------------------------------------------------------------------------
+test('makeCard defaults suggestedWeeklyTouches to null', () => {
+  const card = M.makeCard({ id: 'c1', title: 'Test' });
+  assert.equal(card.suggestedWeeklyTouches, null);
+});
+
+test('makeCard defaults scheduleStyleSuggestion to null', () => {
+  const card = M.makeCard({ id: 'c1', title: 'Test' });
+  assert.equal(card.scheduleStyleSuggestion, null);
+});
+
+test('makeCard preserves suggestedWeeklyTouches and scheduleStyleSuggestion when provided', () => {
+  const card = M.makeCard({ id: 'c1', title: 'Test', suggestedWeeklyTouches: '3x/week', scheduleStyleSuggestion: 'loop' });
+  assert.equal(card.suggestedWeeklyTouches, '3x/week');
+  assert.equal(card.scheduleStyleSuggestion, 'loop');
+});
+
+test('SCHEDULE_STYLE_SUGGESTIONS is an array containing expected values', () => {
+  assert.ok(Array.isArray(M.SCHEDULE_STYLE_SUGGESTIONS));
+  assert.ok(M.SCHEDULE_STYLE_SUGGESTIONS.includes('fixed'));
+  assert.ok(M.SCHEDULE_STYLE_SUGGESTIONS.includes('loop'));
+  assert.ok(M.SCHEDULE_STYLE_SUGGESTIONS.includes('family-rhythm'));
+  assert.ok(M.SCHEDULE_STYLE_SUGGESTIONS.includes('seasonal'));
+  assert.ok(M.SCHEDULE_STYLE_SUGGESTIONS.includes('co-op-external'));
+});
+
+test('SCHEDULE_STYLE_SUGGESTION_LABELS has a label for every value in SCHEDULE_STYLE_SUGGESTIONS', () => {
+  for (const v of M.SCHEDULE_STYLE_SUGGESTIONS) {
+    assert.ok(M.SCHEDULE_STYLE_SUGGESTION_LABELS[v], `Missing label for ${v}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
 let passed = 0, failed = 0;
