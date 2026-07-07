@@ -11,11 +11,22 @@
   table.map th.row-head { background: var(--field-mint); color: var(--navy-story); text-align: left; font-weight: 600; width: 110px; min-width: 80px; max-width: 130px; font-size: 13px; }
   table.map td:empty { background: repeating-linear-gradient(45deg, var(--milk-white), var(--milk-white) 10px, #fafdfd 10px, #fafdfd 20px); }
 
+  /* ---- Resources mode: clean list cells ---- */
+  .res-cell { padding: 2px 0; }
+  .res-card-block { margin-bottom: 5px; }
+  .res-card-block:last-child { margin-bottom: 0; }
+  .res-card-block + .res-card-block { border-top: 1px dotted var(--border); padding-top: 5px; }
+  .res-card-block.lens-dim { opacity: 0.28; }
+  .res-card-block.lens-match { outline: 1px solid var(--wonder-marine); outline-offset: 2px; border-radius: 3px; padding: 1px 3px; }
+  .res-card-block.res-block-hidden { display: none; }
+  .res-label { font-size: 12px; color: var(--ink); line-height: 1.45; padding: 1px 0; overflow-wrap: break-word; word-break: normal; }
+  .res-label::before { content: '· '; color: var(--lagoon-light); font-weight: 700; }
+
+  /* ---- Subject / Detailed chip view ---- */
   .chip { border: 1px solid var(--border); border-left: 4px solid var(--lagoon-light); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; background: var(--milk-white); box-shadow: 0 1px 2px rgba(9,69,78,0.04); transition: opacity 0.15s, box-shadow 0.15s; overflow: hidden; }
   .chip.chip-single { cursor: pointer; }
   .chip.chip-single:hover { background: var(--field-mint); }
-  .chip.chip-group { cursor: default; background: #f0f7f5; border-style: solid; }
-  .chip.chip-summary { cursor: default; background: #e8f3f0; font-weight: 600; }
+  .chip.chip-group { cursor: default; background: #f0f7f5; }
   .chip:last-child { margin-bottom: 0; }
   .chip.lens-dim { opacity: 0.28; }
   .chip.lens-match { box-shadow: 0 0 0 2px var(--wonder-marine) inset; }
@@ -23,9 +34,7 @@
   .chip-title { font-weight: 600; font-size: 13px; color: var(--ink); line-height: 1.3; display: flex; align-items: flex-start; gap: 5px; }
   .chip-title-text { flex: 1; min-width: 0; overflow-wrap: break-word; word-break: normal; hyphens: none; }
   .chip-sub { color: var(--muted); font-size: 11px; margin-top: 3px; overflow-wrap: break-word; word-break: normal; line-height: 1.4; }
-  body.map-summary .chip { padding: 5px 8px; }
-  body.map-summary .chip-title { font-size: 12px; }
-  body.map-summary .participants-row { display: none; }
+
   /* notice: compact variant shown only in print */
   .notice-compact { display: none; }
   .notice-full-list { display: inline; }
@@ -102,7 +111,7 @@
     .page-title { font-size: 15px; margin: 0 0 2px; }
     .sub { font-size: 10px; margin: 0 0 6px; }
 
-    /* Compact review panel — hide full unplaced list, show count only */
+    /* Compact review panel */
     #review-panel { margin-bottom: 4px; }
     .notice { font-size: 10px; padding: 3px 8px; border-radius: 4px; margin-bottom: 4px; }
     .notice-full-list { display: none !important; }
@@ -115,15 +124,23 @@
     table.map thead th { font-size: 9px; padding: 4px 3px; }
     table.map th.row-head { width: 68px; min-width: 52px; max-width: 90px; font-size: 10px; }
 
-    /* Chips — compact, avoid splitting across pages */
+    /* Resources mode list cells — compact for print */
+    .res-label { font-size: 9px; padding: 0; line-height: 1.35; }
+    .res-card-block { margin-bottom: 3px; }
+    .res-card-block + .res-card-block { padding-top: 3px; }
+    .res-card-block.lens-match { outline: none; padding: 0; }
+
+    /* Chips (Subjects/Detailed modes) — compact */
     .chip { padding: 3px 5px; margin-bottom: 2px; box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
     .chip-title { font-size: 10px; gap: 3px; }
     .chip-sub { font-size: 8px; margin-top: 1px; line-height: 1.3; }
     .participants-row { display: none !important; }
     .status-dot { width: 6px; height: 6px; }
 
-    /* Hide empty rows */
+    /* Hide empty rows, individual-student rows, optional/unplaced rows */
     tr.row-empty { display: none !important; }
+    tr[data-row-type="individual"] { display: none !important; }
+    tr.row-optional, tr.row-unplaced { display: none !important; }
 
     /* Avoid row splitting */
     tbody tr { break-inside: avoid; page-break-inside: avoid; }
@@ -150,12 +167,12 @@
     <select id="lens-select"></select>
   </label>
   <div class="density-toggle" id="mapview-toggle">
-    <button type="button" data-mapview="summary">Summary</button>
-    <button type="button" data-mapview="subjects" class="active">Subjects</button>
+    <button type="button" data-mapview="resources" class="active">Resources</button>
+    <button type="button" data-mapview="subjects">Subjects</button>
     <button type="button" data-mapview="detailed">Detailed</button>
   </div>
   <button onclick="render()">Refresh</button>
-  <button class="accent" id="print-summary-btn">Print summary map</button>
+  <button class="accent" id="print-resource-btn">Print resource map</button>
   <button class="accent" onclick="document.body.classList.remove('print-resources'); window.print();">Print full map</button>
   <button class="accent" onclick="document.body.classList.add('print-resources'); window.print();">Print Book &amp; Resource List</button>
   <button type="button" id="starter-toggle-btn">Add starter cards</button>
@@ -444,7 +461,7 @@ function cardStatusDot(card) {
   return needsSomething ? 'dot-needbook' : 'dot-book';
 }
 
-var mapViewMode = 'subjects'; // 'summary' | 'subjects' | 'detailed'
+var mapViewMode = 'resources'; // 'resources' | 'subjects' | 'detailed'
 
 function participantPillsHTML(participantIds) {
   return participantIds.map(function (id) {
@@ -487,40 +504,62 @@ function groupStatusDot(cards) {
   return allPractice ? 'dot-practice' : 'dot-book';
 }
 
-function summaryCellHTML(cards, col) {
-  // Summary mode: one chip per non-empty cell, title = column label, sub = mapGroups or item count
-  var allParticipants = [];
-  var seen = {};
-  cards.forEach(function (c) {
-    M.resolveParticipants(c, state.students, state.groups).forEach(function (id) {
-      if (!seen[id]) { seen[id] = true; allParticipants.push(id); }
-    });
-  });
-  var dotCls = groupStatusDot(cards);
-  var subject = A.findSubject(state, col.id);
-  var borderStyle = subject ? ' style="border-left-color:' + subject.color + ';"' : '';
-  var seenGroups = {};
-  var mapGroupNames = [];
-  var ungroupedCount = 0;
-  cards.forEach(function (c) {
-    if (c.mapGroup && !seenGroups[c.mapGroup]) { seenGroups[c.mapGroup] = true; mapGroupNames.push(c.mapGroup); }
-    else if (!c.mapGroup) { ungroupedCount++; }
-  });
-  var subParts = mapGroupNames.slice();
-  if (ungroupedCount > 0) {
-    if (!subParts.length) subParts.push(ungroupedCount + ' item' + (ungroupedCount !== 1 ? 's' : ''));
-    else subParts.push('+' + ungroupedCount + ' more');
+function getMapLabels(card) {
+  // Returns an array of parent-facing label strings for a card.
+  // Priority: strandLabels > loop items > sequence items (current+upcoming) > resource titles > card title
+  if (card.strandLabels && card.strandLabels.length) return card.strandLabels;
+
+  if (card.loopId) {
+    var items = (state.loopItems || [])
+      .filter(function (li) { return li.loopId === card.loopId; })
+      .sort(function (a, b) { return a.sortOrder - b.sortOrder; });
+    if (items.length) return items.map(function (li) { return li.title; });
   }
-  var subText = subParts.join(' · ');
-  var lensCls = lens.type === 'all' ? '' : (cards.some(function (c) { return A.cardMatchesLens(c, lens, state); }) ? ' lens-match' : ' lens-dim');
-  var pillsHtml = participantPillsHTML(allParticipants);
-  return (
-    '<div class="chip chip-summary' + lensCls + '"' + borderStyle + '>' +
-      '<div class="chip-title"><span class="status-dot ' + dotCls + '"></span><span class="chip-title-text">' + escapeHtml(col.label) + '</span></div>' +
-      (subText ? '<div class="chip-sub">' + escapeHtml(subText) + '</div>' : '') +
-      '<div class="participants-row">' + pillsHtml + '</div>' +
-    '</div>'
-  );
+
+  if (card.sequenceId) {
+    var allSeqItems = (state.sequenceItems || [])
+      .filter(function (si) { return si.sequenceId === card.sequenceId; })
+      .sort(function (a, b) { return a.position - b.position; });
+    var nonDone = allSeqItems.filter(function (si) { return si.status !== 'completed'; });
+    var toShow = nonDone.length ? nonDone : allSeqItems.slice(-1);
+    if (toShow.length) {
+      return toShow.map(function (si) {
+        return si.title + (si.status === 'current' ? ' ★' : '');
+      });
+    }
+  }
+
+  var useIds = card.resourceUseIds || [];
+  if (useIds.length) {
+    var resTitles = useIds.map(function (uid) {
+      var use = (state.resourceUses || []).find(function (u) { return u.id === uid; });
+      var res = use ? A.findResource(state, use.resourceId) : null;
+      return res ? res.title : null;
+    }).filter(Boolean);
+    if (resTitles.length) return resTitles;
+  }
+
+  return [card.title || '(untitled)'];
+}
+
+function resourceCellHTML(cards, col) {
+  // Resources mode: clean list of resource/strand labels — spreadsheet-like
+  if (!cards.length) return '';
+  var subject = A.findSubject(state, col.id);
+  var html = '<div class="res-cell">';
+  cards.forEach(function (card) {
+    var labels = getMapLabels(card);
+    var matches = A.cardMatchesLens(card, lens, state);
+    var lensCls = lens.type === 'all' ? '' : (matches ? ' lens-match' : ' lens-dim');
+    var filterCls = (activeFilters.size && !activeFilters.has(card.audience)) ? ' res-block-hidden' : '';
+    html += '<div class="res-card-block' + lensCls + filterCls + '">';
+    labels.forEach(function (label) {
+      html += '<div class="res-label">' + escapeHtml(label) + '</div>';
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
 }
 
 function groupChipHTML(groupName, cards) {
@@ -551,11 +590,11 @@ function groupChipHTML(groupName, cards) {
 
 function cellChipsHTML(cards, col) {
   if (!cards.length) return '';
-  // Summary: one chip per cell showing column label + mapGroup breakdown
-  if (mapViewMode === 'summary') {
-    return summaryCellHTML(cards, col);
+  // Resources: clean strand/resource list — the default, most like a spreadsheet
+  if (mapViewMode === 'resources') {
+    return resourceCellHTML(cards, col);
   }
-  // Detailed: every card individually
+  // Detailed: every card individually as a chip
   if (mapViewMode === 'detailed') {
     return cards.map(cardChipHTML).join('');
   }
@@ -588,7 +627,19 @@ function renderMap() {
   var html = '';
   grid.forEach(function (g) {
     var rowEmpty = columns.every(function (col) { return !(g.cells[col.id] || []).length; });
-    html += '<tr' + (rowEmpty ? ' class="row-empty"' : '') + '><th class="row-head">' + escapeHtml(g.row.label) + '</th>';
+    var rid = g.row.id;
+    var rowType = rid === 'together' ? 'together' :
+                  rid === 'coop-outside' ? 'coop' :
+                  rid === 'optional' ? 'optional' :
+                  rid === 'unplaced' ? 'unplaced' :
+                  rid.startsWith('group:') ? 'group' :
+                  rid.startsWith('individual:') ? 'individual' : 'other';
+    var rowClasses = [];
+    if (rowEmpty) rowClasses.push('row-empty');
+    if (rowType === 'optional') rowClasses.push('row-optional');
+    if (rowType === 'unplaced') rowClasses.push('row-unplaced');
+    html += '<tr data-row-type="' + rowType + '"' + (rowClasses.length ? ' class="' + rowClasses.join(' ') + '"' : '') + '>';
+    html += '<th class="row-head">' + escapeHtml(g.row.label) + '</th>';
     columns.forEach(function (col) {
       var cards = g.cells[col.id] || [];
       html += '<td>' + cellChipsHTML(cards, col) + '</td>';
@@ -1040,7 +1091,7 @@ function render() {
 
 function setMapViewMode(mode) {
   mapViewMode = mode;
-  document.body.classList.toggle('map-summary', mode === 'summary');
+  document.body.classList.toggle('map-resources', mode === 'resources');
   document.body.classList.toggle('map-detailed', mode === 'detailed');
   document.querySelectorAll('#mapview-toggle button').forEach(function (b) {
     b.classList.toggle('active', b.getAttribute('data-mapview') === mode);
@@ -1054,12 +1105,11 @@ document.getElementById('mapview-toggle').addEventListener('click', function (e)
   setMapViewMode(btn.getAttribute('data-mapview'));
 });
 
-document.getElementById('print-summary-btn').addEventListener('click', function () {
+document.getElementById('print-resource-btn').addEventListener('click', function () {
   var prev = mapViewMode;
-  setMapViewMode('summary');
+  setMapViewMode('resources');
   document.body.classList.remove('print-resources');
   window.print();
-  // afterprint fires after the print dialog closes (sync on most browsers anyway)
   window.addEventListener('afterprint', function restoreMode() {
     window.removeEventListener('afterprint', restoreMode);
     setMapViewMode(prev);

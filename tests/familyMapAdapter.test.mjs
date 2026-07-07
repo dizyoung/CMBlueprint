@@ -515,6 +515,64 @@ test('formApplicability is set on sample cards and survives updateCard round-tri
   assert.deepEqual(card.formApplicability, []);
 });
 
+test('Resources mode: card_bible derives map labels from loop items, not card title', () => {
+  const state = A.buildSampleAppState();
+  const bibleCard = A.findCard(state, 'card_bible');
+  assert.ok(bibleCard, 'card_bible exists');
+  assert.ok(bibleCard.loopId, 'card_bible has a loopId');
+  // The loop items are the resource/strand labels for the map
+  const loopItems = state.loopItems.filter(function (li) { return li.loopId === bibleCard.loopId; });
+  assert.ok(loopItems.length >= 3, 'Bible loop has at least 3 items — map shows those, not just "Bible Loop"');
+  const titles = loopItems.map(function (li) { return li.title; });
+  assert.ok(titles.some(function (t) { return t.toLowerCase().includes('matthew') || t.toLowerCase().includes('testament'); }),
+    'Loop items include Bible-specific strand titles');
+});
+
+test('Resources mode: card_american_history has strandLabels overriding resource title', () => {
+  const state = A.buildSampleAppState();
+  const card = A.findCard(state, 'card_american_history');
+  assert.ok(card.strandLabels && card.strandLabels.length >= 2,
+    'card_american_history has strandLabels with multiple strands');
+  assert.ok(card.strandLabels.some(function (s) { return s.toLowerCase().includes('spine'); }),
+    'strandLabels includes a spine label');
+  assert.ok(card.strandLabels.some(function (s) { return s.toLowerCase().includes('story') || s.toLowerCase().includes('picture'); }),
+    'strandLabels includes supplementary strand labels beyond the main spine');
+});
+
+test('Resources mode: card_history_spine strandLabels reflects current cycle (Modern Times)', () => {
+  const state = A.buildSampleAppState();
+  const card = A.findCard(state, 'card_history_spine');
+  assert.ok(card.strandLabels && card.strandLabels.length > 0,
+    'card_history_spine has strandLabels');
+  assert.ok(card.strandLabels[0].toLowerCase().includes('modern'),
+    'history spine strandLabels references Modern Times cycle');
+});
+
+test('Resources mode: card_readaloud derives map labels from sequence items (current + upcoming)', () => {
+  const state = A.buildSampleAppState();
+  const card = A.findCard(state, 'card_readaloud');
+  assert.ok(card.sequenceId, 'card_readaloud has sequenceId');
+  const currentItem = state.sequenceItems.find(function (si) { return si.sequenceId === card.sequenceId && si.status === 'current'; });
+  assert.ok(currentItem, 'sequence has a current item');
+  // The current item title is the map display label (not "Family Read-Alouds")
+  assert.ok(currentItem.title && currentItem.title !== 'Family Read-Alouds',
+    'Map label would be the actual book title, not the card title');
+});
+
+test('Resources mode: cards without strandLabels/loop/sequence fall back to resource title then card title', () => {
+  const state = A.buildSampleAppState();
+  // card_grammar has a resource but no strandLabels/loop/sequence
+  const grammar = A.findCard(state, 'card_grammar');
+  assert.ok(!grammar.strandLabels, 'card_grammar has no strandLabels');
+  assert.ok(!grammar.loopId, 'card_grammar has no loopId');
+  assert.ok(!grammar.sequenceId, 'card_grammar has no sequenceId');
+  assert.ok(grammar.resourceUseIds && grammar.resourceUseIds.length > 0, 'card_grammar has resource use');
+  // Map would show resource title "Grammar Curriculum (TBD)", not just "Grammar"
+  const use = state.resourceUses.find(function (u) { return u.id === grammar.resourceUseIds[0]; });
+  const res = A.findResource(state, use.resourceId);
+  assert.ok(res && res.title !== 'Grammar', 'Resource title is more descriptive than card title');
+});
+
 test('Summary mode: cells with mapGroups would collapse to fewer chips than Detailed', () => {
   // Validate the data that drives Summary vs Subjects vs Detailed view-mode differences.
   // Summary shows 1 chip/cell; Subjects groups by mapGroup; Detailed shows every card.

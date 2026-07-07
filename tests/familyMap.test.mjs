@@ -629,6 +629,17 @@ test('makeCard preserves mapGroup when provided', () => {
   assert.equal(card.mapGroup, 'Beauty Loop');
 });
 
+test('makeCard defaults strandLabels to null', () => {
+  const card = M.makeCard({ id: 'c1', title: 'History' });
+  assert.equal(card.strandLabels, null);
+});
+
+test('makeCard preserves strandLabels when provided', () => {
+  const card = M.makeCard({ id: 'c1', title: 'American History',
+    strandLabels: ['American History Spine', 'American History Story', 'American Picture Books'] });
+  assert.deepEqual(card.strandLabels, ['American History Spine', 'American History Story', 'American Picture Books']);
+});
+
 // ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
