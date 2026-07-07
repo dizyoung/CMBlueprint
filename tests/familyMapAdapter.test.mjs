@@ -701,6 +701,136 @@ test('not-this-year planning status does not affect map row placement', () => {
   assert.equal(A.rowIdForCard(updated), 'unplaced');
 });
 
+// ---------------------------------------------------------------------------
+// commitCardResources — resource CRUD via adapter
+// ---------------------------------------------------------------------------
+
+test('getResourceUsesForCard returns uses linked to a specific card', () => {
+  const state = A.buildSampleAppState();
+  const card = A.findCard(state, 'card_bible');
+  const uses = A.getResourceUsesForCard(state, card.id);
+  // Bible loop card may or may not have direct resource uses
+  assert.ok(Array.isArray(uses), 'returns an array');
+  // All returned uses should reference the correct card
+  uses.forEach(function (u) { assert.equal(u.cardId, card.id); });
+});
+
+test('commitCardResources adds a new resource and ResourceUse to a card', () => {
+  const state = A.buildSampleAppState();
+  const card = A.findCard(state, 'card_bible');
+  const before = A.getResourceUsesForCard(state, card.id).length;
+  A.commitCardResources(state, card.id, [
+    { _resId: null, _useId: null, title: 'New Testament', status: 'have-it' }
+  ]);
+  const uses = A.getResourceUsesForCard(state, card.id);
+  assert.equal(uses.length, 1, 'one ResourceUse added');
+  const res = A.findResource(state, uses[0].resourceId);
+  assert.ok(res, 'Resource created');
+  assert.equal(res.title, 'New Testament');
+  assert.equal(res.status, 'have-it');
+  assert.ok(card.resourceUseIds.includes(uses[0].id), 'card.resourceUseIds updated');
+});
+
+test('commitCardResources updates an existing resource title and status', () => {
+  const state = A.buildSampleAppState();
+  const card = A.findCard(state, 'card_bible');
+  A.commitCardResources(state, card.id, [{ _resId: null, _useId: null, title: 'Draft NT', status: 'need-to-buy' }]);
+  const use = A.getResourceUsesForCard(state, card.id)[0];
+  const res = A.findResource(state, use.resourceId);
+  // Now update via commitCardResources
+  A.commitCardResources(state, card.id, [{ _resId: res.id, _useId: use.id, title: 'New Testament', status: 'have-it' }]);
+  const updated = A.findResource(state, res.id);
+  assert.equal(updated.title, 'New Testament');
+  assert.equal(updated.status, 'have-it');
+  assert.equal(A.getResourceUsesForCard(state, card.id).length, 1, 'still 1 use — no duplicate');
+});
+
+test('commitCardResources removes a deleted resource and its use when not shared', () => {
+  const state = A.buildSampleAppState();
+  const card = A.findCard(state, 'card_bible');
+  A.commitCardResources(state, card.id, [{ _resId: null, _useId: null, title: 'NT to delete', status: 'need-to-choose' }]);
+  const use = A.getResourceUsesForCard(state, card.id)[0];
+  const resId = use.resourceId;
+  // Now remove it by committing empty list
+  A.commitCardResources(state, card.id, []);
+  assert.equal(A.getResourceUsesForCard(state, card.id).length, 0, 'ResourceUse removed');
+  assert.ok(!A.findResource(state, resId), 'Resource removed (not shared)');
+  assert.deepEqual(card.resourceUseIds, [], 'card.resourceUseIds cleared');
+});
+
+test('commitCardResources does not delete a resource that is shared by another card', () => {
+  const state = A.buildSampleAppState();
+  const cardA = A.findCard(state, 'card_bible');
+  const cardB = A.addCard(state, { title: 'Other Card', subjectColumnId: 'bible' });
+  // Add a resource to cardA
+  A.commitCardResources(state, cardA.id, [{ _resId: null, _useId: null, title: 'Shared Book', status: 'have-it' }]);
+  const useA = A.getResourceUsesForCard(state, cardA.id)[0];
+  const sharedResId = useA.resourceId;
+  // Simulate another card also using the same resource by pushing a use directly
+  const useB = M.makeResourceUse({ resourceId: sharedResId, cardId: cardB.id });
+  state.resourceUses.push(useB);
+  cardB.resourceUseIds = [useB.id];
+  // Now remove from cardA — shared resource must NOT be deleted
+  A.commitCardResources(state, cardA.id, []);
+  assert.equal(A.getResourceUsesForCard(state, cardA.id).length, 0, 'useA removed from cardA');
+  assert.ok(A.findResource(state, sharedResId), 'shared resource preserved because cardB still uses it');
+});
+
+test('resource added via commitCardResources is visible in getResourceList', () => {
+  const state = A.buildSampleAppState();
+  const card = A.findCard(state, 'card_bible');
+  A.commitCardResources(state, card.id, [
+    { _resId: null, _useId: null, title: 'New Testament', status: 'have-it' }
+  ]);
+  const grouped = A.getResourceList(state, { groupBy: 'subject' });
+  // grouped is an object keyed by subject id; each value is an array of resource rollup items
+  const bibleGroup = grouped[card.subjectColumnId];
+  assert.ok(bibleGroup, 'subject group exists for ' + card.subjectColumnId);
+  const ntRes = bibleGroup.find(function (r) { return r.title === 'New Testament'; });
+  assert.ok(ntRes, 'New Testament appears in resource list after commitCardResources');
+});
+
+test('resource added from map card persists through JSON export/import round-trip', () => {
+  const state = A.buildSampleAppState();
+  const card = A.findCard(state, 'card_bible');
+  A.commitCardResources(state, card.id, [
+    { _resId: null, _useId: null, title: 'New Testament', status: 'have-it' }
+  ]);
+  // Simulate export/import (JSON serialize + deserialize)
+  const exported = JSON.parse(JSON.stringify(state));
+  const resInExport = exported.resources.find(function (r) { return r.title === 'New Testament'; });
+  assert.ok(resInExport, 'Resource preserved in export');
+  const useInExport = exported.resourceUses.find(function (u) { return u.cardId === card.id && u.resourceId === resInExport.id; });
+  assert.ok(useInExport, 'ResourceUse preserved in export');
+  const cardInExport = exported.cards.find(function (c) { return c.id === card.id; });
+  assert.ok(cardInExport.resourceUseIds.includes(useInExport.id), 'card.resourceUseIds preserved');
+});
+
+test('coverage status updates after adding a resource via commitCardResources', () => {
+  const state = A.buildSampleAppState();
+  // Find a card with no resources
+  const cardNoRes = A.addCard(state, { title: 'Empty Card', subjectColumnId: 'science' });
+  assert.equal(A.getCoverageStatusForCard(state, cardNoRes.id), 'not-tracked', 'initially not-tracked');
+  A.commitCardResources(state, cardNoRes.id, [
+    { _resId: null, _useId: null, title: 'Science Book', status: 'have-it' }
+  ]);
+  assert.equal(A.getCoverageStatusForCard(state, cardNoRes.id), 'covered', 'covered after have-it resource added');
+  A.commitCardResources(state, cardNoRes.id, [
+    { _resId: null, _useId: null, title: 'Science Book', status: 'need-to-buy' }
+  ]);
+  assert.equal(A.getCoverageStatusForCard(state, cardNoRes.id), 'needs-books', 'needs-books when need-to-buy');
+});
+
+test('findResourceUse retrieves a use by id', () => {
+  const state = A.buildSampleAppState();
+  const card = A.findCard(state, 'card_bible');
+  A.commitCardResources(state, card.id, [{ _resId: null, _useId: null, title: 'NT', status: 'have-it' }]);
+  const use = A.getResourceUsesForCard(state, card.id)[0];
+  assert.ok(use);
+  assert.strictEqual(A.findResourceUse(state, use.id), use);
+  assert.strictEqual(A.findResourceUse(state, 'nonexistent'), null);
+});
+
 let passed = 0;
 let failed = 0;
 for (const t of tests) {

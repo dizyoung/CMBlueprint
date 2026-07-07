@@ -96,6 +96,24 @@
   .res-use { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .res-dupe-note { font-size: 11px; font-weight: 400; color: var(--muted); font-style: italic; }
 
+  /* Resource editor rows inside card overlay */
+  .resource-list-editor { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+  .resource-row { display: flex; gap: 6px; align-items: center; }
+  .resource-row .res-title-inp { flex: 1; font-size: 13px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--milk-white); }
+  .resource-row .res-status-sel { font-size: 12px; padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--milk-white); }
+  .resource-row .remove-res-btn { border: none; background: none; cursor: pointer; color: var(--muted); font-size: 16px; line-height: 1; padding: 2px 4px; }
+  .resource-row .remove-res-btn:hover { color: var(--poppy); }
+  .add-resource-row-btn { font-size: 12px; color: var(--wonder-marine); background: none; border: 1px dashed var(--border); border-radius: 6px; padding: 5px 10px; cursor: pointer; width: 100%; margin-top: 2px; }
+  .add-resource-row-btn:hover { background: var(--field-mint); }
+  .ed-res-empty { font-size: 12px; color: var(--muted); font-style: italic; }
+
+  /* Group detail overlay */
+  .gd-card-row { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; font-size: 13px; }
+  .gd-card-title { font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .gd-card-resources { font-size: 12px; color: var(--muted); margin-top: 5px; }
+  .gd-edit-btn { font-size: 11px; padding: 3px 9px; border: 1px solid var(--border); border-radius: 5px; background: var(--field-mint); cursor: pointer; white-space: nowrap; }
+  .gd-edit-btn:hover { background: var(--lagoon-light); color: var(--milk-white); }
+
   @media print {
     /* Hide all app chrome and controls */
     .app-header, .banner, #save-bar, .toolbar, .legend, .filters-row,
@@ -271,12 +289,27 @@
     <div class="checkrow"><input type="checkbox" id="ed-use-default" checked><label for="ed-use-default" style="margin:0;font-weight:400;">Use default for who this is for</label></div>
     <div id="ed-participants-checks" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
 
-    <div class="modal-actions">
+    <h3 style="margin:16px 0 6px;font-size:13px;color:var(--wonder-marine);">Resources</h3>
+    <div class="resource-list-editor" id="ed-resource-rows"></div>
+    <button type="button" class="add-resource-row-btn" id="ed-add-resource-btn">+ Add resource</button>
+
+    <div class="modal-actions" style="margin-top:16px;">
       <span></span>
       <div class="right">
         <button id="ed-cancel">Cancel</button>
         <button class="accent" id="ed-save">Save</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="group-detail-overlay" style="display:none;">
+  <div class="modal-card" style="max-width:520px;">
+    <h2 id="gd-title" style="margin-bottom:14px;">Group</h2>
+    <div id="gd-cards-list"></div>
+    <div class="modal-actions" style="margin-top:12px;">
+      <span></span>
+      <div class="right"><button id="gd-close">Close</button></div>
     </div>
   </div>
 </div>
@@ -606,12 +639,13 @@ function groupChipHTML(groupName, cards) {
   var matches = cards.some(function (c) { return A.cardMatchesLens(c, lens, state); });
   var lensCls = lens.type === 'all' ? '' : (matches ? ' lens-match' : ' lens-dim');
   var subject = A.findSubject(state, cards[0].subjectColumnId);
-  var borderStyle = subject ? ' style="border-left-color:' + subject.color + ';"' : '';
   var dotCls = groupStatusDot(cards);
   var subText = cards.map(function (c) { return c.title; }).join(', ');
   var pillsHtml = participantPillsHTML(allParticipants);
+  var groupStyle = (subject && subject.color ? 'border-left-color:' + subject.color + ';' : '') + 'cursor:pointer;';
   return (
-    '<div class="chip chip-group' + lensCls + filterCls + '"' + borderStyle + '>' +
+    '<div class="chip chip-group' + lensCls + filterCls + '" style="' + groupStyle + '"' +
+      ' onclick="openGroupDetail(\'' + groupName.replace(/\\/g, '\\\\').replace(/'/g, '\\\'') + '\')" title="Click to view and edit ' + escapeHtml(groupName) + '">' +
       '<div class="chip-title"><span class="status-dot ' + dotCls + '"></span><span class="chip-title-text">' + escapeHtml(groupName) + '</span></div>' +
       '<div class="chip-sub">' + escapeHtml(subText) + '</div>' +
       '<div class="participants-row">' + pillsHtml + '</div>' +
@@ -770,11 +804,71 @@ function populateRowSelect() {
   sel.innerHTML = rows.map(function (r) { return '<option value="' + r.id + '">' + escapeHtml(r.label) + '</option>'; }).join('');
 }
 
+// ---------------------------------------------------------------------------
+// Resource editor helpers (shared pattern with Subjects & Books)
+// ---------------------------------------------------------------------------
+var edPendingResources = []; // [{_resId, _useId, title, status}]
+
+var RES_STATUS_OPTIONS = [
+  { value: 'have-it', label: 'Have it' },
+  { value: 'need-to-buy', label: 'Need to buy' },
+  { value: 'need-to-choose', label: 'Need to choose' },
+  { value: 'no-resource-needed', label: 'No resource needed' }
+];
+
+function renderEditorResourceRows() {
+  var container = document.getElementById('ed-resource-rows');
+  if (!edPendingResources.length) {
+    container.innerHTML = '<div class="ed-res-empty">No resources attached yet.</div>';
+    return;
+  }
+  container.innerHTML = edPendingResources.map(function (r, i) {
+    var statusOpts = RES_STATUS_OPTIONS.map(function (o) {
+      return '<option value="' + o.value + '"' + (r.status === o.value ? ' selected' : '') + '>' + o.label + '</option>';
+    }).join('');
+    return '<div class="resource-row" data-res-idx="' + i + '">' +
+      '<input type="text" class="res-title-inp" placeholder="Resource title" value="' + escapeHtml(r.title || '') + '">' +
+      '<select class="res-status-sel">' + statusOpts + '</select>' +
+      '<button class="remove-res-btn" data-res-idx="' + i + '">&times;</button>' +
+      '</div>';
+  }).join('');
+  container.querySelectorAll('.res-title-inp').forEach(function (inp, i) {
+    inp.addEventListener('input', function () { edPendingResources[i].title = inp.value; });
+  });
+  container.querySelectorAll('.res-status-sel').forEach(function (sel, i) {
+    sel.addEventListener('change', function () { edPendingResources[i].status = sel.value; });
+  });
+  container.querySelectorAll('.remove-res-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      edPendingResources.splice(Number(btn.dataset.resIdx), 1);
+      renderEditorResourceRows();
+    });
+  });
+}
+
+function loadEditorResources(cardId) {
+  var uses = A.getResourceUsesForCard(state, cardId);
+  edPendingResources = uses.map(function (use) {
+    var res = A.findResource(state, use.resourceId);
+    return res ? { _resId: res.id, _useId: use.id, title: res.title, status: res.status } : null;
+  }).filter(Boolean);
+}
+
+document.getElementById('ed-add-resource-btn').addEventListener('click', function () {
+  edPendingResources.push({ _resId: null, _useId: null, title: '', status: 'need-to-choose' });
+  renderEditorResourceRows();
+  var rows = document.querySelectorAll('#ed-resource-rows .res-title-inp');
+  if (rows.length) rows[rows.length - 1].focus();
+});
+
+// ---------------------------------------------------------------------------
+// Card editor overlay
+// ---------------------------------------------------------------------------
 function openEditor(cardId) {
   var card = A.findCard(state, cardId);
   if (!card) return;
   editingCardId = cardId;
-  document.getElementById('editor-title').textContent = 'Edit card';
+  document.getElementById('editor-title').textContent = card.title || 'Edit card';
   document.getElementById('ed-title').value = card.title || '';
   populateRowSelect();
   document.getElementById('ed-row').value = A.rowIdForCard(card);
@@ -791,11 +885,14 @@ function openEditor(cardId) {
   useDefault.checked = !isOverride;
   checksBox.style.display = isOverride ? 'flex' : 'none';
   document.getElementById('ed-subject').value = card.subjectColumnId;
+  loadEditorResources(cardId);
+  renderEditorResourceRows();
   document.getElementById('card-editor-overlay').style.display = 'flex';
 }
 
 function closeEditor() {
   editingCardId = null;
+  edPendingResources = [];
   document.getElementById('card-editor-overlay').style.display = 'none';
 }
 
@@ -808,6 +905,7 @@ function saveEditor() {
   var useDefault = document.getElementById('ed-use-default').checked;
   var ids = useDefault ? [] : Array.prototype.slice.call(document.querySelectorAll('.ed-participant-check:checked')).map(function (el) { return el.value; });
   A.setCardParticipants(state, editingCardId, ids.length ? 'override' : card.participantMode, ids);
+  A.commitCardResources(state, editingCardId, edPendingResources);
   closeEditor();
   render();
   markDirtyAndSave();
@@ -820,6 +918,47 @@ document.getElementById('ed-cancel').addEventListener('click', closeEditor);
 document.getElementById('ed-save').addEventListener('click', saveEditor);
 document.getElementById('card-editor-overlay').addEventListener('click', function (e) {
   if (e.target.id === 'card-editor-overlay') closeEditor();
+});
+
+// ---------------------------------------------------------------------------
+// Group detail overlay (Subject Map / Resource Map grouped cards)
+// ---------------------------------------------------------------------------
+function openGroupDetail(groupName) {
+  var allCards = state.cards.filter(function (c) { return c.mapGroup === groupName; });
+  document.getElementById('gd-title').textContent = groupName;
+  var html = '';
+  allCards.forEach(function (card) {
+    var uses = A.getResourceUsesForCard(state, card.id);
+    var resHtml = '';
+    if (uses.length) {
+      resHtml = uses.map(function (use) {
+        var res = A.findResource(state, use.resourceId);
+        if (!res) return '';
+        var statusLabel = { 'have-it': 'Have it', 'need-to-buy': 'Need to buy', 'need-to-choose': 'Need to choose', 'no-resource-needed': 'No resource needed' }[res.status] || res.status;
+        return '<div>· ' + escapeHtml(res.title) + ' <span style="color:var(--muted);font-size:11px;">(' + escapeHtml(statusLabel) + ')</span></div>';
+      }).filter(Boolean).join('');
+    } else {
+      resHtml = '<div class="ed-res-empty">No resources yet.</div>';
+    }
+    html += '<div class="gd-card-row">' +
+      '<div class="gd-card-title">' + escapeHtml(card.title) +
+        '<button class="gd-edit-btn" onclick="closeGroupDetail();openEditor(\'' + card.id + '\')">Edit</button>' +
+      '</div>' +
+      '<div class="gd-card-resources">' + resHtml + '</div>' +
+      '</div>';
+  });
+  if (!allCards.length) html = '<div class="ed-res-empty">No cards in this group.</div>';
+  document.getElementById('gd-cards-list').innerHTML = html;
+  document.getElementById('group-detail-overlay').style.display = 'flex';
+}
+
+function closeGroupDetail() {
+  document.getElementById('group-detail-overlay').style.display = 'none';
+}
+
+document.getElementById('gd-close').addEventListener('click', closeGroupDetail);
+document.getElementById('group-detail-overlay').addEventListener('click', function (e) {
+  if (e.target.id === 'group-detail-overlay') closeGroupDetail();
 });
 
 function advanceLoopUI(loopId) { A.advanceLoopInState(state, loopId); render(); markDirtyAndSave(); }

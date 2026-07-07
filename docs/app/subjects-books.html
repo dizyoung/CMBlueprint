@@ -596,56 +596,20 @@ document.getElementById('item-save-btn').addEventListener('click', () => {
   const suggestedWeeklyTouches = inputFreq.value.trim() || null;
   const scheduleStyleSuggestion = selScheduleStyle.value || null;
 
-  // Reconcile resources: update existing, add new, remove deleted
-  // Collect resIds still present
-  const stillPresentResIds = new Set(pendingResources.filter(r=>r._resId).map(r=>r._resId));
-
   if (editingCardId) {
-    // Update card fields
     A.updateCard(state, editingCardId, {
       title, subjectColumnId, planningStatus, notes, formApplicability,
       suggestedWeeklyTouches, scheduleStyleSuggestion,
       ...audienceParsed
     });
-
-    // Remove resourceUses + resources that were deleted in the editor
-    const existingUses = (state.resourceUses || []).filter(u => u.cardId === editingCardId);
-    existingUses.forEach(u => {
-      if (!stillPresentResIds.has(u.resourceId)) {
-        state.resourceUses = state.resourceUses.filter(r => r.id !== u.id);
-        // Only remove resource if not used elsewhere
-        const usedElsewhere = state.resourceUses.some(other => other.resourceId === u.resourceId);
-        if (!usedElsewhere) {
-          state.resources = state.resources.filter(r => r.id !== u.resourceId);
-        }
-      }
-    });
-
-    // Update existing resources title/status
-    pendingResources.filter(r=>r._resId).forEach(r => {
-      const res = state.resources.find(res => res.id === r._resId);
-      if (res) { res.title = r.title; res.status = r.status; }
-    });
-
-    // Add new resources (no _resId)
-    pendingResources.filter(r=>!r._resId && r.title.trim()).forEach(r => {
-      const res = M.makeResource({ title: r.title.trim(), type: r.type || 'book', status: r.status });
-      state.resources.push(res);
-      state.resourceUses.push(M.makeResourceUse({ resourceId: res.id, cardId: editingCardId, subjectColumnId }));
-    });
+    A.commitCardResources(state, editingCardId, pendingResources);
   } else {
-    // Add new card
     const card = A.addCard(state, {
       title, subjectColumnId, planningStatus, notes, formApplicability,
       suggestedWeeklyTouches, scheduleStyleSuggestion,
       ...audienceParsed
     });
-    // Add resources
-    pendingResources.filter(r=>r.title.trim()).forEach(r => {
-      const res = M.makeResource({ title: r.title.trim(), type: r.type || 'book', status: r.status });
-      state.resources.push(res);
-      state.resourceUses.push(M.makeResourceUse({ resourceId: res.id, cardId: card.id, subjectColumnId }));
-    });
+    A.commitCardResources(state, card.id, pendingResources);
   }
 
   saveState();
