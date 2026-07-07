@@ -14,7 +14,8 @@
   .chip { border: 1px solid var(--border); border-left: 4px solid var(--lagoon-light); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; background: var(--milk-white); box-shadow: 0 1px 2px rgba(9,69,78,0.04); transition: opacity 0.15s, box-shadow 0.15s; overflow: hidden; }
   .chip.chip-single { cursor: pointer; }
   .chip.chip-single:hover { background: var(--field-mint); }
-  .chip.chip-group { cursor: default; }
+  .chip.chip-group { cursor: default; background: #f0f7f5; border-style: solid; }
+  .chip.chip-summary { cursor: default; background: #e8f3f0; font-weight: 600; }
   .chip:last-child { margin-bottom: 0; }
   .chip.lens-dim { opacity: 0.28; }
   .chip.lens-match { box-shadow: 0 0 0 2px var(--wonder-marine) inset; }
@@ -22,9 +23,12 @@
   .chip-title { font-weight: 600; font-size: 13px; color: var(--ink); line-height: 1.3; display: flex; align-items: flex-start; gap: 5px; }
   .chip-title-text { flex: 1; min-width: 0; overflow-wrap: break-word; word-break: normal; hyphens: none; }
   .chip-sub { color: var(--muted); font-size: 11px; margin-top: 3px; overflow-wrap: break-word; word-break: normal; line-height: 1.4; }
-  body.map-summary .chip { padding: 4px 7px; }
+  body.map-summary .chip { padding: 5px 8px; }
   body.map-summary .chip-title { font-size: 12px; }
-  body.map-summary .chip-sub, body.map-summary .participants-row { display: none; }
+  body.map-summary .participants-row { display: none; }
+  /* notice: compact variant shown only in print */
+  .notice-compact { display: none; }
+  .notice-full-list { display: inline; }
 
   .status-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
   .status-dot.dot-book { background: #4a9b5e; }
@@ -83,12 +87,46 @@
   .res-dupe-note { font-size: 11px; font-weight: 400; color: var(--muted); font-style: italic; }
 
   @media print {
-    .app-header, .banner, .toolbar, .save-area, .overlay, .legend, .filters-row, .starter-panel, .manage-panel { display: none !important; }
-    @page { size: landscape; margin: 0.4in; }
-    @page resources { size: portrait; margin: 0.5in; }
-    body.print-resources table.map, body.print-resources #loops-panel, body.print-resources #sequences-panel { display: none !important; }
-    body.print-resources #resources-panel { page: resources; }
+    /* Hide all app chrome and controls */
+    .app-header, .banner, #save-bar, .toolbar, .legend, .filters-row,
+    .starter-panel, .manage-panel, .overlay, #loops-panel, #sequences-panel { display: none !important; }
+
+    @page { size: landscape; margin: 0.45in 0.35in; }
+
+    /* Resources-only print mode */
+    body.print-resources table.map, body.print-resources #review-panel { display: none !important; }
     body:not(.print-resources) #resources-panel { display: none !important; }
+
+    /* Page-level layout */
+    .page-wrap { padding: 0; }
+    .page-title { font-size: 15px; margin: 0 0 2px; }
+    .sub { font-size: 10px; margin: 0 0 6px; }
+
+    /* Compact review panel — hide full unplaced list, show count only */
+    #review-panel { margin-bottom: 4px; }
+    .notice { font-size: 10px; padding: 3px 8px; border-radius: 4px; margin-bottom: 4px; }
+    .notice-full-list { display: none !important; }
+    .notice-compact { display: inline !important; }
+
+    /* Map table — compact and readable */
+    div[style*="overflow-x"] { overflow: visible; }
+    table.map { width: 100%; font-size: 10px; border-radius: 0; margin-bottom: 0; }
+    table.map th, table.map td { padding: 3px 4px; min-width: 52px; max-width: 130px; min-height: 0; font-size: 10px; }
+    table.map thead th { font-size: 9px; padding: 4px 3px; }
+    table.map th.row-head { width: 68px; min-width: 52px; max-width: 90px; font-size: 10px; }
+
+    /* Chips — compact, avoid splitting across pages */
+    .chip { padding: 3px 5px; margin-bottom: 2px; box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
+    .chip-title { font-size: 10px; gap: 3px; }
+    .chip-sub { font-size: 8px; margin-top: 1px; line-height: 1.3; }
+    .participants-row { display: none !important; }
+    .status-dot { width: 6px; height: 6px; }
+
+    /* Hide empty rows */
+    tr.row-empty { display: none !important; }
+
+    /* Avoid row splitting */
+    tbody tr { break-inside: avoid; page-break-inside: avoid; }
   }
 </style>
 </head>
@@ -117,7 +155,8 @@
     <button type="button" data-mapview="detailed">Detailed</button>
   </div>
   <button onclick="render()">Refresh</button>
-  <button class="accent" onclick="document.body.classList.remove('print-resources'); window.print();">Print map</button>
+  <button class="accent" id="print-summary-btn">Print summary map</button>
+  <button class="accent" onclick="document.body.classList.remove('print-resources'); window.print();">Print full map</button>
   <button class="accent" onclick="document.body.classList.add('print-resources'); window.print();">Print Book &amp; Resource List</button>
   <button type="button" id="starter-toggle-btn">Add starter cards</button>
   <button type="button" id="learners-toggle-btn">Family members</button>
@@ -448,6 +487,42 @@ function groupStatusDot(cards) {
   return allPractice ? 'dot-practice' : 'dot-book';
 }
 
+function summaryCellHTML(cards, col) {
+  // Summary mode: one chip per non-empty cell, title = column label, sub = mapGroups or item count
+  var allParticipants = [];
+  var seen = {};
+  cards.forEach(function (c) {
+    M.resolveParticipants(c, state.students, state.groups).forEach(function (id) {
+      if (!seen[id]) { seen[id] = true; allParticipants.push(id); }
+    });
+  });
+  var dotCls = groupStatusDot(cards);
+  var subject = A.findSubject(state, col.id);
+  var borderStyle = subject ? ' style="border-left-color:' + subject.color + ';"' : '';
+  var seenGroups = {};
+  var mapGroupNames = [];
+  var ungroupedCount = 0;
+  cards.forEach(function (c) {
+    if (c.mapGroup && !seenGroups[c.mapGroup]) { seenGroups[c.mapGroup] = true; mapGroupNames.push(c.mapGroup); }
+    else if (!c.mapGroup) { ungroupedCount++; }
+  });
+  var subParts = mapGroupNames.slice();
+  if (ungroupedCount > 0) {
+    if (!subParts.length) subParts.push(ungroupedCount + ' item' + (ungroupedCount !== 1 ? 's' : ''));
+    else subParts.push('+' + ungroupedCount + ' more');
+  }
+  var subText = subParts.join(' · ');
+  var lensCls = lens.type === 'all' ? '' : (cards.some(function (c) { return A.cardMatchesLens(c, lens, state); }) ? ' lens-match' : ' lens-dim');
+  var pillsHtml = participantPillsHTML(allParticipants);
+  return (
+    '<div class="chip chip-summary' + lensCls + '"' + borderStyle + '>' +
+      '<div class="chip-title"><span class="status-dot ' + dotCls + '"></span><span class="chip-title-text">' + escapeHtml(col.label) + '</span></div>' +
+      (subText ? '<div class="chip-sub">' + escapeHtml(subText) + '</div>' : '') +
+      '<div class="participants-row">' + pillsHtml + '</div>' +
+    '</div>'
+  );
+}
+
 function groupChipHTML(groupName, cards) {
   var allParticipants = [];
   var seen = {};
@@ -474,11 +549,17 @@ function groupChipHTML(groupName, cards) {
   );
 }
 
-function cellChipsHTML(cards) {
+function cellChipsHTML(cards, col) {
+  if (!cards.length) return '';
+  // Summary: one chip per cell showing column label + mapGroup breakdown
+  if (mapViewMode === 'summary') {
+    return summaryCellHTML(cards, col);
+  }
+  // Detailed: every card individually
   if (mapViewMode === 'detailed') {
     return cards.map(cardChipHTML).join('');
   }
-  // Group cards by mapGroup, preserving insertion order of first occurrence
+  // Subjects: group cards by mapGroup, ungrouped cards shown individually
   var groups = {};
   var order = [];
   var ungrouped = [];
@@ -506,10 +587,11 @@ function renderMap() {
   var body = document.getElementById('map-body');
   var html = '';
   grid.forEach(function (g) {
-    html += '<tr><th class="row-head">' + escapeHtml(g.row.label) + '</th>';
+    var rowEmpty = columns.every(function (col) { return !(g.cells[col.id] || []).length; });
+    html += '<tr' + (rowEmpty ? ' class="row-empty"' : '') + '><th class="row-head">' + escapeHtml(g.row.label) + '</th>';
     columns.forEach(function (col) {
       var cards = g.cells[col.id] || [];
-      html += '<td>' + cellChipsHTML(cards) + '</td>';
+      html += '<td>' + cellChipsHTML(cards, col) + '</td>';
     });
     html += '</tr>';
   });
@@ -939,7 +1021,10 @@ function renderReviewPanel() {
     html += '<div class="notice"><strong>Worth a second look:</strong> ' + reviewItems.map(function (a) { return escapeHtml(a.label || a.id); }).join(', ') + '.</div>';
   }
   if (cardsNoPlacement.length) {
-    html += '<div class="notice"><strong>Not placed in weekly rhythm yet:</strong> ' + cardsNoPlacement.map(function (c) { return escapeHtml(c.title); }).join(', ') + '.</div>';
+    html += '<div class="notice"><strong>Not placed in weekly rhythm yet:</strong> ' +
+      '<span class="notice-compact">' + cardsNoPlacement.length + ' items — see Weekly Rhythm.</span>' +
+      '<span class="notice-full-list">' + cardsNoPlacement.map(function (c) { return escapeHtml(c.title); }).join(', ') + '.</span>' +
+    '</div>';
   }
   panel.innerHTML = html;
 }
@@ -953,14 +1038,32 @@ function render() {
   renderReviewPanel();
 }
 
+function setMapViewMode(mode) {
+  mapViewMode = mode;
+  document.body.classList.toggle('map-summary', mode === 'summary');
+  document.body.classList.toggle('map-detailed', mode === 'detailed');
+  document.querySelectorAll('#mapview-toggle button').forEach(function (b) {
+    b.classList.toggle('active', b.getAttribute('data-mapview') === mode);
+  });
+  renderMap();
+}
+
 document.getElementById('mapview-toggle').addEventListener('click', function (e) {
   var btn = e.target.closest('button[data-mapview]');
   if (!btn) return;
-  document.querySelectorAll('#mapview-toggle button').forEach(function (b) { b.classList.remove('active'); });
-  btn.classList.add('active');
-  mapViewMode = btn.getAttribute('data-mapview');
-  document.body.classList.toggle('map-summary', mapViewMode === 'summary');
-  renderMap();
+  setMapViewMode(btn.getAttribute('data-mapview'));
+});
+
+document.getElementById('print-summary-btn').addEventListener('click', function () {
+  var prev = mapViewMode;
+  setMapViewMode('summary');
+  document.body.classList.remove('print-resources');
+  window.print();
+  // afterprint fires after the print dialog closes (sync on most browsers anyway)
+  window.addEventListener('afterprint', function restoreMode() {
+    window.removeEventListener('afterprint', restoreMode);
+    setMapViewMode(prev);
+  }, { once: true });
 });
 function updateStarterToggleLabel() {
   var open = document.getElementById('starter-panel').classList.contains('show');

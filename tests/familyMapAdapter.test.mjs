@@ -515,6 +515,64 @@ test('formApplicability is set on sample cards and survives updateCard round-tri
   assert.deepEqual(card.formApplicability, []);
 });
 
+test('Summary mode: cells with mapGroups would collapse to fewer chips than Detailed', () => {
+  // Validate the data that drives Summary vs Subjects vs Detailed view-mode differences.
+  // Summary shows 1 chip/cell; Subjects groups by mapGroup; Detailed shows every card.
+  const state = A.buildSampleAppState();
+  const { grid, columns } = A.buildMapGrid(state);
+
+  // Find the beauty column (arts/beauty/music)
+  const beautyCols = ['beauty', 'arts', 'music'];
+  let beautyCards = [];
+  grid.forEach(function (g) {
+    columns.forEach(function (col) {
+      if (beautyCols.some(function (k) { return col.id.includes(k); })) {
+        beautyCards = beautyCards.concat(g.cells[col.id] || []);
+      }
+    });
+  });
+
+  // The 5 Beauty Loop cards should all share a mapGroup
+  const beautyLoopCards = state.cards.filter(function (c) { return c.mapGroup === 'Beauty Loop'; });
+  assert.ok(beautyLoopCards.length >= 4, 'At least 4 Beauty Loop cards exist (Subjects shows 1 group chip, Detailed shows each)');
+
+  // Subjects mode: unique mapGroups per cell → fewer chips than Detailed
+  // For the History column in the older-group row, all 4 history cards share 'History Cycle'
+  const historyCards = state.cards.filter(function (c) { return c.mapGroup === 'History Cycle'; });
+  assert.ok(historyCards.length >= 3, 'At least 3 History Cycle cards (Subjects: 1 chip, Detailed: N chips)');
+
+  // Summary: each non-empty cell would render 1 chip (the column label)
+  // Verify some cells ARE non-empty across multiple columns
+  var nonEmptyCellCount = 0;
+  grid.forEach(function (g) {
+    columns.forEach(function (col) {
+      if ((g.cells[col.id] || []).length > 0) nonEmptyCellCount++;
+    });
+  });
+  assert.ok(nonEmptyCellCount >= 10, 'At least 10 non-empty cells means Summary view shows at least 10 summary chips');
+});
+
+test('Detailed mode shows more items than Subjects because mapGroups are not collapsed', () => {
+  const state = A.buildSampleAppState();
+  // In Detailed: every card = one chip. In Subjects: each mapGroup = one chip.
+  // Count: active cards vs unique (row+col+mapGroup) groupings
+  const activeCards = state.cards.filter(function (c) { return c.status === 'active' || c.status === 'optional'; });
+
+  // Count distinct mapGroup labels across all cards
+  const allGroups = new Set();
+  let ungroupedCount = 0;
+  activeCards.forEach(function (c) {
+    if (c.mapGroup) allGroups.add(c.mapGroup);
+    else ungroupedCount++;
+  });
+
+  // Subjects view chip count ≈ allGroups.size + ungroupedCount (per cell, not total)
+  // Detailed view chip count = activeCards.length
+  // Detailed must have more chips than there are unique mapGroups + ungrouped cards
+  assert.ok(activeCards.length > allGroups.size + ungroupedCount,
+    'Detailed (one chip per card=' + activeCards.length + ') > Subjects groupings (groups=' + allGroups.size + ' + ungrouped=' + ungroupedCount + ')');
+});
+
 test('card_american_history exists in history column with mapGroup History Cycle', () => {
   const state = A.buildSampleAppState();
   const card = A.findCard(state, 'card_american_history');
