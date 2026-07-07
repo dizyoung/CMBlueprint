@@ -42,12 +42,25 @@ test('sample state builds rows, columns, and card groupings as expected', () => 
 test('Student Lens resolves correctly from real state, including together/group/co-op/individual work', () => {
   const state = A.buildSampleAppState();
   const jeremiahCards = A.studentLensCards(state, 'jeremiah').map((c) => c.id);
-  assert.deepEqual(jeremiahCards.sort(), [
-    'card_amhistory', 'card_ancienthistory', 'card_bible', 'card_readaloud', 'card_science_coop'
-  ].sort());
+  // Together cards: bible, readaloud, hymn, folksong, picturestudy, geography, naturestudy, handicraft, pe
+  // Group:older cards: amhistory, ancienthistory, dictation, citizenship
+  // Coop: science_coop
+  const jeremiahExpected = [
+    'card_bible', 'card_readaloud', 'card_hymn', 'card_folksong', 'card_picturestudy',
+    'card_geography', 'card_naturestudy', 'card_handicraft', 'card_pe',
+    'card_amhistory', 'card_ancienthistory', 'card_dictation', 'card_citizenship',
+    'card_science_coop'
+  ];
+  assert.deepEqual(jeremiahCards.sort(), jeremiahExpected.sort());
 
   const kaylaCards = A.studentLensCards(state, 'kayla').map((c) => c.id);
-  assert.deepEqual(kaylaCards.sort(), ['card_bible', 'card_math', 'card_readaloud'].sort());
+  // Together cards + group:littles copywork + individual math
+  const kaylaExpected = [
+    'card_bible', 'card_readaloud', 'card_hymn', 'card_folksong', 'card_picturestudy',
+    'card_geography', 'card_naturestudy', 'card_handicraft', 'card_pe',
+    'card_copywork', 'card_math'
+  ];
+  assert.deepEqual(kaylaCards.sort(), kaylaExpected.sort());
 
   const kaylaWithOptional = A.studentLensCards(state, 'kayla', { includeOptional: true }).map((c) => c.id);
   assert.ok(!kaylaWithOptional.includes('card_mapquiz'));
@@ -413,6 +426,84 @@ test('placeStarterCardsWithRhythmPreset places selected cards using a PNEU-inspi
   const created = A.placeStarterCardsWithRhythmPreset(state, 'preset_form1', cardIds);
   assert.equal(created.length, 2);
   cardIds.forEach((id) => assert.equal(A.cardHasRhythmPlacement(state, id), true));
+});
+
+test('planningStatus defaults to active and is separate from card.status', () => {
+  const state = A.buildSampleAppState();
+  const card = A.addCard(state, { title: 'Test Card', subjectColumnId: 'science' });
+  assert.equal(card.planningStatus, 'active');
+  assert.equal(card.status, 'active');
+  // status controls map row placement; planningStatus is a planning decision
+  A.updateCard(state, card.id, { planningStatus: 'not-this-year' });
+  const updated = A.findCard(state, card.id);
+  assert.equal(updated.planningStatus, 'not-this-year');
+  assert.equal(updated.status, 'active'); // status unchanged
+});
+
+test('getCoverageStatusForCard derives coverage from resources, never from planningStatus', () => {
+  const state = A.buildSampleAppState();
+  // grammar card has a resource in 'need-to-choose' state
+  const grammarCoverage = A.getCoverageStatusForCard(state, 'card_grammar');
+  assert.equal(grammarCoverage, 'need-to-choose');
+  // hymn has planningStatus:'practice-no-book' and no resources => 'no-resource-needed'
+  const hymnCoverage = A.getCoverageStatusForCard(state, 'card_hymn');
+  assert.equal(hymnCoverage, 'no-resource-needed');
+  // picturestudy has a resource with status:'have-it' => 'covered'
+  const pictureCoverage = A.getCoverageStatusForCard(state, 'card_picturestudy');
+  assert.equal(pictureCoverage, 'covered');
+  // math_lucy resource is 'have-it' => 'covered'
+  const mathLucyCoverage = A.getCoverageStatusForCard(state, 'card_math_lucy');
+  assert.equal(mathLucyCoverage, 'covered');
+});
+
+test('getCardsForSubjectColumn returns all cards for a column sorted by title', () => {
+  const state = A.buildSampleAppState();
+  const historyCards = A.getCardsForSubjectColumn(state, 'history');
+  const ids = historyCards.map((c) => c.id);
+  assert.ok(ids.includes('card_amhistory'));
+  assert.ok(ids.includes('card_ancienthistory'));
+  assert.ok(ids.includes('card_mapquiz'));
+  assert.ok(ids.includes('card_neighboring'));
+  // citizenship is geography, not history
+  const geoCards = A.getCardsForSubjectColumn(state, 'geography');
+  assert.ok(geoCards.map((c) => c.id).includes('card_citizenship'));
+  const beautyCards = A.getCardsForSubjectColumn(state, 'beauty');
+  assert.equal(beautyCards.length, 3); // hymn, folksong, picturestudy
+});
+
+test('addCard and updateCard mutate state correctly', () => {
+  const state = A.buildSampleAppState();
+  const before = state.cards.length;
+  const card = A.addCard(state, { title: 'New Card', subjectColumnId: 'languages', planningStatus: 'optional' });
+  assert.equal(state.cards.length, before + 1);
+  assert.equal(card.planningStatus, 'optional');
+  A.updateCard(state, card.id, { title: 'Renamed Card', planningStatus: 'not-this-year' });
+  const found = A.findCard(state, card.id);
+  assert.equal(found.title, 'Renamed Card');
+  assert.equal(found.planningStatus, 'not-this-year');
+  assert.equal(A.updateCard(state, 'nonexistent', {}), null);
+});
+
+test('co-op card has planningStatus co-op-external and stays in coop-outside row', () => {
+  const state = A.buildSampleAppState();
+  const coopCard = A.findCard(state, 'card_science_coop');
+  assert.equal(coopCard.planningStatus, 'co-op-external');
+  assert.equal(coopCard.status, 'coop');
+  const rowId = A.rowIdForCard(coopCard);
+  assert.equal(rowId, 'coop-outside');
+});
+
+test('not-this-year planning status does not affect map row placement', () => {
+  const state = A.buildSampleAppState();
+  // planningStatus:'not-this-year' means a planning decision; map row is set by status/audience separately
+  const card = A.addCard(state, { title: 'Skipped Card', subjectColumnId: 'science', planningStatus: 'not-this-year' });
+  // makeCard defaults status to 'active'; planningStatus can be set independently
+  assert.equal(card.planningStatus, 'not-this-year');
+  // Explicitly set status to unplaced and verify row placement reflects status, not planningStatus
+  A.updateCard(state, card.id, { status: 'unplaced', audience: 'unplaced' });
+  const updated = A.findCard(state, card.id);
+  assert.equal(updated.planningStatus, 'not-this-year');
+  assert.equal(A.rowIdForCard(updated), 'unplaced');
 });
 
 let passed = 0;

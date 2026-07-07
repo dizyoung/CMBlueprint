@@ -6,9 +6,10 @@ export function appHeaderHTML(activePage) {
   }
   return (
     '<header class="app-header"><div class="app-header-inner">' +
-      '<span class="app-brand">Family School Map</span>' +
+      '<span class="app-brand">CM Blueprint</span>' +
       '<nav class="app-nav">' +
         link('./index.html', 'Home', 'home') +
+        link('./subjects-books.html', 'Subjects & Books', 'subjects') +
         link('./family-school-map.html', 'Family School Map', 'map') +
         link('./weekly-rhythm.html', 'Weekly Rhythm', 'rhythm') +
       '</nav>' +
