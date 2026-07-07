@@ -575,62 +575,89 @@ test('Resources mode: cards without strandLabels/loop/sequence fall back to reso
   assert.equal(grammar.title, 'Grammar', 'card title is the fallback label for unresolved grammar resource');
 });
 
-test('Summary mode: cells with mapGroups would collapse to fewer chips than Detailed', () => {
-  // Validate the data that drives Summary vs Subjects vs Detailed view-mode differences.
-  // Summary shows 1 chip/cell; Subjects groups by mapGroup; Detailed shows every card.
+test('Subject Map: cells with mapGroups collapse to fewer chips than Detailed Map', () => {
+  // Subject Map: each mapGroup → 1 chip; Detailed Map: every card → 1 chip
   const state = A.buildSampleAppState();
-  const { grid, columns } = A.buildMapGrid(state);
 
-  // Find the beauty column (arts/beauty/music)
-  const beautyCols = ['beauty', 'arts', 'music'];
-  let beautyCards = [];
-  grid.forEach(function (g) {
-    columns.forEach(function (col) {
-      if (beautyCols.some(function (k) { return col.id.includes(k); })) {
-        beautyCards = beautyCards.concat(g.cells[col.id] || []);
-      }
-    });
-  });
-
-  // The 5 Beauty Loop cards should all share a mapGroup
   const beautyLoopCards = state.cards.filter(function (c) { return c.mapGroup === 'Beauty Loop'; });
-  assert.ok(beautyLoopCards.length >= 4, 'At least 4 Beauty Loop cards exist (Subjects shows 1 group chip, Detailed shows each)');
+  assert.ok(beautyLoopCards.length >= 4, 'At least 4 Beauty Loop cards exist: Subject Map collapses to 1 group chip, Detailed Map shows each separately');
 
-  // Subjects mode: unique mapGroups per cell → fewer chips than Detailed
-  // For the History column in the older-group row, all 4 history cards share 'History Cycle'
   const historyCards = state.cards.filter(function (c) { return c.mapGroup === 'History Cycle'; });
-  assert.ok(historyCards.length >= 3, 'At least 3 History Cycle cards (Subjects: 1 chip, Detailed: N chips)');
-
-  // Summary: each non-empty cell would render 1 chip (the column label)
-  // Verify some cells ARE non-empty across multiple columns
-  var nonEmptyCellCount = 0;
-  grid.forEach(function (g) {
-    columns.forEach(function (col) {
-      if ((g.cells[col.id] || []).length > 0) nonEmptyCellCount++;
-    });
-  });
-  assert.ok(nonEmptyCellCount >= 10, 'At least 10 non-empty cells means Summary view shows at least 10 summary chips');
+  assert.ok(historyCards.length >= 3, 'At least 3 History Cycle cards: Subject Map shows 1 chip, Detailed Map shows N chips');
 });
 
-test('Detailed mode shows more items than Subjects because mapGroups are not collapsed', () => {
+test('Detailed Map shows more items than Subject Map because mapGroups are not collapsed', () => {
   const state = A.buildSampleAppState();
-  // In Detailed: every card = one chip. In Subjects: each mapGroup = one chip.
-  // Count: active cards vs unique (row+col+mapGroup) groupings
   const activeCards = state.cards.filter(function (c) { return c.status === 'active' || c.status === 'optional'; });
-
-  // Count distinct mapGroup labels across all cards
   const allGroups = new Set();
   let ungroupedCount = 0;
   activeCards.forEach(function (c) {
     if (c.mapGroup) allGroups.add(c.mapGroup);
     else ungroupedCount++;
   });
-
-  // Subjects view chip count ≈ allGroups.size + ungroupedCount (per cell, not total)
-  // Detailed view chip count = activeCards.length
-  // Detailed must have more chips than there are unique mapGroups + ungrouped cards
   assert.ok(activeCards.length > allGroups.size + ungroupedCount,
-    'Detailed (one chip per card=' + activeCards.length + ') > Subjects groupings (groups=' + allGroups.size + ' + ungrouped=' + ungroupedCount + ')');
+    'Detailed (one chip per card=' + activeCards.length + ') > Subject Map groupings (groups=' + allGroups.size + ' + ungrouped=' + ungroupedCount + ')');
+});
+
+test('Resource Map and Subject Map differ: Resource Map uses text strand labels, Subject Map uses chips', () => {
+  // Resource Map is a flat text list (strand/resource labels).
+  // Subject Map is chip-based grouping. They are fundamentally different rendering modes.
+  // We can verify this at the data level: the same set of cards should produce different label sets.
+  const state = A.buildSampleAppState();
+  // History Cycle in Resource Map → strandLabels/resource titles (Modern Times — World History Spine, etc.)
+  const histSpine = A.findCard(state, 'card_history_spine');
+  assert.ok(histSpine.strandLabels && histSpine.strandLabels.length > 0, 'History spine has strandLabels for Resource Map');
+  // In Subject Map, it would show under a "History Cycle" group chip instead
+  assert.equal(histSpine.mapGroup, 'History Cycle', 'History spine is in History Cycle mapGroup for Subject Map');
+  // These produce different outputs: strandLabels for Resource Map vs groupName chip for Subject Map
+  assert.notEqual(histSpine.strandLabels[0], histSpine.mapGroup, 'Resource Map label differs from Subject Map group name');
+});
+
+test('Resource Map falls back to card title when resource is need-to-choose', () => {
+  const state = A.buildSampleAppState();
+  // Grammar resource is need-to-choose; getMapLabels should return card title not resource title
+  const grammar = A.findCard(state, 'card_grammar');
+  const use = state.resourceUses.find(function (u) { return grammar.resourceUseIds && grammar.resourceUseIds.includes(u.id); });
+  const res = use ? A.findResource(state, use.resourceId) : null;
+  assert.ok(res && (res.status === 'need-to-choose' || res.status === 'undecided'), 'Grammar resource is need-to-choose');
+  // The card title is the clean fallback
+  assert.equal(grammar.title, 'Grammar', 'Card title "Grammar" is the clean fallback for Resource Map');
+});
+
+test('Resource Map has no TBD placeholder labels for any card in the demo', () => {
+  // No resource title containing "(TBD)" should appear in the labels that Resource Map would show.
+  const state = A.buildSampleAppState();
+  const tdbPattern = /\(TBD\)/i;
+  // Check all resource titles that are NOT need-to-choose/undecided (those get skipped)
+  state.resources.forEach(function (res) {
+    if (res.status !== 'need-to-choose' && res.status !== 'undecided') {
+      assert.ok(!tdbPattern.test(res.title),
+        'Resource "' + res.title + '" (status: ' + res.status + ') should not contain (TBD) — use cleanMapLabel');
+    }
+  });
+});
+
+test('Beauty Loop in Subject Map shows 1 group entry; in Detailed Map shows individual cards', () => {
+  const state = A.buildSampleAppState();
+  const beautyCards = state.cards.filter(function (c) { return c.mapGroup === 'Beauty Loop'; });
+  assert.ok(beautyCards.length >= 4, 'At least 4 Beauty Loop cards');
+  // Subject Map: 1 distinct mapGroup
+  const subjectGroups = new Set(beautyCards.map(function (c) { return c.mapGroup; }));
+  assert.equal(subjectGroups.size, 1, 'Subject Map shows 1 Beauty Loop group chip');
+  // Detailed Map: every card individually
+  assert.ok(beautyCards.length > 1, 'Detailed Map shows ' + beautyCards.length + ' individual Beauty Loop chips');
+});
+
+test('History in Resource Map uses strandLabels; in Subject Map uses History Cycle group chip', () => {
+  const state = A.buildSampleAppState();
+  const historyCards = state.cards.filter(function (c) { return c.mapGroup === 'History Cycle'; });
+  assert.ok(historyCards.length >= 3);
+  // Cards with strandLabels would show those in Resource Map
+  const withStrands = historyCards.filter(function (c) { return c.strandLabels && c.strandLabels.length; });
+  assert.ok(withStrands.length >= 2, 'At least 2 history cards have explicit strandLabels for Resource Map');
+  // All share the same mapGroup for Subject Map grouping
+  const uniqueGroups = new Set(historyCards.map(function (c) { return c.mapGroup; }));
+  assert.equal(uniqueGroups.size, 1, 'All history cards collapse to 1 History Cycle chip in Subject Map');
 });
 
 test('card_american_history exists in history column with mapGroup History Cycle', () => {

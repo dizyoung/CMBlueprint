@@ -34,6 +34,11 @@
   }
   .add-cell-btn:hover { opacity: 1; background: var(--field-mint); color: var(--wonder-marine); border-color: var(--lagoon-light); }
 
+  .ed-days-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 4px; }
+  .ed-day-row { display: flex; align-items: center; gap: 7px; font-size: 13px; cursor: pointer; }
+  .ed-day-row input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--wonder-marine); }
+  .ed-all-days-row { font-size: 12px; color: var(--muted); margin-top: 2px; display: flex; align-items: center; gap: 7px; cursor: pointer; }
+
   @media print {
     .app-header, .banner, .toolbar, .save-area, .add-cell-btn, .legend { display: none !important; }
     @page { size: landscape; margin: 0.4in; }
@@ -86,9 +91,9 @@
     <label for="ed-label">Label</label>
     <input type="text" id="ed-label" placeholder="e.g. Jeremiah independent">
 
-    <h3 style="margin:14px 0 6px;font-size:13px;color:var(--wonder-marine);">Move this rhythm item</h3>
-    <label for="ed-day">Day</label>
-    <select id="ed-day"></select>
+    <h3 style="margin:14px 0 6px;font-size:13px;color:var(--wonder-marine);">Day(s)</h3>
+    <div id="ed-days-list" class="ed-days-list"></div>
+    <label class="ed-all-days-row"><input type="checkbox" id="ed-all-days"> Every school day</label>
 
     <label for="ed-block">Rhythm block</label>
     <select id="ed-block"></select>
@@ -192,10 +197,21 @@ function openEditor(dayId, blockId, assignment) {
   document.getElementById('ed-showprint').checked = assignment ? assignment.showOnPrint !== false : true;
   document.getElementById('ed-delete').style.display = assignment ? '' : 'none';
 
-  var daySel = document.getElementById('ed-day');
-  daySel.innerHTML = rhythm.days.slice().sort(function (a, b) { return a.sortOrder - b.sortOrder; })
-    .map(function (d) { return '<option value="' + escapeHtml(d.id) + '">' + escapeHtml(d.label) + '</option>'; }).join('');
-  daySel.value = dayId;
+  var sortedDays = rhythm.days.slice().sort(function (a, b) { return a.sortOrder - b.sortOrder; });
+  var daysList = document.getElementById('ed-days-list');
+  daysList.innerHTML = sortedDays.map(function (d) {
+    var checked = d.id === dayId ? ' checked' : '';
+    return '<label class="ed-day-row"><input type="checkbox" name="ed-day-cb" value="' + escapeHtml(d.id) + '"' + checked + '> ' + escapeHtml(d.label) + '</label>';
+  }).join('');
+  var allDaysCb = document.getElementById('ed-all-days');
+  allDaysCb.checked = false;
+  allDaysCb.onchange = function () {
+    daysList.querySelectorAll('input[name="ed-day-cb"]').forEach(function (cb) { cb.checked = allDaysCb.checked; });
+  };
+  daysList.addEventListener('change', function () {
+    var all = daysList.querySelectorAll('input[name="ed-day-cb"]');
+    allDaysCb.checked = Array.from(all).every(function (cb) { return cb.checked; });
+  });
 
   var blockSel = document.getElementById('ed-block');
   blockSel.innerHTML = rhythm.blocks.slice().sort(function (a, b) { return a.sortOrder - b.sortOrder; })
@@ -239,7 +255,12 @@ function saveEditor() {
   var type = document.getElementById('ed-type').value;
   var refOpts = refOptionsForType(type);
   var refSel = document.getElementById('ed-ref').value;
-  var fields = {
+  var checkedDays = Array.from(
+    document.querySelectorAll('#ed-days-list input[name="ed-day-cb"]:checked')
+  ).map(function (cb) { return cb.value; });
+  if (!checkedDays.length) { window.alert('Please select at least one day.'); return; }
+
+  var baseFields = {
     label: document.getElementById('ed-label').value.trim() || (TYPE_LABELS[type] || type),
     assignmentType: type,
     referencedId: refOpts && refSel ? refSel : null,
@@ -247,14 +268,20 @@ function saveEditor() {
     isAllDay: document.getElementById('ed-allday').checked,
     isFlexible: document.getElementById('ed-flexible').checked,
     showOnPrint: document.getElementById('ed-showprint').checked,
-    dayId: document.getElementById('ed-day').value,
     blockId: document.getElementById('ed-block').value
   };
 
   if (editingState.assignmentId) {
-    A.updateRhythmAssignmentInState(appState, editingState.assignmentId, fields);
+    // Update the existing item to the first checked day; create new items for any additional days
+    A.updateRhythmAssignmentInState(appState, editingState.assignmentId,
+      Object.assign({}, baseFields, { dayId: checkedDays[0] }));
+    checkedDays.slice(1).forEach(function (dayId) {
+      A.addRhythmAssignmentToState(appState, Object.assign({}, baseFields, { dayId: dayId }));
+    });
   } else {
-    A.addRhythmAssignmentToState(appState, fields);
+    checkedDays.forEach(function (dayId) {
+      A.addRhythmAssignmentToState(appState, Object.assign({}, baseFields, { dayId: dayId }));
+    });
   }
   saveBar.scheduleSave(appState);
   closeEditor();
@@ -263,7 +290,9 @@ function saveEditor() {
 
 function deleteEditorAssignment() {
   if (!editingState.assignmentId) return;
-  var confirmed = window.confirm('Remove this item from the weekly rhythm? This will not delete any linked card, loop, or sequence.');
+  var a = rhythm.assignments.find(function (x) { return x.id === editingState.assignmentId; });
+  var dayLabel = a ? (rhythm.days.find(function (d) { return d.id === a.dayId; }) || {}).label || a.dayId : 'this day';
+  var confirmed = window.confirm('Remove this item from ' + dayLabel + ' only? (To remove from other days, open and delete each day separately.) This will not delete any linked card, loop, or sequence.');
   if (!confirmed) return;
   A.deleteRhythmAssignmentFromState(appState, editingState.assignmentId);
   saveBar.scheduleSave(appState);

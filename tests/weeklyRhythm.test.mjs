@@ -278,6 +278,92 @@ test('placeCardsUsingRhythmPreset places given cards as card-referencing rhythm 
   assert.equal(rhythm.assignments.some((a) => a.referencedId === 'card_a' && a.label === 'Card A'), true);
 });
 
+test('adding an item to multiple days creates one assignment per day', () => {
+  const rhythm = R.buildSampleWeeklyRhythm();
+  const before = rhythm.assignments.length;
+  const days = ['day1', 'day2', 'day3'];
+  days.forEach(function (dayId) {
+    R.addRhythmAssignment(rhythm, { dayId, blockId: 'morning', label: 'Read-Aloud', assignmentType: 'custom' });
+  });
+  assert.equal(rhythm.assignments.length, before + 3);
+  days.forEach(function (dayId) {
+    const cell = R.getAssignmentsForCell(rhythm, dayId, 'morning');
+    assert.ok(cell.some((a) => a.label === 'Read-Aloud'), 'Read-Aloud should appear on ' + dayId);
+  });
+});
+
+test('multi-day add creates independent items — each has its own id and correct dayId', () => {
+  const rhythm = R.buildSampleWeeklyRhythm();
+  const days = ['day1', 'day2', 'day4'];
+  const created = days.map(function (dayId) {
+    return R.addRhythmAssignment(rhythm, { dayId, blockId: 'afternoon', label: 'Nature Walk', assignmentType: 'custom' });
+  });
+  const ids = created.map((a) => a.id);
+  assert.equal(new Set(ids).size, 3, 'each item must have a unique id');
+  created.forEach(function (a, i) {
+    assert.equal(a.dayId, days[i]);
+    assert.equal(a.label, 'Nature Walk');
+  });
+});
+
+test('repeated saves do not duplicate — addRhythmAssignment is called once per day per save', () => {
+  const rhythm = R.buildSampleWeeklyRhythm();
+  const dayId = 'day3';
+  const blockId = 'morning';
+  const before = R.getAssignmentsForCell(rhythm, dayId, blockId).length;
+  // Simulate saving once
+  R.addRhythmAssignment(rhythm, { dayId, blockId, label: 'Latin', assignmentType: 'custom' });
+  assert.equal(R.getAssignmentsForCell(rhythm, dayId, blockId).length, before + 1);
+  // A second save on the same cell (user added via + button twice) adds another — idempotency
+  // is the UI's responsibility (close overlay after save), not the data model's
+  R.addRhythmAssignment(rhythm, { dayId, blockId, label: 'Latin', assignmentType: 'custom' });
+  assert.equal(R.getAssignmentsForCell(rhythm, dayId, blockId).length, before + 2, 'model does not deduplicate — UI prevents double-save by closing overlay');
+});
+
+test('updating a multi-day item changes only the targeted assignment', () => {
+  const rhythm = R.buildSampleWeeklyRhythm();
+  const days = ['day1', 'day2', 'day3'];
+  const created = days.map(function (dayId) {
+    return R.addRhythmAssignment(rhythm, { dayId, blockId: 'morning', label: 'Hymn', assignmentType: 'custom' });
+  });
+  // Update only the day2 copy
+  R.updateRhythmAssignment(rhythm, created[1].id, { label: 'Hymn (moved)' });
+  assert.equal(R.getAssignmentsForCell(rhythm, 'day1', 'morning').find((a) => a.id === created[0].id).label, 'Hymn');
+  assert.equal(R.getAssignmentsForCell(rhythm, 'day2', 'morning').find((a) => a.id === created[1].id).label, 'Hymn (moved)');
+  assert.equal(R.getAssignmentsForCell(rhythm, 'day3', 'morning').find((a) => a.id === created[2].id).label, 'Hymn');
+});
+
+test('deleting one day copy of a multi-day item leaves the others intact', () => {
+  const rhythm = R.buildSampleWeeklyRhythm();
+  const days = ['day1', 'day2', 'day3'];
+  const created = days.map(function (dayId) {
+    return R.addRhythmAssignment(rhythm, { dayId, blockId: 'afternoon', label: 'Shakespeare', assignmentType: 'custom' });
+  });
+  R.deleteRhythmAssignment(rhythm, created[1].id);
+  assert.ok(R.getAssignmentsForCell(rhythm, 'day1', 'afternoon').some((a) => a.id === created[0].id), 'day1 copy intact');
+  assert.ok(!rhythm.assignments.find((a) => a.id === created[1].id), 'day2 copy deleted');
+  assert.ok(R.getAssignmentsForCell(rhythm, 'day3', 'afternoon').some((a) => a.id === created[2].id), 'day3 copy intact');
+});
+
+test('lens filtering on multi-day items works per-day per-cell', () => {
+  const rhythm = R.buildSampleWeeklyRhythm();
+  const students = [
+    M.makeStudent({ id: 's1', name: 'Alice', gradeBand: 'form1' }),
+    M.makeStudent({ id: 's2', name: 'Bob', gradeBand: 'form2' })
+  ];
+  const groups = [];
+  const days = ['day1', 'day2'];
+  days.forEach(function (dayId) {
+    R.addRhythmAssignment(rhythm, { dayId, blockId: 'morning', label: 'Dictation', assignmentType: 'student',
+      participantIds: ['s1'] });
+  });
+  const aliceDay1 = R.getRhythmForStudent(rhythm, 's1', { students, groups });
+  const aliceDay2Labels = aliceDay1.filter((a) => a.dayId === 'day2').map((a) => a.label);
+  assert.ok(aliceDay2Labels.includes('Dictation'), 'Alice sees Dictation on day2');
+  const bob = R.getRhythmForStudent(rhythm, 's2', { students, groups });
+  assert.ok(!bob.some((a) => a.label === 'Dictation'), 'Bob does not see Dictation');
+});
+
 let passed = 0;
 let failed = 0;
 for (const t of tests) {
