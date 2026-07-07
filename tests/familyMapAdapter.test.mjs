@@ -567,10 +567,12 @@ test('Resources mode: cards without strandLabels/loop/sequence fall back to reso
   assert.ok(!grammar.loopId, 'card_grammar has no loopId');
   assert.ok(!grammar.sequenceId, 'card_grammar has no sequenceId');
   assert.ok(grammar.resourceUseIds && grammar.resourceUseIds.length > 0, 'card_grammar has resource use');
-  // Map would show resource title "Grammar Curriculum (TBD)", not just "Grammar"
+  // Grammar resource is need-to-choose, so map falls back to card title (not placeholder resource title)
   const use = state.resourceUses.find(function (u) { return u.id === grammar.resourceUseIds[0]; });
   const res = A.findResource(state, use.resourceId);
-  assert.ok(res && res.title !== 'Grammar', 'Resource title is more descriptive than card title');
+  assert.ok(res && (res.status === 'need-to-choose' || res.status === 'undecided'),
+    'Grammar resource is need-to-choose so map skips it and uses card title');
+  assert.equal(grammar.title, 'Grammar', 'card title is the fallback label for unresolved grammar resource');
 });
 
 test('Summary mode: cells with mapGroups would collapse to fewer chips than Detailed', () => {

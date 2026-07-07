@@ -19,6 +19,7 @@
   .res-card-block.lens-dim { opacity: 0.28; }
   .res-card-block.lens-match { outline: 1px solid var(--wonder-marine); outline-offset: 2px; border-radius: 3px; padding: 1px 3px; }
   .res-card-block.res-block-hidden { display: none; }
+  .res-group-name { font-size: 11px; font-weight: 600; color: var(--wonder-marine); margin-bottom: 3px; }
   .res-label { font-size: 12px; color: var(--ink); line-height: 1.45; padding: 1px 0; overflow-wrap: break-word; word-break: normal; }
   .res-label::before { content: '· '; color: var(--lagoon-light); font-weight: 700; }
 
@@ -504,9 +505,18 @@ function groupStatusDot(cards) {
   return allPractice ? 'dot-practice' : 'dot-book';
 }
 
+function cleanMapLabel(title) {
+  // Strip placeholder suffixes that add noise to the map without informing the parent.
+  return title
+    .replace(/\s*[—–-]\s*TBD(?=\s*\))/gi, '') // "(Kayla — TBD)" → "(Kayla)"
+    .replace(/\s*\(\s*TBD\s*\)\s*$/i, '')       // trailing "(TBD)"
+    .trim();
+}
+
 function getMapLabels(card) {
   // Returns an array of parent-facing label strings for a card.
-  // Priority: strandLabels > loop items > sequence items (current+upcoming) > resource titles > card title
+  // Priority: strandLabels > loop items > sequence items (current+upcoming)
+  //           > chosen resource titles > card title
   if (card.strandLabels && card.strandLabels.length) return card.strandLabels;
 
   if (card.loopId) {
@@ -529,33 +539,54 @@ function getMapLabels(card) {
     }
   }
 
+  // Only use resource titles when the resource has actually been chosen/acquired.
+  // 'need-to-choose' and 'undecided' produce placeholder titles worse than the card title itself.
   var useIds = card.resourceUseIds || [];
   if (useIds.length) {
-    var resTitles = useIds.map(function (uid) {
+    var chosenTitles = useIds.map(function (uid) {
       var use = (state.resourceUses || []).find(function (u) { return u.id === uid; });
       var res = use ? A.findResource(state, use.resourceId) : null;
-      return res ? res.title : null;
+      if (!res) return null;
+      if (res.status === 'need-to-choose' || res.status === 'undecided') return null;
+      return cleanMapLabel(res.title);
     }).filter(Boolean);
-    if (resTitles.length) return resTitles;
+    if (chosenTitles.length) return chosenTitles;
   }
 
   return [card.title || '(untitled)'];
 }
 
 function resourceCellHTML(cards, col) {
-  // Resources mode: clean list of resource/strand labels — spreadsheet-like
+  // Resources mode: group by mapGroup, then individual ungrouped cards
   if (!cards.length) return '';
-  var subject = A.findSubject(state, col.id);
-  var html = '<div class="res-cell">';
+  var groups = {}; var groupOrder = []; var ungrouped = [];
   cards.forEach(function (card) {
+    if (card.mapGroup) {
+      if (!groups[card.mapGroup]) { groups[card.mapGroup] = []; groupOrder.push(card.mapGroup); }
+      groups[card.mapGroup].push(card);
+    } else { ungrouped.push(card); }
+  });
+  var html = '<div class="res-cell">';
+  groupOrder.forEach(function (groupName) {
+    var groupCards = groups[groupName];
+    var allLabels = [];
+    groupCards.forEach(function (card) { getMapLabels(card).forEach(function (l) { allLabels.push(l); }); });
+    var anyMatch = groupCards.some(function (c) { return A.cardMatchesLens(c, lens, state); });
+    var lensCls = lens.type === 'all' ? '' : (anyMatch ? ' lens-match' : ' lens-dim');
+    var allFiltered = activeFilters.size && groupCards.every(function (c) { return !activeFilters.has(c.audience); });
+    var filterCls = allFiltered ? ' res-block-hidden' : '';
+    html += '<div class="res-card-block' + lensCls + filterCls + '">';
+    html += '<div class="res-group-name">' + escapeHtml(groupName) + '</div>';
+    allLabels.forEach(function (label) { html += '<div class="res-label">' + escapeHtml(label) + '</div>'; });
+    html += '</div>';
+  });
+  ungrouped.forEach(function (card) {
     var labels = getMapLabels(card);
     var matches = A.cardMatchesLens(card, lens, state);
     var lensCls = lens.type === 'all' ? '' : (matches ? ' lens-match' : ' lens-dim');
     var filterCls = (activeFilters.size && !activeFilters.has(card.audience)) ? ' res-block-hidden' : '';
     html += '<div class="res-card-block' + lensCls + filterCls + '">';
-    labels.forEach(function (label) {
-      html += '<div class="res-label">' + escapeHtml(label) + '</div>';
-    });
+    labels.forEach(function (label) { html += '<div class="res-label">' + escapeHtml(label) + '</div>'; });
     html += '</div>';
   });
   html += '</div>';
