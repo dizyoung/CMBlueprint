@@ -493,6 +493,22 @@ test('co-op card has planningStatus co-op-external and stays in coop-outside row
   assert.equal(rowId, 'coop-outside');
 });
 
+test('formApplicability is set on sample cards and survives updateCard round-trip', () => {
+  const state = A.buildSampleAppState();
+  const amhistory = A.findCard(state, 'card_amhistory');
+  assert.deepEqual(amhistory.formApplicability, ['form2', 'form3']);
+  const bible = A.findCard(state, 'card_bible');
+  assert.deepEqual(bible.formApplicability, []); // all forms
+  const plutarch = A.findCard(state, 'card_plutarch');
+  assert.deepEqual(plutarch.formApplicability, ['form3']);
+  // update changes value
+  A.updateCard(state, 'card_bible', { formApplicability: ['form1'] });
+  assert.deepEqual(A.findCard(state, 'card_bible').formApplicability, ['form1']);
+  // addCard defaults to []
+  const card = A.addCard(state, { title: 'New' });
+  assert.deepEqual(card.formApplicability, []);
+});
+
 test('not-this-year planning status does not affect map row placement', () => {
   const state = A.buildSampleAppState();
   // planningStatus:'not-this-year' means a planning decision; map row is set by status/audience separately

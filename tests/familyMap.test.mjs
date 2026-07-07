@@ -498,6 +498,22 @@ test('defaultStarterTemplateLibrary includes core, riches, and skills categories
 // ---------------------------------------------------------------------------
 // PLANNING_STATUSES and COVERAGE_STATUSES constants
 // ---------------------------------------------------------------------------
+test('makeCard defaults formApplicability to empty array (all forms)', () => {
+  const card = M.makeCard({ title: 'Test' });
+  assert.deepEqual(card.formApplicability, []);
+});
+
+test('formApplicabilityLabel returns readable labels for all combinations', () => {
+  assert.equal(M.formApplicabilityLabel([]), 'All forms');
+  assert.equal(M.formApplicabilityLabel(null), 'All forms');
+  assert.equal(M.formApplicabilityLabel(['form1', 'form2', 'form3']), 'All forms');
+  assert.equal(M.formApplicabilityLabel(['form1']), 'Form I');
+  assert.equal(M.formApplicabilityLabel(['form2']), 'Form II');
+  assert.equal(M.formApplicabilityLabel(['form3']), 'Form III+');
+  assert.equal(M.formApplicabilityLabel(['form1', 'form2']), 'Forms I–II');
+  assert.equal(M.formApplicabilityLabel(['form2', 'form3']), 'Forms II–III');
+});
+
 test('PLANNING_STATUSES contains the five expected values', () => {
   assert.deepEqual(M.PLANNING_STATUSES, ['active', 'optional', 'not-this-year', 'co-op-external', 'practice-no-book']);
 });

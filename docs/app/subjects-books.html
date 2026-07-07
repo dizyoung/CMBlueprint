@@ -79,6 +79,9 @@
 /* ---- Notes ---- */
 .work-item-notes { font-size:12px; color:var(--muted); font-style:italic; margin-top:4px; }
 
+/* ---- Form badge ---- */
+.badge-form { background:#f0f4ff; color:#2a4a9e; border:1px solid #c8d5f5; }
+
 /* ---- Section with color dot ---- */
 .col-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; display:inline-block; }
 </style>
@@ -125,6 +128,22 @@
         <option value="co-op-external">Co-op / External</option>
         <option value="practice-no-book">Practice — no book needed</option>
       </select>
+    </div>
+
+    <div class="form-row">
+      <label>Form / stage applicability</label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:2px;">
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:400;cursor:pointer;">
+          <input type="checkbox" id="fa-form1" value="form1"> Form I
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:400;cursor:pointer;">
+          <input type="checkbox" id="fa-form2" value="form2"> Form II
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:400;cursor:pointer;">
+          <input type="checkbox" id="fa-form3" value="form3"> Form III+
+        </label>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;">Leave all unchecked for "All forms / Family".</div>
     </div>
 
     <div class="form-row">
@@ -210,6 +229,19 @@ const COVERAGE_LABEL = M.COVERAGE_STATUS_LABELS || {
   'covered': 'Covered', 'needs-books': 'Needs books', 'need-to-choose': 'Need to choose',
   'no-resource-needed': 'No resource needed', 'not-tracked': 'No resource tracked', 'partial': 'Partially covered'
 };
+
+function formApplicabilityLabel(fa) {
+  if (!fa || !fa.length) return 'All forms';
+  const has1 = fa.includes('form1'), has2 = fa.includes('form2'), has3 = fa.includes('form3');
+  if (has1 && has2 && has3) return 'All forms';
+  if (has1 && has2 && !has3) return 'Forms I–II';
+  if (!has1 && has2 && has3) return 'Forms II–III';
+  if (has1 && !has2 && has3) return 'Forms I & III';
+  if (has1 && !has2 && !has3) return 'Form I';
+  if (!has1 && has2 && !has3) return 'Form II';
+  if (!has1 && !has2 && has3) return 'Form III+';
+  return fa.join(', ');
+}
 
 function planningBadge(ps) {
   const cls = PLANNING_CLASS[ps] || 'badge-planning-active';
@@ -299,6 +331,9 @@ function renderSubjects() {
         const ps = card.planningStatus || 'active';
         const cs = A.getCoverageStatusForCard(state, card.id);
         const resSummary = cardResourceSummary(card);
+        const faLabel = formApplicabilityLabel(card.formApplicability);
+        const formBadgeHtml = faLabel !== 'All forms'
+          ? `<span class="badge badge-form">${faLabel}</span>` : '';
         html += `<div class="work-item" data-card-id="${card.id}">
           <div class="work-item-main">
             <div class="work-item-title">${escapeHtml(card.title)}</div>
@@ -306,6 +341,7 @@ function renderSubjects() {
               ${planningBadge(ps)}
               ${coverageBadge(cs)}
               ${whoBadge(card)}
+              ${formBadgeHtml}
             </div>
             ${resSummary ? `<div class="work-item-notes">${escapeHtml(resSummary)}</div>` : ''}
             ${card.notes ? `<div class="work-item-notes">${escapeHtml(card.notes)}</div>` : ''}
@@ -422,6 +458,20 @@ function populateSubjectSelect(selectedId) {
   selSubject.innerHTML = cols.map(c => `<option value="${c.id}"${c.id===selectedId?' selected':''}>${escapeHtml(c.label)}</option>`).join('');
 }
 
+function setFormCheckboxes(fa) {
+  ['form1', 'form2', 'form3'].forEach(f => {
+    const el = document.getElementById('fa-' + f);
+    if (el) el.checked = Array.isArray(fa) && fa.includes(f);
+  });
+}
+
+function readFormCheckboxes() {
+  return ['form1', 'form2', 'form3'].filter(f => {
+    const el = document.getElementById('fa-' + f);
+    return el && el.checked;
+  });
+}
+
 function openAddItem(colId) {
   editingCardId = null;
   titleEl.textContent = 'Add work item';
@@ -430,6 +480,7 @@ function openAddItem(colId) {
   selPlanning.value = 'active';
   selAudience.innerHTML = buildAudienceOptions('together', []);
   inputNotes.value = '';
+  setFormCheckboxes([]);
   pendingResources = [];
   deleteBtn.style.display = 'none';
   renderResourceRows();
@@ -447,6 +498,7 @@ function openEditItem(cardId) {
   selPlanning.value = card.planningStatus || 'active';
   selAudience.innerHTML = buildAudienceOptions(card.participantMode, card.participantIds);
   inputNotes.value = card.notes || '';
+  setFormCheckboxes(card.formApplicability || []);
   // Load linked resources
   const uses = (state.resourceUses || []).filter(u => u.cardId === cardId);
   pendingResources = uses.map(u => {
@@ -504,6 +556,7 @@ document.getElementById('item-save-btn').addEventListener('click', () => {
   const planningStatus = selPlanning.value;
   const audienceParsed = parseAudienceValue(selAudience.value);
   const notes = inputNotes.value.trim();
+  const formApplicability = readFormCheckboxes();
 
   // Reconcile resources: update existing, add new, remove deleted
   // Collect resIds still present
@@ -512,7 +565,7 @@ document.getElementById('item-save-btn').addEventListener('click', () => {
   if (editingCardId) {
     // Update card fields
     A.updateCard(state, editingCardId, {
-      title, subjectColumnId, planningStatus, notes,
+      title, subjectColumnId, planningStatus, notes, formApplicability,
       ...audienceParsed
     });
 
@@ -544,7 +597,7 @@ document.getElementById('item-save-btn').addEventListener('click', () => {
   } else {
     // Add new card
     const card = A.addCard(state, {
-      title, subjectColumnId, planningStatus, notes,
+      title, subjectColumnId, planningStatus, notes, formApplicability,
       ...audienceParsed
     });
     // Add resources
