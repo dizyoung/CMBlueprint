@@ -515,6 +515,34 @@ test('formApplicability is set on sample cards and survives updateCard round-tri
   assert.deepEqual(card.formApplicability, []);
 });
 
+test('card_american_history exists in history column with mapGroup History Cycle', () => {
+  const state = A.buildSampleAppState();
+  const card = A.findCard(state, 'card_american_history');
+  assert.ok(card, 'card_american_history should exist');
+  assert.equal(card.subjectColumnId, 'history');
+  assert.equal(card.mapGroup, 'History Cycle');
+});
+
+test('beauty cards in sample state share mapGroup Beauty Loop', () => {
+  const state = A.buildSampleAppState();
+  const beautyIds = ['card_hymn', 'card_folksong', 'card_poetry', 'card_picture_study', 'card_composer_study'];
+  for (const id of beautyIds) {
+    const card = A.findCard(state, id);
+    assert.ok(card, `${id} should exist`);
+    assert.equal(card.mapGroup, 'Beauty Loop', `${id} should have mapGroup 'Beauty Loop'`);
+  }
+});
+
+test('history older cards all have mapGroup History Cycle', () => {
+  const state = A.buildSampleAppState();
+  const histIds = ['card_history_spine', 'card_american_history', 'card_biography', 'card_timeline'];
+  for (const id of histIds) {
+    const card = A.findCard(state, id);
+    assert.ok(card, `${id} should exist`);
+    assert.equal(card.mapGroup, 'History Cycle', `${id} should have mapGroup 'History Cycle'`);
+  }
+});
+
 test('not-this-year planning status does not affect map row placement', () => {
   const state = A.buildSampleAppState();
   // planningStatus:'not-this-year' means a planning decision; map row is set by status/audience separately

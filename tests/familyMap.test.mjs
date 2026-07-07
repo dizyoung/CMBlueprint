@@ -619,6 +619,16 @@ test('SCHEDULE_STYLE_SUGGESTION_LABELS has a label for every value in SCHEDULE_S
   }
 });
 
+test('makeCard defaults mapGroup to null', () => {
+  const card = M.makeCard({ id: 'c1', title: 'Test' });
+  assert.equal(card.mapGroup, null);
+});
+
+test('makeCard preserves mapGroup when provided', () => {
+  const card = M.makeCard({ id: 'c1', title: 'Beauty Hymn', mapGroup: 'Beauty Loop' });
+  assert.equal(card.mapGroup, 'Beauty Loop');
+});
+
 // ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
