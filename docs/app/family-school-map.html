@@ -106,6 +106,19 @@
   .resource-row .remove-res-btn:hover { color: var(--poppy); }
   .add-resource-row-btn { font-size: 12px; color: var(--wonder-marine); background: none; border: 1px dashed var(--border); border-radius: 6px; padding: 5px 10px; cursor: pointer; width: 100%; margin-top: 2px; }
   .add-resource-row-btn:hover { background: var(--field-mint); }
+  .res-block-clickable { cursor: pointer; transition: background 0.12s; }
+  .res-block-clickable:hover { background: #eaf6f7; border-radius: 4px; padding-left: 3px; }
+  .res-add-btn { font-size: 11px; color: var(--wonder-marine); background: none; border: 1px dashed var(--border); border-radius: 5px; padding: 2px 7px; cursor: pointer; margin-top: 4px; width: 100%; }
+  .res-add-btn:hover { background: var(--field-mint); }
+  .res-cell-add { margin-top: 3px; }
+  .res-need-choose { font-size: 11px; color: var(--muted); font-style: italic; }
+  .ed-pattern-label { font-size: 11px; color: var(--muted); margin: 2px 0 8px; }
+  .ed-seq-row { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+  .ed-seq-status { font-size: 11px; padding: 2px 7px; border-radius: 4px; flex-shrink: 0; white-space: nowrap; }
+  .ed-seq-status.seq-current { background: var(--wonder-marine); color: #fff; font-weight: 600; }
+  .ed-seq-status.seq-completed { background: #eee; color: var(--muted); }
+  .ed-seq-status.seq-upcoming { background: var(--field-mint); color: var(--muted); }
+  .ed-res-empty { font-size: 12px; color: var(--muted); padding: 4px 0; font-style: italic; }
   .ed-res-empty { font-size: 12px; color: var(--muted); font-style: italic; }
 
   /* Group detail overlay */
@@ -187,11 +200,12 @@
     <select id="lens-select"></select>
   </label>
   <div class="density-toggle" id="mapview-toggle">
-    <button type="button" data-mapview="resources" class="active" title="Printable spreadsheet — shows actual resources, strands, and components">Resource Map</button>
-    <button type="button" data-mapview="subjects" title="Planning units — collapses loop groups like Beauty Loop and History Cycle">Subject Map</button>
-    <button type="button" data-mapview="detailed" title="Every underlying work item — no collapsing">Detailed Map</button>
+    <button type="button" data-mapview="resources" class="active" title="Who needs what this year — resources, strands, and books">Family School Map</button>
+    <button type="button" data-mapview="subjects" title="Collapsed subject view — groups loop strands" style="font-size:11px;color:var(--muted);">Subject View</button>
+    <button type="button" data-mapview="detailed" title="Every underlying subject and work item" style="font-size:11px;color:var(--muted);">Detailed View</button>
   </div>
   <button onclick="render()">Refresh</button>
+  <span style="font-size:10px;color:var(--muted);margin-left:8px;font-family:monospace;" title="Build identifier">build:seq-loop-editor</span>
   <button class="accent" id="print-resource-btn">Print resource map</button>
   <button class="accent" onclick="document.body.classList.remove('print-resources'); window.print();">Print full map</button>
   <button class="accent" onclick="document.body.classList.add('print-resources'); window.print();">Print Book &amp; Resource List</button>
@@ -275,7 +289,7 @@
 
 <div class="overlay" id="card-editor-overlay" style="display:none;">
   <div class="modal-card">
-    <h2 id="editor-title">Edit card</h2>
+    <h2 id="editor-title">Edit subject</h2>
     <label for="ed-title">Title</label>
     <input type="text" id="ed-title">
 
@@ -290,9 +304,7 @@
     <div class="checkrow"><input type="checkbox" id="ed-use-default" checked><label for="ed-use-default" style="margin:0;font-weight:400;">Use default for who this is for</label></div>
     <div id="ed-participants-checks" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
 
-    <h3 style="margin:16px 0 6px;font-size:13px;color:var(--wonder-marine);">Resources</h3>
-    <div class="resource-list-editor" id="ed-resource-rows"></div>
-    <button type="button" class="add-resource-row-btn" id="ed-add-resource-btn">+ Add resource</button>
+    <div id="ed-resources-section"></div>
 
     <div class="modal-actions" style="margin-top:16px;">
       <span></span>
@@ -548,46 +560,7 @@ function cleanMapLabel(title) {
 }
 
 function getMapLabels(card) {
-  // Returns an array of parent-facing label strings for a card.
-  // Priority: strandLabels > loop items > sequence items (current+upcoming)
-  //           > chosen resource titles > card title
-  if (card.strandLabels && card.strandLabels.length) return card.strandLabels;
-
-  if (card.loopId) {
-    var items = (state.loopItems || [])
-      .filter(function (li) { return li.loopId === card.loopId; })
-      .sort(function (a, b) { return a.sortOrder - b.sortOrder; });
-    if (items.length) return items.map(function (li) { return li.title; });
-  }
-
-  if (card.sequenceId) {
-    var allSeqItems = (state.sequenceItems || [])
-      .filter(function (si) { return si.sequenceId === card.sequenceId; })
-      .sort(function (a, b) { return a.position - b.position; });
-    var nonDone = allSeqItems.filter(function (si) { return si.status !== 'completed'; });
-    var toShow = nonDone.length ? nonDone : allSeqItems.slice(-1);
-    if (toShow.length) {
-      return toShow.map(function (si) {
-        return si.title + (si.status === 'current' ? ' ★' : '');
-      });
-    }
-  }
-
-  // Only use resource titles when the resource has actually been chosen/acquired.
-  // 'need-to-choose' and 'undecided' produce placeholder titles worse than the card title itself.
-  var useIds = card.resourceUseIds || [];
-  if (useIds.length) {
-    var chosenTitles = useIds.map(function (uid) {
-      var use = (state.resourceUses || []).find(function (u) { return u.id === uid; });
-      var res = use ? A.findResource(state, use.resourceId) : null;
-      if (!res) return null;
-      if (res.status === 'need-to-choose' || res.status === 'undecided') return null;
-      return cleanMapLabel(res.title);
-    }).filter(Boolean);
-    if (chosenTitles.length) return chosenTitles;
-  }
-
-  return [card.title || '(untitled)'];
+  return A.getCardMapLabels(state, card);
 }
 
 function resourceCellHTML(cards, col) {
@@ -609,7 +582,8 @@ function resourceCellHTML(cards, col) {
     var lensCls = lens.type === 'all' ? '' : (anyMatch ? ' lens-match' : ' lens-dim');
     var allFiltered = activeFilters.size && groupCards.every(function (c) { return !activeFilters.has(c.audience); });
     var filterCls = allFiltered ? ' res-block-hidden' : '';
-    html += '<div class="res-card-block' + lensCls + filterCls + '">';
+    var safeGroup = groupName.replace(/\\/g, '\\\\').replace(/'/g, '\\\'');
+    html += '<div class="res-card-block res-block-clickable' + lensCls + filterCls + '" onclick="openGroupDetail(\'' + safeGroup + '\')" title="Click to view and edit ' + escapeHtml(groupName) + '">';
     html += '<div class="res-group-name">' + escapeHtml(groupName) + '</div>';
     allLabels.forEach(function (label) { html += '<div class="res-label">' + escapeHtml(label) + '</div>'; });
     html += '</div>';
@@ -619,8 +593,13 @@ function resourceCellHTML(cards, col) {
     var matches = A.cardMatchesLens(card, lens, state);
     var lensCls = lens.type === 'all' ? '' : (matches ? ' lens-match' : ' lens-dim');
     var filterCls = (activeFilters.size && !activeFilters.has(card.audience)) ? ' res-block-hidden' : '';
-    html += '<div class="res-card-block' + lensCls + filterCls + '">';
-    labels.forEach(function (label) { html += '<div class="res-label">' + escapeHtml(label) + '</div>'; });
+    var safeId = card.id.replace(/'/g, '\\\'');
+    html += '<div class="res-card-block res-block-clickable' + lensCls + filterCls + '" onclick="openEditorFromMap(\'' + safeId + '\')" title="Click to edit ' + escapeHtml(card.title || 'subject') + '">';
+    if (A.cardNeedsResourceChoice(state, card)) {
+      html += '<div class="res-need-choose">Need to choose: ' + escapeHtml(card.title) + '</div>';
+    } else {
+      labels.forEach(function (label) { html += '<div class="res-label">' + escapeHtml(label) + '</div>'; });
+    }
     var hintParts = [];
     if (card.suggestedWeeklyTouches) hintParts.push(card.suggestedWeeklyTouches);
     var lenText = A.lessonLengthText(card);
@@ -628,6 +607,7 @@ function resourceCellHTML(cards, col) {
     if (hintParts.length) html += '<div class="res-hint">' + escapeHtml(hintParts.join(' · ')) + '</div>';
     html += '</div>';
   });
+  html += '<div class="res-cell-add"><button class="res-add-btn" onclick="openAddSubjectForCell(\'' + col.id.replace(/'/g, '\\\'') + '\',\'' + (cards[0] ? A.rowIdForCard(cards[0]) : 'unplaced') + '\')">+ Add subject</button></div>';
   html += '</div>';
   return html;
 }
@@ -813,44 +793,16 @@ function populateRowSelect() {
 // ---------------------------------------------------------------------------
 // Resource editor helpers (shared pattern with Subjects & Books)
 // ---------------------------------------------------------------------------
-var edPendingResources = []; // [{_resId, _useId, title, status}]
+var edPendingResources = [];  // [{_resId, _useId, title, status}]
+var edPendingSeqItems  = [];  // [{_itemId, title, status}]
+var edPendingLoopItems = [];  // [{_itemId, title}]
 
 var RES_STATUS_OPTIONS = [
-  { value: 'have-it', label: 'Have it' },
-  { value: 'need-to-buy', label: 'Need to buy' },
-  { value: 'need-to-choose', label: 'Need to choose' },
+  { value: 'have-it',            label: 'Have it' },
+  { value: 'need-to-buy',        label: 'Need to buy' },
+  { value: 'need-to-choose',     label: 'Need to choose' },
   { value: 'no-resource-needed', label: 'No resource needed' }
 ];
-
-function renderEditorResourceRows() {
-  var container = document.getElementById('ed-resource-rows');
-  if (!edPendingResources.length) {
-    container.innerHTML = '<div class="ed-res-empty">No resources attached yet.</div>';
-    return;
-  }
-  container.innerHTML = edPendingResources.map(function (r, i) {
-    var statusOpts = RES_STATUS_OPTIONS.map(function (o) {
-      return '<option value="' + o.value + '"' + (r.status === o.value ? ' selected' : '') + '>' + o.label + '</option>';
-    }).join('');
-    return '<div class="resource-row" data-res-idx="' + i + '">' +
-      '<input type="text" class="res-title-inp" placeholder="Resource title" value="' + escapeHtml(r.title || '') + '">' +
-      '<select class="res-status-sel">' + statusOpts + '</select>' +
-      '<button class="remove-res-btn" data-res-idx="' + i + '">&times;</button>' +
-      '</div>';
-  }).join('');
-  container.querySelectorAll('.res-title-inp').forEach(function (inp, i) {
-    inp.addEventListener('input', function () { edPendingResources[i].title = inp.value; });
-  });
-  container.querySelectorAll('.res-status-sel').forEach(function (sel, i) {
-    sel.addEventListener('change', function () { edPendingResources[i].status = sel.value; });
-  });
-  container.querySelectorAll('.remove-res-btn').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      edPendingResources.splice(Number(btn.dataset.resIdx), 1);
-      renderEditorResourceRows();
-    });
-  });
-}
 
 function loadEditorResources(cardId) {
   var uses = A.getResourceUsesForCard(state, cardId);
@@ -858,23 +810,166 @@ function loadEditorResources(cardId) {
     var res = A.findResource(state, use.resourceId);
     return res ? { _resId: res.id, _useId: use.id, title: res.title, status: res.status } : null;
   }).filter(Boolean);
+  edPendingSeqItems = A.getCardSequenceItems(state, cardId).map(function (si) {
+    return { _itemId: si.id, title: si.title, status: si.status };
+  });
+  edPendingLoopItems = A.getCardLoopItems(state, cardId).map(function (li) {
+    return { _itemId: li.id, title: li.title };
+  });
 }
 
-document.getElementById('ed-add-resource-btn').addEventListener('click', function () {
-  edPendingResources.push({ _resId: null, _useId: null, title: '', status: 'need-to-choose' });
-  renderEditorResourceRows();
-  var rows = document.querySelectorAll('#ed-resource-rows .res-title-inp');
-  if (rows.length) rows[rows.length - 1].focus();
-});
+function renderEditorResourceSection() {
+  var section = document.getElementById('ed-resources-section');
+  if (!section) return;
+  var card = editingCardId ? A.findCard(state, editingCardId) : null;
+  var h3Style = 'margin:16px 0 3px;font-size:13px;color:var(--wonder-marine);';
+  var html = '';
+
+  // ---- Reading order (sequence) section ----
+  if (card && card.sequenceId) {
+    var seq = A.getCardSequence(state, editingCardId);
+    html += '<h3 style="' + h3Style + '">Reading order' + (seq ? ': ' + escapeHtml(seq.title) : '') + '</h3>';
+    html += '<div class="ed-pattern-label">One at a time, in order</div>';
+    html += '<div class="resource-list-editor" id="ed-seq-rows">';
+    if (edPendingSeqItems.length) {
+      edPendingSeqItems.forEach(function (item, i) {
+        var sc = item.status === 'current' ? 'seq-current' : (item.status === 'completed' ? 'seq-completed' : 'seq-upcoming');
+        var sl = item.status === 'current' ? 'Current' : (item.status === 'completed' ? 'Finished' : 'Up next');
+        html += '<div class="ed-seq-row" data-seq-idx="' + i + '">' +
+          '<input type="text" class="res-title-inp ed-seq-title" placeholder="Book or resource title" value="' + escapeHtml(item.title || '') + '" data-seq-idx="' + i + '">' +
+          '<span class="ed-seq-status ' + sc + '">' + sl + '</span>' +
+          '<button class="remove-res-btn ed-seq-remove" data-seq-idx="' + i + '" title="Remove from reading order">&times;</button>' +
+          '</div>';
+      });
+    } else {
+      html += '<div class="ed-res-empty">No books in this reading order yet.</div>';
+    }
+    html += '</div>';
+    html += '<button type="button" class="add-resource-row-btn" id="ed-add-seq-item-btn">+ Add book to reading order</button>';
+  }
+
+  // ---- Loop / rotation section ----
+  if (card && card.loopId) {
+    var loop = A.getCardLoop(state, editingCardId);
+    var turnsText = loop && loop.turnsPerWeek ? loop.turnsPerWeek + ' turns/week' : '';
+    html += '<h3 style="' + h3Style + '">Loop / rotation' + (loop ? ': ' + escapeHtml(loop.title) : '') + '</h3>';
+    html += '<div class="ed-pattern-label">Rotate through these resources' + (turnsText ? ' — ' + escapeHtml(turnsText) : '') + '</div>';
+    html += '<div class="resource-list-editor" id="ed-loop-rows">';
+    if (edPendingLoopItems.length) {
+      edPendingLoopItems.forEach(function (item, i) {
+        html += '<div class="resource-row" data-loop-idx="' + i + '">' +
+          '<input type="text" class="res-title-inp ed-loop-title" placeholder="Loop item title" value="' + escapeHtml(item.title || '') + '" data-loop-idx="' + i + '">' +
+          '<button class="remove-res-btn ed-loop-remove" data-loop-idx="' + i + '" title="Remove from loop">&times;</button>' +
+          '</div>';
+      });
+    } else {
+      html += '<div class="ed-res-empty">No items in this loop yet.</div>';
+    }
+    html += '</div>';
+    html += '<button type="button" class="add-resource-row-btn" id="ed-add-loop-item-btn">+ Add to loop</button>';
+  }
+
+  // ---- Other resources section ----
+  var hasSeqOrLoop = card && (card.sequenceId || card.loopId);
+  var directHeading = hasSeqOrLoop ? 'Other resources' : 'Resources';
+  var directEmpty   = hasSeqOrLoop
+    ? 'No other resources. Materials for this subject not part of the reading order or loop.'
+    : 'No resources attached yet.';
+  html += '<h3 style="' + h3Style + '">' + directHeading + '</h3>';
+  html += '<div class="resource-list-editor" id="ed-resource-rows">';
+  if (edPendingResources.length) {
+    edPendingResources.forEach(function (r, i) {
+      var statusOpts = RES_STATUS_OPTIONS.map(function (o) {
+        return '<option value="' + o.value + '"' + (r.status === o.value ? ' selected' : '') + '>' + o.label + '</option>';
+      }).join('');
+      html += '<div class="resource-row" data-res-idx="' + i + '">' +
+        '<input type="text" class="res-title-inp ed-direct-title" placeholder="e.g. American History Spine, New Testament" value="' + escapeHtml(r.title || '') + '" data-res-idx="' + i + '">' +
+        '<select class="res-status-sel ed-direct-status" data-res-idx="' + i + '">' + statusOpts + '</select>' +
+        '<button class="remove-res-btn ed-direct-remove" data-res-idx="' + i + '">&times;</button>' +
+        '</div>';
+    });
+  } else {
+    html += '<div class="ed-res-empty">' + directEmpty + '</div>';
+  }
+  html += '</div>';
+  html += '<button type="button" class="add-resource-row-btn" id="ed-add-resource-btn">+ Add resource</button>';
+
+  section.innerHTML = html;
+
+  // Wire sequence handlers
+  if (card && card.sequenceId) {
+    section.querySelectorAll('.ed-seq-title').forEach(function (inp) {
+      var i = Number(inp.dataset.seqIdx);
+      inp.addEventListener('input', function () { edPendingSeqItems[i].title = inp.value; });
+    });
+    section.querySelectorAll('.ed-seq-remove').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        edPendingSeqItems.splice(Number(btn.dataset.seqIdx), 1);
+        renderEditorResourceSection();
+      });
+    });
+    var addSeqBtn = section.querySelector('#ed-add-seq-item-btn');
+    if (addSeqBtn) addSeqBtn.addEventListener('click', function () {
+      edPendingSeqItems.push({ _itemId: null, title: '', status: 'upcoming' });
+      renderEditorResourceSection();
+      var seqInputs = section.querySelectorAll('.ed-seq-title');
+      if (seqInputs.length) seqInputs[seqInputs.length - 1].focus();
+    });
+  }
+
+  // Wire loop handlers
+  if (card && card.loopId) {
+    section.querySelectorAll('.ed-loop-title').forEach(function (inp) {
+      var i = Number(inp.dataset.loopIdx);
+      inp.addEventListener('input', function () { edPendingLoopItems[i].title = inp.value; });
+    });
+    section.querySelectorAll('.ed-loop-remove').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        edPendingLoopItems.splice(Number(btn.dataset.loopIdx), 1);
+        renderEditorResourceSection();
+      });
+    });
+    var addLoopBtn = section.querySelector('#ed-add-loop-item-btn');
+    if (addLoopBtn) addLoopBtn.addEventListener('click', function () {
+      edPendingLoopItems.push({ _itemId: null, title: '' });
+      renderEditorResourceSection();
+      var loopInputs = section.querySelectorAll('.ed-loop-title');
+      if (loopInputs.length) loopInputs[loopInputs.length - 1].focus();
+    });
+  }
+
+  // Wire direct resource handlers
+  section.querySelectorAll('.ed-direct-title').forEach(function (inp) {
+    var i = Number(inp.dataset.resIdx);
+    inp.addEventListener('input', function () { edPendingResources[i].title = inp.value; });
+  });
+  section.querySelectorAll('.ed-direct-status').forEach(function (sel) {
+    var i = Number(sel.dataset.resIdx);
+    sel.addEventListener('change', function () { edPendingResources[i].status = sel.value; });
+  });
+  section.querySelectorAll('.ed-direct-remove').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      edPendingResources.splice(Number(btn.dataset.resIdx), 1);
+      renderEditorResourceSection();
+    });
+  });
+  var addResBtn = section.querySelector('#ed-add-resource-btn');
+  if (addResBtn) addResBtn.addEventListener('click', function () {
+    edPendingResources.push({ _resId: null, _useId: null, title: '', status: 'need-to-choose' });
+    renderEditorResourceSection();
+    var resInputs = section.querySelectorAll('.ed-direct-title');
+    if (resInputs.length) resInputs[resInputs.length - 1].focus();
+  });
+}
 
 // ---------------------------------------------------------------------------
-// Card editor overlay
+// Subject editor overlay
 // ---------------------------------------------------------------------------
 function openEditor(cardId) {
   var card = A.findCard(state, cardId);
   if (!card) return;
   editingCardId = cardId;
-  document.getElementById('editor-title').textContent = card.title || 'Edit card';
+  document.getElementById('editor-title').textContent = card.title || 'Edit subject';
   document.getElementById('ed-title').value = card.title || '';
   populateRowSelect();
   document.getElementById('ed-row').value = A.rowIdForCard(card);
@@ -892,13 +987,15 @@ function openEditor(cardId) {
   checksBox.style.display = isOverride ? 'flex' : 'none';
   document.getElementById('ed-subject').value = card.subjectColumnId;
   loadEditorResources(cardId);
-  renderEditorResourceRows();
+  renderEditorResourceSection();
   document.getElementById('card-editor-overlay').style.display = 'flex';
 }
 
 function closeEditor() {
   editingCardId = null;
   edPendingResources = [];
+  edPendingSeqItems  = [];
+  edPendingLoopItems = [];
   document.getElementById('card-editor-overlay').style.display = 'none';
 }
 
@@ -912,6 +1009,8 @@ function saveEditor() {
   var ids = useDefault ? [] : Array.prototype.slice.call(document.querySelectorAll('.ed-participant-check:checked')).map(function (el) { return el.value; });
   A.setCardParticipants(state, editingCardId, ids.length ? 'override' : card.participantMode, ids);
   A.commitCardResources(state, editingCardId, edPendingResources);
+  A.commitSequenceItems(state, editingCardId, edPendingSeqItems);
+  A.commitLoopItems(state, editingCardId, edPendingLoopItems);
   closeEditor();
   render();
   markDirtyAndSave();
@@ -932,20 +1031,28 @@ document.getElementById('card-editor-overlay').addEventListener('click', functio
 function openGroupDetail(groupName) {
   var allCards = state.cards.filter(function (c) { return c.mapGroup === groupName; });
   document.getElementById('gd-title').textContent = groupName;
+  var seqStatusMap = { current: 'Current', completed: 'Finished', upcoming: 'Up next' };
+  var resStatusMap = { 'have-it': 'Have it', 'need-to-buy': 'Need to buy', 'need-to-choose': 'Need to choose', 'no-resource-needed': 'No resource needed' };
   var html = '';
   allCards.forEach(function (card) {
-    var uses = A.getResourceUsesForCard(state, card.id);
     var resHtml = '';
-    if (uses.length) {
-      resHtml = uses.map(function (use) {
-        var res = A.findResource(state, use.resourceId);
-        if (!res) return '';
-        var statusLabel = { 'have-it': 'Have it', 'need-to-buy': 'Need to buy', 'need-to-choose': 'Need to choose', 'no-resource-needed': 'No resource needed' }[res.status] || res.status;
-        return '<div>· ' + escapeHtml(res.title) + ' <span style="color:var(--muted);font-size:11px;">(' + escapeHtml(statusLabel) + ')</span></div>';
-      }).filter(Boolean).join('');
-    } else {
-      resHtml = '<div class="ed-res-empty">No resources yet.</div>';
-    }
+    var seqItems = A.getCardSequenceItems(state, card.id);
+    seqItems.forEach(function (si) {
+      var sl = seqStatusMap[si.status] || si.status;
+      resHtml += '<div>· ' + escapeHtml(si.title) + ' <span style="color:var(--muted);font-size:11px;">(' + escapeHtml(sl) + ')</span></div>';
+    });
+    var loopItems = A.getCardLoopItems(state, card.id);
+    loopItems.forEach(function (li) {
+      resHtml += '<div>· ' + escapeHtml(li.title) + '</div>';
+    });
+    var uses = A.getResourceUsesForCard(state, card.id);
+    uses.forEach(function (use) {
+      var res = A.findResource(state, use.resourceId);
+      if (!res) return;
+      var statusLabel = resStatusMap[res.status] || res.status;
+      resHtml += '<div>· ' + escapeHtml(res.title) + ' <span style="color:var(--muted);font-size:11px;">(' + escapeHtml(statusLabel) + ')</span></div>';
+    });
+    if (!resHtml) resHtml = '<div class="ed-res-empty">No resources yet.</div>';
     html += '<div class="gd-card-row">' +
       '<div class="gd-card-title">' + escapeHtml(card.title) +
         '<button class="gd-edit-btn" onclick="closeGroupDetail();openEditor(\'' + card.id + '\')">Edit</button>' +
@@ -966,6 +1073,30 @@ document.getElementById('gd-close').addEventListener('click', closeGroupDetail);
 document.getElementById('group-detail-overlay').addEventListener('click', function (e) {
   if (e.target.id === 'group-detail-overlay') closeGroupDetail();
 });
+
+function openEditorFromMap(cardId) {
+  openEditor(cardId);
+  setTimeout(function () {
+    var res = document.getElementById('ed-resources-section');
+    if (res) res.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 80);
+}
+
+function openAddSubjectForCell(subjectColumnId, rowId) {
+  A.addCard(state, { subjectColumnId: subjectColumnId, status: rowId === 'optional' ? 'optional' : 'active' });
+  var cards = A.getCardsForSubjectColumn(state, subjectColumnId);
+  var newCard = cards[cards.length - 1];
+  if (!newCard) return;
+  A.moveCardToRow(state, newCard.id, rowId || 'unplaced');
+  render();
+  markDirtyAndSave();
+  openEditor(newCard.id);
+}
+
+window.openGroupDetail = openGroupDetail;
+window.closeGroupDetail = closeGroupDetail;
+window.openEditorFromMap = openEditorFromMap;
+window.openAddSubjectForCell = openAddSubjectForCell;
 
 function advanceLoopUI(loopId) { A.advanceLoopInState(state, loopId); render(); markDirtyAndSave(); }
 function advanceSequenceUI(sequenceId) { A.advanceSequenceInState(state, sequenceId); render(); markDirtyAndSave(); }

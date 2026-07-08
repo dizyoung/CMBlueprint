@@ -871,6 +871,228 @@ test('lessonLengthText returns ~target when only targetMinutes set', () => {
   assert.equal(A.lessonLengthText(card), '~20 min');
 });
 
+// ---------------------------------------------------------------------------
+// getCardSequenceItems / getCardLoopItems / getCardSequence / getCardLoop
+// ---------------------------------------------------------------------------
+
+test('getCardSequenceItems returns items for card_readaloud in position order', () => {
+  const state = A.buildSampleAppState();
+  const items = A.getCardSequenceItems(state, 'card_readaloud');
+  assert.equal(items.length, 3);
+  assert.equal(items[0].title, 'The Hobbit');
+  assert.equal(items[0].status, 'completed');
+  assert.equal(items[1].title, "Charlotte's Web");
+  assert.equal(items[1].status, 'current');
+  assert.equal(items[2].title, 'The Wind in the Willows');
+  assert.equal(items[2].status, 'upcoming');
+});
+
+test('getCardSequenceItems returns [] for card with no sequenceId', () => {
+  const state = A.buildSampleAppState();
+  const card = A.addCard(state, { subjectColumnId: state.subjectColumns[0].id });
+  const items = A.getCardSequenceItems(state, card.id);
+  assert.deepEqual(items, []);
+});
+
+test('getCardLoopItems returns items for card_bible in sortOrder', () => {
+  const state = A.buildSampleAppState();
+  const items = A.getCardLoopItems(state, 'card_bible');
+  assert.equal(items.length, 4);
+  assert.equal(items[0].title, 'Matthew');
+  assert.equal(items[1].title, 'Psalms + Proverbs');
+  assert.equal(items[2].title, 'Theology');
+  assert.equal(items[3].title, 'Old Testament');
+});
+
+test('getCardLoopItems returns [] for card with no loopId', () => {
+  const state = A.buildSampleAppState();
+  const card = A.addCard(state, { subjectColumnId: state.subjectColumns[0].id });
+  const items = A.getCardLoopItems(state, card.id);
+  assert.deepEqual(items, []);
+});
+
+test('getCardSequence returns the sequence object for card_readaloud', () => {
+  const state = A.buildSampleAppState();
+  const seq = A.getCardSequence(state, 'card_readaloud');
+  assert.ok(seq);
+  assert.equal(seq.title, 'Family Read-Alouds');
+});
+
+test('getCardLoop returns the loop object for card_bible', () => {
+  const state = A.buildSampleAppState();
+  const loop = A.getCardLoop(state, 'card_bible');
+  assert.ok(loop);
+  assert.equal(loop.title, 'Bible Loop');
+});
+
+test('getCardSequence returns null for card with no sequenceId', () => {
+  const state = A.buildSampleAppState();
+  const card = A.addCard(state, { subjectColumnId: state.subjectColumns[0].id });
+  assert.equal(A.getCardSequence(state, card.id), null);
+});
+
+test('getCardLoop returns null for card with no loopId', () => {
+  const state = A.buildSampleAppState();
+  const card = A.addCard(state, { subjectColumnId: state.subjectColumns[0].id });
+  assert.equal(A.getCardLoop(state, card.id), null);
+});
+
+// ---------------------------------------------------------------------------
+// commitSequenceItems
+// ---------------------------------------------------------------------------
+
+test('commitSequenceItems: adding a new item', () => {
+  const state = A.buildSampleAppState();
+  const existing = A.getCardSequenceItems(state, 'card_readaloud');
+  const pending = existing.map(si => ({ _itemId: si.id, title: si.title, status: si.status }));
+  pending.push({ _itemId: null, title: 'The Secret Garden', status: 'upcoming' });
+  A.commitSequenceItems(state, 'card_readaloud', pending);
+  const after = A.getCardSequenceItems(state, 'card_readaloud');
+  assert.ok(after.some(si => si.title === 'The Secret Garden'));
+  assert.equal(after.length, 4);
+});
+
+test('commitSequenceItems: removing an item', () => {
+  const state = A.buildSampleAppState();
+  const existing = A.getCardSequenceItems(state, 'card_readaloud');
+  const pending = existing.filter(si => si.title !== 'The Hobbit').map(si => ({ _itemId: si.id, title: si.title, status: si.status }));
+  A.commitSequenceItems(state, 'card_readaloud', pending);
+  const after = A.getCardSequenceItems(state, 'card_readaloud');
+  assert.ok(!after.some(si => si.title === 'The Hobbit'));
+  assert.equal(after.length, 2);
+});
+
+test('commitSequenceItems: updating a title', () => {
+  const state = A.buildSampleAppState();
+  const existing = A.getCardSequenceItems(state, 'card_readaloud');
+  const pending = existing.map(si => ({
+    _itemId: si.id,
+    title: si.title === "Charlotte's Web" ? 'Charlotte Updated' : si.title,
+    status: si.status
+  }));
+  A.commitSequenceItems(state, 'card_readaloud', pending);
+  const after = A.getCardSequenceItems(state, 'card_readaloud');
+  assert.ok(after.some(si => si.title === 'Charlotte Updated'));
+  assert.ok(!after.some(si => si.title === "Charlotte's Web"));
+});
+
+test('commitSequenceItems: no-op for card without sequenceId', () => {
+  const state = A.buildSampleAppState();
+  const card = A.addCard(state, { subjectColumnId: state.subjectColumns[0].id });
+  const before = state.sequenceItems.length;
+  A.commitSequenceItems(state, card.id, [{ _itemId: null, title: 'Test', status: 'upcoming' }]);
+  assert.equal(state.sequenceItems.length, before);
+});
+
+// ---------------------------------------------------------------------------
+// commitLoopItems
+// ---------------------------------------------------------------------------
+
+test('commitLoopItems: adding a new item', () => {
+  const state = A.buildSampleAppState();
+  const existing = A.getCardLoopItems(state, 'card_bible');
+  const pending = existing.map(li => ({ _itemId: li.id, title: li.title }));
+  pending.push({ _itemId: null, title: 'Job' });
+  A.commitLoopItems(state, 'card_bible', pending);
+  const after = A.getCardLoopItems(state, 'card_bible');
+  assert.ok(after.some(li => li.title === 'Job'));
+  assert.equal(after.length, 5);
+});
+
+test('commitLoopItems: removing an item', () => {
+  const state = A.buildSampleAppState();
+  const existing = A.getCardLoopItems(state, 'card_bible');
+  const pending = existing.filter(li => li.title !== 'Old Testament').map(li => ({ _itemId: li.id, title: li.title }));
+  A.commitLoopItems(state, 'card_bible', pending);
+  const after = A.getCardLoopItems(state, 'card_bible');
+  assert.ok(!after.some(li => li.title === 'Old Testament'));
+  assert.equal(after.length, 3);
+});
+
+// ---------------------------------------------------------------------------
+// getCardMapLabels / cardNeedsResourceChoice
+// ---------------------------------------------------------------------------
+
+test('getCardMapLabels: sequence card returns nonDone items with star on current', () => {
+  const state = A.buildSampleAppState();
+  const card = A.findCard(state, 'card_readaloud');
+  const labels = A.getCardMapLabels(state, card);
+  assert.ok(labels.some(l => l.includes("Charlotte's Web") && l.includes('★')));
+  assert.ok(labels.some(l => l.includes('The Wind in the Willows')));
+  assert.ok(!labels.some(l => l.includes('The Hobbit')));
+});
+
+test('getCardMapLabels: loop card returns all loop item titles', () => {
+  const state = A.buildSampleAppState();
+  const card = A.findCard(state, 'card_bible');
+  const labels = A.getCardMapLabels(state, card);
+  assert.ok(labels.includes('Matthew'));
+  assert.ok(labels.includes('Psalms + Proverbs'));
+  assert.ok(labels.includes('Theology'));
+  assert.ok(labels.includes('Old Testament'));
+});
+
+test('cardNeedsResourceChoice: true for card with no resources/seq/loop', () => {
+  const state = A.buildSampleAppState();
+  const card = A.addCard(state, { subjectColumnId: state.subjectColumns[0].id });
+  assert.equal(A.cardNeedsResourceChoice(state, card), true);
+});
+
+test('cardNeedsResourceChoice: false for card_readaloud (has sequenceId)', () => {
+  const state = A.buildSampleAppState();
+  const card = A.findCard(state, 'card_readaloud');
+  assert.equal(A.cardNeedsResourceChoice(state, card), false);
+});
+
+// ---------------------------------------------------------------------------
+// Time guidance model
+// ---------------------------------------------------------------------------
+
+test('makeTimeGuidanceByForm returns defaults with correct form1 label', () => {
+  const g = M.makeTimeGuidanceByForm();
+  assert.equal(g.form1.minutesMin, 10);
+  assert.equal(g.form1.minutesMax, 15);
+  assert.equal(g.form1.weeklyTouches, 3);
+  assert.ok(g.form1.label.includes('10'));
+  assert.ok(g.form2.weeklyTouches === 2);
+  assert.ok(g.form3.minutesMin === 20);
+});
+
+test('makeTimeGuidanceByForm accepts overrides per form', () => {
+  const g = M.makeTimeGuidanceByForm({ form1: { minutesMin: 5, minutesMax: 10, weeklyTouches: 5, label: '5–10 min · 5×/week' } });
+  assert.equal(g.form1.minutesMin, 5);
+  assert.equal(g.form2.minutesMin, 15);
+});
+
+// ---------------------------------------------------------------------------
+// Resource pacing model
+// ---------------------------------------------------------------------------
+
+test('makeResourcePacing returns correct defaults', () => {
+  const p = M.makeResourcePacing();
+  assert.equal(p.totalUnits, null);
+  assert.equal(p.unitType, 'chapters');
+  assert.equal(p.unitsPerTouch, 1);
+  assert.equal(p.termAssignment, 'unassigned');
+});
+
+test('makeResourcePacing accepts field overrides', () => {
+  const p = M.makeResourcePacing({ totalUnits: 22, unitType: 'chapters', termAssignment: 'term1' });
+  assert.equal(p.totalUnits, 22);
+  assert.equal(p.termAssignment, 'term1');
+  assert.equal(p.unitsPerTouch, 1);
+});
+
+test('RESOURCE_PACING_UNIT_TYPES includes chapters and sessions', () => {
+  assert.ok(M.RESOURCE_PACING_UNIT_TYPES.includes('chapters'));
+  assert.ok(M.RESOURCE_PACING_UNIT_TYPES.includes('sessions'));
+});
+
+test('TERM_ASSIGNMENT_OPTIONS includes all-year and unassigned', () => {
+  assert.ok(M.TERM_ASSIGNMENT_OPTIONS.includes('all-year'));
+  assert.ok(M.TERM_ASSIGNMENT_OPTIONS.includes('unassigned'));
+});
+
 let passed = 0;
 let failed = 0;
 for (const t of tests) {
