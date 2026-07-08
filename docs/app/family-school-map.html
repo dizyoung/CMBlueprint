@@ -100,7 +100,8 @@
   .resource-list-editor { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
   .resource-row { display: flex; gap: 6px; align-items: center; }
   .resource-row .res-title-inp { flex: 1; font-size: 13px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--milk-white); }
-  .resource-row .res-status-sel { font-size: 12px; padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--milk-white); }
+  .resource-row .res-status-sel { font-size: 12px; padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--milk-white); max-width: 130px; }
+  .res-hint { font-size: 10px; color: var(--muted); padding: 1px 0 2px; }
   .resource-row .remove-res-btn { border: none; background: none; cursor: pointer; color: var(--muted); font-size: 16px; line-height: 1; padding: 2px 4px; }
   .resource-row .remove-res-btn:hover { color: var(--poppy); }
   .add-resource-row-btn { font-size: 12px; color: var(--wonder-marine); background: none; border: 1px dashed var(--border); border-radius: 6px; padding: 5px 10px; cursor: pointer; width: 100%; margin-top: 2px; }
@@ -620,6 +621,11 @@ function resourceCellHTML(cards, col) {
     var filterCls = (activeFilters.size && !activeFilters.has(card.audience)) ? ' res-block-hidden' : '';
     html += '<div class="res-card-block' + lensCls + filterCls + '">';
     labels.forEach(function (label) { html += '<div class="res-label">' + escapeHtml(label) + '</div>'; });
+    var hintParts = [];
+    if (card.suggestedWeeklyTouches) hintParts.push(card.suggestedWeeklyTouches);
+    var lenText = A.lessonLengthText(card);
+    if (lenText) hintParts.push(lenText);
+    if (hintParts.length) html += '<div class="res-hint">' + escapeHtml(hintParts.join(' · ')) + '</div>';
     html += '</div>';
   });
   html += '</div>';

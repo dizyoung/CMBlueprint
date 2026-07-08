@@ -9,8 +9,8 @@ export function appHeaderHTML(activePage) {
       '<span class="app-brand">CM Blueprint</span>' +
       '<nav class="app-nav">' +
         link('./index.html', 'Home', 'home') +
-        link('./subjects-books.html', 'Subjects & Books', 'subjects') +
         link('./family-school-map.html', 'Family School Map', 'map') +
+        link('./subjects-books.html', 'Subjects & Books', 'subjects') +
         link('./weekly-rhythm.html', 'Weekly Rhythm', 'rhythm') +
       '</nav>' +
     '</div></header>'

@@ -831,6 +831,46 @@ test('findResourceUse retrieves a use by id', () => {
   assert.strictEqual(A.findResourceUse(state, 'nonexistent'), null);
 });
 
+// ---------------------------------------------------------------------------
+// Phase 1D.10h — lesson length text + 4-layer architecture
+// ---------------------------------------------------------------------------
+
+test('lessonLengthText returns min–target range', () => {
+  const state = A.buildSampleAppState();
+  const card = state.cards[0];
+  card.lessonTimeConfig = { minMinutes: 5, targetMinutes: 10, maxMinutes: 15, hardMaxMinutes: null, sessionsPerWeek: null };
+  assert.equal(A.lessonLengthText(card), '5–10 min');
+});
+
+test('lessonLengthText returns ~target when min equals target', () => {
+  const state = A.buildSampleAppState();
+  const card = state.cards[0];
+  card.lessonTimeConfig = { minMinutes: 10, targetMinutes: 10, maxMinutes: null, hardMaxMinutes: null, sessionsPerWeek: null };
+  assert.equal(A.lessonLengthText(card), '~10 min');
+});
+
+test('lessonLengthText returns min+ when only minMinutes set', () => {
+  const state = A.buildSampleAppState();
+  const card = state.cards[0];
+  card.lessonTimeConfig = { minMinutes: 5, targetMinutes: null, maxMinutes: null, hardMaxMinutes: null, sessionsPerWeek: null };
+  assert.equal(A.lessonLengthText(card), '5+ min');
+});
+
+test('lessonLengthText returns empty string when no config', () => {
+  const state = A.buildSampleAppState();
+  const card = state.cards[0];
+  card.lessonTimeConfig = { minMinutes: null, targetMinutes: null, maxMinutes: null, hardMaxMinutes: null, sessionsPerWeek: null };
+  assert.equal(A.lessonLengthText(card), '');
+  assert.equal(A.lessonLengthText(null), '');
+});
+
+test('lessonLengthText returns ~target when only targetMinutes set', () => {
+  const state = A.buildSampleAppState();
+  const card = state.cards[0];
+  card.lessonTimeConfig = { minMinutes: null, targetMinutes: 20, maxMinutes: null, hardMaxMinutes: null, sessionsPerWeek: null };
+  assert.equal(A.lessonLengthText(card), '~20 min');
+});
+
 let passed = 0;
 let failed = 0;
 for (const t of tests) {
