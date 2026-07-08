@@ -27,7 +27,7 @@ ok('+ Add subject buttons present', addBtns > 0);
 // --- build label visible ---
 const buildLabel = await page.$eval('span[title="Build identifier"]', el => el.textContent).catch(() => '');
 ok('Build label visible in toolbar', buildLabel.includes('build:'));
-ok('Build label is time-rhythm-reorder', buildLabel.includes('time-rhythm-reorder'));
+ok('Build label is cm-pneu-aligned', buildLabel.includes('cm-pneu-aligned'));
 
 // --- TEST A: Family Read-Alouds — click and verify reading order ---
 const readaloudBlock = await page.$('.res-block-clickable[onclick*="card_readaloud"]');

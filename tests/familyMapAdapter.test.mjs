@@ -234,14 +234,15 @@ test('"Needs rhythm placement" helpers find cards/loops/sequences absent from th
   const state = A.buildSampleAppState();
   const cardsWithoutPlacement = A.getCardsWithoutRhythmPlacement(state);
   assert.ok(Array.isArray(cardsWithoutPlacement));
-  // none of the sample cards are referenced by id from the sample rhythm (the
-  // sample rhythm uses its own student/group ids, not the sample card ids)
+  // Most sample cards are not referenced by id from the sample rhythm
   assert.ok(cardsWithoutPlacement.length > 0);
   assert.equal(A.cardHasRhythmPlacement(state, 'card_math_kayla'), false);
 
-  const loop = state.loops[0];
-  assert.equal(A.loopHasRhythmPlacement(state, loop.id), false);
-  assert.ok(A.getLoopsWithoutRhythmPlacement(state).some((l) => l.id === loop.id));
+  // Bible Loop is now placed in the sample rhythm by ID — so it should NOT appear unplaced
+  assert.equal(A.loopHasRhythmPlacement(state, 'loop_bible'), true);
+  assert.ok(!A.getLoopsWithoutRhythmPlacement(state).some((l) => l.id === 'loop_bible'));
+  // Nature Study card is placed; math_kayla is not
+  assert.equal(A.cardHasRhythmPlacement(state, 'card_nature_study'), true);
 });
 
 test('"Needs rhythm review" flags a rhythm assignment whose referenced card/loop/sequence no longer exists', () => {
@@ -1091,6 +1092,116 @@ test('RESOURCE_PACING_UNIT_TYPES includes chapters and sessions', () => {
 test('TERM_ASSIGNMENT_OPTIONS includes all-year and unassigned', () => {
   assert.ok(M.TERM_ASSIGNMENT_OPTIONS.includes('all-year'));
   assert.ok(M.TERM_ASSIGNMENT_OPTIONS.includes('unassigned'));
+});
+
+// ---------------------------------------------------------------------------
+// Phase 1D.10k — CM / PNEU alignment
+// ---------------------------------------------------------------------------
+
+test('LESSON_TIME_GUARDRAILS has correct friendly target values (not strange exact numbers)', () => {
+  assert.equal(M.LESSON_TIME_GUARDRAILS.form1.target, 20, 'Form I target should be 20 min (not 18)');
+  assert.equal(M.LESSON_TIME_GUARDRAILS.form2.target, 30, 'Form II target should be 30 min (not 25)');
+  assert.equal(M.LESSON_TIME_GUARDRAILS.form3.target, 45, 'Form III target should be 45 min (not 38)');
+});
+
+test('lessonLengthRangeLabel returns friendly range strings', () => {
+  assert.equal(M.lessonLengthRangeLabel('form1'), '15–20 min');
+  assert.equal(M.lessonLengthRangeLabel('form2'), '20–30 min');
+  assert.equal(M.lessonLengthRangeLabel('form3'), '30–45 min');
+  assert.equal(M.lessonLengthRangeLabel('unknown'), '');
+});
+
+test('card_bible lesson display shows 10–15 min (not 18 or ~18)', () => {
+  const state = A.buildSampleAppState();
+  const bibleCard = A.findCard(state, 'card_bible');
+  const text = A.lessonLengthText(bibleCard);
+  assert.ok(!text.includes('18'), 'Bible card lesson length should not include "18": got ' + text);
+  assert.ok(text.includes('10') || text.includes('15'), 'Bible card should show 10–15 range: got ' + text);
+});
+
+test('lessonTimeConfigFromGradeBand form1 produces 15–20 min via lessonLengthText', () => {
+  const ltc = M.lessonTimeConfigFromGradeBand('form1');
+  const card = { lessonTimeConfig: ltc };
+  const text = A.lessonLengthText(card);
+  assert.equal(text, '15–20 min', 'Form I config should display as 15–20 min: got ' + text);
+});
+
+test('card_math_charis exists in sample state for Charis', () => {
+  const state = A.buildSampleAppState();
+  const card = A.findCard(state, 'card_math_charis');
+  assert.ok(card, 'card_math_charis should exist');
+  assert.equal(card.subjectColumnId, 'math');
+  assert.deepEqual(card.participantIds, ['charis']);
+  assert.ok(card.lessonTimeConfig, 'card_math_charis should have a lessonTimeConfig');
+});
+
+test('Charis has an individual math card just like Kayla and Lucy', () => {
+  const state = A.buildSampleAppState();
+  const charisRow = A.buildMapGrid(state).grid.find(function (g) { return g.row.id === 'individual:charis'; });
+  assert.ok(charisRow, 'Charis row exists');
+  assert.ok(charisRow.cells.math.some(function (c) { return c.id === 'card_math_charis'; }), 'Charis has a math card in the grid');
+  assert.ok(A.studentLensCards(state, 'charis').some(function (c) { return c.id === 'card_math_charis'; }), 'Charis math card in student lens');
+});
+
+test('Bible Loop is placed in the sample weekly rhythm (loop assignment by ID)', () => {
+  const state = A.buildSampleAppState();
+  assert.equal(A.loopHasRhythmPlacement(state, 'loop_bible'), true, 'loop_bible should be placed in the rhythm');
+  assert.ok(A.getLoopsWithoutRhythmPlacement(state).every(function (l) { return l.id !== 'loop_bible'; }), 'loop_bible should NOT appear in unplaced list');
+});
+
+test('Family Read-Alouds sequence is placed in the sample weekly rhythm (sequence assignment by ID)', () => {
+  const state = A.buildSampleAppState();
+  const placed = R.sequenceHasRhythmPlacement(state.weeklyRhythm, 'seq_readaloud');
+  assert.equal(placed, true, 'seq_readaloud should be placed in the rhythm');
+  assert.ok(R.getSequencesWithoutRhythmPlacement(state.weeklyRhythm, state.sequences).every(function (s) { return s.id !== 'seq_readaloud'; }), 'seq_readaloud should NOT appear in unplaced list');
+});
+
+test('loopHasRhythmPlacement returns false when rhythm has only text-label assignments (no loop type)', () => {
+  const rhythm = R.makeWeeklyRhythm({
+    days: [R.makeRhythmDay({ id: 'd1', label: 'Day 1' })],
+    blocks: [R.makeRhythmBlock({ id: 'morning', label: 'Morning' })],
+    assignments: [
+      R.makeRhythmAssignment({ dayId: 'd1', blockId: 'morning', label: 'Bible Loop', assignmentType: 'custom' })
+    ]
+  });
+  assert.equal(R.loopHasRhythmPlacement(rhythm, 'loop_bible'), false, 'text-label "Bible Loop" should NOT satisfy ID-based check');
+});
+
+test('Nature Study card is placed in the sample weekly rhythm', () => {
+  const state = A.buildSampleAppState();
+  assert.equal(A.cardHasRhythmPlacement(state, 'card_nature_study'), true, 'card_nature_study should be placed (by ID)');
+});
+
+test('sample state Form I cards include expected CM strand subjects', () => {
+  const state = A.buildSampleAppState();
+  const ids = state.cards.map(function (c) { return c.id; });
+  // Core Form I strands
+  assert.ok(ids.includes('card_phonics'), 'Phonics / Reading Practice');
+  assert.ok(ids.includes('card_copywork'), 'Copywork');
+  assert.ok(ids.includes('card_recitation'), 'Recitation / Memory Work');
+  assert.ok(ids.includes('card_math_charis'), 'Math (Form I individual)');
+  assert.ok(ids.includes('card_nature_study'), 'Nature Study');
+  assert.ok(ids.includes('card_early_history'), 'Early History Stories');
+  assert.ok(ids.includes('card_tales'), 'Tales / Fairy Tales');
+  assert.ok(ids.includes('card_hymn'), 'Hymn');
+  assert.ok(ids.includes('card_folksong'), 'Folk Song');
+  assert.ok(ids.includes('card_poetry'), 'Poetry');
+  assert.ok(ids.includes('card_picture_study'), 'Picture Study');
+  assert.ok(ids.includes('card_drawing'), 'Drawing');
+  assert.ok(ids.includes('card_handicraft'), 'Handicraft');
+  assert.ok(ids.includes('card_pe'), 'PE / Movement');
+});
+
+test('sample state Form II/III cards include expected CM strand subjects', () => {
+  const state = A.buildSampleAppState();
+  const ids = state.cards.map(function (c) { return c.id; });
+  assert.ok(ids.includes('card_dictation'), 'Dictation');
+  assert.ok(ids.includes('card_grammar'), 'Grammar');
+  assert.ok(ids.includes('card_written_narration'), 'Written Narration');
+  assert.ok(ids.includes('card_shakespeare'), 'Shakespeare (F3 optional)');
+  assert.ok(ids.includes('card_timeline'), 'Timeline / Book of Centuries');
+  assert.ok(ids.includes('card_plutarch'), 'Plutarch');
+  assert.ok(ids.includes('card_citizenship_gov'), 'Citizenship / Government');
 });
 
 let passed = 0;
