@@ -119,7 +119,17 @@
   .ed-seq-status.seq-completed { background: #eee; color: var(--muted); }
   .ed-seq-status.seq-upcoming { background: var(--field-mint); color: var(--muted); }
   .ed-res-empty { font-size: 12px; color: var(--muted); padding: 4px 0; font-style: italic; }
-  .ed-res-empty { font-size: 12px; color: var(--muted); font-style: italic; }
+  .ed-reorder-btn { border: none; background: none; cursor: pointer; color: var(--muted); font-size: 13px; line-height: 1; padding: 2px 3px; }
+  .ed-reorder-btn:hover { color: var(--wonder-marine); }
+  .ed-reorder-btn:disabled { opacity: 0.25; cursor: default; }
+  .ed-field-hint { font-size: 11px; color: var(--muted); margin: 1px 0 6px; }
+  .ed-timing-section { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .ed-timing-row { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 8px; }
+  .ed-timing-row label { font-size: 12px; font-weight: 600; color: var(--ink); display: block; margin-bottom: 3px; }
+  .ed-timing-row input, .ed-timing-row select { font-size: 13px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--milk-white); }
+  .ed-timing-col { flex: 1; min-width: 130px; }
+  .ed-form-checks { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
+  .ed-form-checks label { font-size: 12px; font-weight: 400; display: flex; align-items: center; gap: 4px; cursor: pointer; }
 
   /* Group detail overlay */
   .gd-card-row { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; font-size: 13px; }
@@ -205,7 +215,7 @@
     <button type="button" data-mapview="detailed" title="Every underlying subject and work item" style="font-size:11px;color:var(--muted);">Detailed View</button>
   </div>
   <button onclick="render()">Refresh</button>
-  <span style="font-size:10px;color:var(--muted);margin-left:8px;font-family:monospace;" title="Build identifier">build:seq-loop-editor</span>
+  <span style="font-size:10px;color:var(--muted);margin-left:8px;font-family:monospace;" title="Build identifier">build:time-rhythm-reorder</span>
   <button class="accent" id="print-resource-btn">Print resource map</button>
   <button class="accent" onclick="document.body.classList.remove('print-resources'); window.print();">Print full map</button>
   <button class="accent" onclick="document.body.classList.add('print-resources'); window.print();">Print Book &amp; Resource List</button>
@@ -293,7 +303,7 @@
     <label for="ed-title">Title</label>
     <input type="text" id="ed-title">
 
-    <h3 style="margin:14px 0 6px;font-size:13px;color:var(--wonder-marine);">Move this card</h3>
+    <h3 style="margin:14px 0 6px;font-size:13px;color:var(--wonder-marine);">Move this subject</h3>
     <label for="ed-row">Who is this for?</label>
     <select id="ed-row"></select>
 
@@ -305,6 +315,8 @@
     <div id="ed-participants-checks" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
 
     <div id="ed-resources-section"></div>
+
+    <div id="ed-timing-section"></div>
 
     <div class="modal-actions" style="margin-top:16px;">
       <span></span>
@@ -796,6 +808,7 @@ function populateRowSelect() {
 var edPendingResources = [];  // [{_resId, _useId, title, status}]
 var edPendingSeqItems  = [];  // [{_itemId, title, status}]
 var edPendingLoopItems = [];  // [{_itemId, title}]
+var edPendingTiming    = {};  // {suggestedWeeklyTouches, lessonTargetMinutes, scheduleStyleSuggestion, formApplicability, notes}
 
 var RES_STATUS_OPTIONS = [
   { value: 'have-it',            label: 'Have it' },
@@ -818,6 +831,87 @@ function loadEditorResources(cardId) {
   });
 }
 
+var SCHEDULE_STYLE_OPTS = [
+  { value: '', label: '— not specified —' },
+  { value: 'fixed', label: 'Fixed rhythm' },
+  { value: 'loop', label: 'Loop-friendly' },
+  { value: 'fixed-or-loop', label: 'Fixed or loop' },
+  { value: 'family-rhythm', label: 'Family rhythm' },
+  { value: 'seasonal', label: 'Seasonal' },
+  { value: 'co-op-external', label: 'Co-op / External' },
+  { value: 'manual', label: 'As scheduled' }
+];
+
+function renderEditorTimingSection() {
+  var t = edPendingTiming;
+  var styleOpts = SCHEDULE_STYLE_OPTS.map(function (o) {
+    return '<option value="' + o.value + '"' + (t.scheduleStyleSuggestion === o.value ? ' selected' : '') + '>' + o.label + '</option>';
+  }).join('');
+  var faChecks = ['form1', 'form2', 'form3'].map(function (f, idx) {
+    var label = ['Form I', 'Form II', 'Form III+'][idx];
+    var checked = Array.isArray(t.formApplicability) && t.formApplicability.indexOf(f) !== -1 ? ' checked' : '';
+    return '<label><input type="checkbox" class="ed-fa-check" value="' + f + '"' + checked + '> ' + label + '</label>';
+  }).join('');
+  var html =
+    '<div class="ed-timing-section">' +
+    '<h3 style="margin:0 0 10px;font-size:13px;color:var(--wonder-marine);">Time + rhythm</h3>' +
+    '<div class="ed-timing-row">' +
+      '<div class="ed-timing-col">' +
+        '<label for="ed-freq">Times per week</label>' +
+        '<input type="text" id="ed-freq" placeholder="e.g. daily, 3x/week" value="' + escapeHtml(t.suggestedWeeklyTouches || '') + '" maxlength="30">' +
+        '<div class="ed-field-hint">Shown on the map and used to help place work in the Weekly Rhythm.</div>' +
+      '</div>' +
+      '<div class="ed-timing-col">' +
+        '<label for="ed-lesson-min">Lesson length (min)</label>' +
+        '<input type="number" id="ed-lesson-min" placeholder="e.g. 20" min="1" max="180" value="' + escapeHtml(String(t.lessonTargetMinutes || '')) + '" style="max-width:80px;">' +
+        '<div class="ed-field-hint">Target minutes per session.</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="ed-timing-row">' +
+      '<div class="ed-timing-col">' +
+        '<label for="ed-rhythm-style">Rhythm style</label>' +
+        '<select id="ed-rhythm-style">' + styleOpts + '</select>' +
+        '<div class="ed-field-hint">Helps the Weekly Rhythm planner know how to place this.</div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="margin-bottom:8px;">' +
+      '<label style="font-size:12px;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">Form applicability</label>' +
+      '<div class="ed-form-checks">' + faChecks + '</div>' +
+      '<div class="ed-field-hint">Leave all unchecked for "All forms / Family".</div>' +
+    '</div>' +
+    '<div style="margin-bottom:4px;">' +
+      '<label for="ed-notes" style="font-size:12px;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">Notes</label>' +
+      '<textarea id="ed-notes" rows="2" style="width:100%;box-sizing:border-box;font-size:13px;padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-family:inherit;resize:vertical;" placeholder="Approach, method, source, anything to remember.">' + escapeHtml(t.notes || '') + '</textarea>' +
+    '</div>' +
+    '</div>';
+
+  var timingEl = document.getElementById('ed-timing-section');
+  if (timingEl) {
+    timingEl.innerHTML = html;
+  } else {
+    var section = document.getElementById('ed-resources-section');
+    if (section) section.insertAdjacentHTML('afterend', '<div id="ed-timing-section">' + html + '</div>');
+  }
+
+  // Wire timing handlers
+  var freqInp = document.getElementById('ed-freq');
+  if (freqInp) freqInp.addEventListener('input', function () { edPendingTiming.suggestedWeeklyTouches = freqInp.value.trim() || null; });
+  var lessonInp = document.getElementById('ed-lesson-min');
+  if (lessonInp) lessonInp.addEventListener('input', function () {
+    var v = parseInt(lessonInp.value, 10);
+    edPendingTiming.lessonTargetMinutes = isNaN(v) ? null : v;
+  });
+  var styleEl = document.getElementById('ed-rhythm-style');
+  if (styleEl) styleEl.addEventListener('change', function () { edPendingTiming.scheduleStyleSuggestion = styleEl.value || null; });
+  document.querySelectorAll('.ed-fa-check').forEach(function (cb) {
+    cb.addEventListener('change', function () {
+      edPendingTiming.formApplicability = Array.prototype.slice.call(document.querySelectorAll('.ed-fa-check:checked')).map(function (el) { return el.value; });
+    });
+  });
+  var notesEl = document.getElementById('ed-notes');
+  if (notesEl) notesEl.addEventListener('input', function () { edPendingTiming.notes = notesEl.value.trim() || null; });
+}
+
 function renderEditorResourceSection() {
   var section = document.getElementById('ed-resources-section');
   if (!section) return;
@@ -835,7 +929,13 @@ function renderEditorResourceSection() {
       edPendingSeqItems.forEach(function (item, i) {
         var sc = item.status === 'current' ? 'seq-current' : (item.status === 'completed' ? 'seq-completed' : 'seq-upcoming');
         var sl = item.status === 'current' ? 'Current' : (item.status === 'completed' ? 'Finished' : 'Up next');
+        var upDis = i === 0 ? ' disabled' : '';
+        var downDis = i === edPendingSeqItems.length - 1 ? ' disabled' : '';
         html += '<div class="ed-seq-row" data-seq-idx="' + i + '">' +
+          '<div style="display:flex;flex-direction:column;gap:1px;">' +
+            '<button class="ed-reorder-btn ed-seq-up" data-seq-idx="' + i + '" title="Move up"' + upDis + '>▲</button>' +
+            '<button class="ed-reorder-btn ed-seq-down" data-seq-idx="' + i + '" title="Move down"' + downDis + '>▼</button>' +
+          '</div>' +
           '<input type="text" class="res-title-inp ed-seq-title" placeholder="Book or resource title" value="' + escapeHtml(item.title || '') + '" data-seq-idx="' + i + '">' +
           '<span class="ed-seq-status ' + sc + '">' + sl + '</span>' +
           '<button class="remove-res-btn ed-seq-remove" data-seq-idx="' + i + '" title="Remove from reading order">&times;</button>' +
@@ -857,7 +957,13 @@ function renderEditorResourceSection() {
     html += '<div class="resource-list-editor" id="ed-loop-rows">';
     if (edPendingLoopItems.length) {
       edPendingLoopItems.forEach(function (item, i) {
+        var upDis = i === 0 ? ' disabled' : '';
+        var downDis = i === edPendingLoopItems.length - 1 ? ' disabled' : '';
         html += '<div class="resource-row" data-loop-idx="' + i + '">' +
+          '<div style="display:flex;flex-direction:column;gap:1px;">' +
+            '<button class="ed-reorder-btn ed-loop-up" data-loop-idx="' + i + '" title="Move up"' + upDis + '>▲</button>' +
+            '<button class="ed-reorder-btn ed-loop-down" data-loop-idx="' + i + '" title="Move down"' + downDis + '>▼</button>' +
+          '</div>' +
           '<input type="text" class="res-title-inp ed-loop-title" placeholder="Loop item title" value="' + escapeHtml(item.title || '') + '" data-loop-idx="' + i + '">' +
           '<button class="remove-res-btn ed-loop-remove" data-loop-idx="' + i + '" title="Remove from loop">&times;</button>' +
           '</div>';
@@ -908,6 +1014,20 @@ function renderEditorResourceSection() {
         renderEditorResourceSection();
       });
     });
+    section.querySelectorAll('.ed-seq-up').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var i = Number(btn.dataset.seqIdx);
+        if (i > 0) { var tmp = edPendingSeqItems[i-1]; edPendingSeqItems[i-1] = edPendingSeqItems[i]; edPendingSeqItems[i] = tmp; }
+        renderEditorResourceSection();
+      });
+    });
+    section.querySelectorAll('.ed-seq-down').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var i = Number(btn.dataset.seqIdx);
+        if (i < edPendingSeqItems.length - 1) { var tmp = edPendingSeqItems[i+1]; edPendingSeqItems[i+1] = edPendingSeqItems[i]; edPendingSeqItems[i] = tmp; }
+        renderEditorResourceSection();
+      });
+    });
     var addSeqBtn = section.querySelector('#ed-add-seq-item-btn');
     if (addSeqBtn) addSeqBtn.addEventListener('click', function () {
       edPendingSeqItems.push({ _itemId: null, title: '', status: 'upcoming' });
@@ -926,6 +1046,20 @@ function renderEditorResourceSection() {
     section.querySelectorAll('.ed-loop-remove').forEach(function (btn) {
       btn.addEventListener('click', function () {
         edPendingLoopItems.splice(Number(btn.dataset.loopIdx), 1);
+        renderEditorResourceSection();
+      });
+    });
+    section.querySelectorAll('.ed-loop-up').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var i = Number(btn.dataset.loopIdx);
+        if (i > 0) { var tmp = edPendingLoopItems[i-1]; edPendingLoopItems[i-1] = edPendingLoopItems[i]; edPendingLoopItems[i] = tmp; }
+        renderEditorResourceSection();
+      });
+    });
+    section.querySelectorAll('.ed-loop-down').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var i = Number(btn.dataset.loopIdx);
+        if (i < edPendingLoopItems.length - 1) { var tmp = edPendingLoopItems[i+1]; edPendingLoopItems[i+1] = edPendingLoopItems[i]; edPendingLoopItems[i] = tmp; }
         renderEditorResourceSection();
       });
     });
@@ -988,6 +1122,14 @@ function openEditor(cardId) {
   document.getElementById('ed-subject').value = card.subjectColumnId;
   loadEditorResources(cardId);
   renderEditorResourceSection();
+  edPendingTiming = {
+    suggestedWeeklyTouches: card.suggestedWeeklyTouches || null,
+    lessonTargetMinutes: (card.lessonTimeConfig && card.lessonTimeConfig.targetMinutes) || null,
+    scheduleStyleSuggestion: card.scheduleStyleSuggestion || null,
+    formApplicability: card.formApplicability ? card.formApplicability.slice() : [],
+    notes: card.notes || null
+  };
+  renderEditorTimingSection();
   document.getElementById('card-editor-overlay').style.display = 'flex';
 }
 
@@ -996,6 +1138,7 @@ function closeEditor() {
   edPendingResources = [];
   edPendingSeqItems  = [];
   edPendingLoopItems = [];
+  edPendingTiming    = {};
   document.getElementById('card-editor-overlay').style.display = 'none';
 }
 
@@ -1011,6 +1154,16 @@ function saveEditor() {
   A.commitCardResources(state, editingCardId, edPendingResources);
   A.commitSequenceItems(state, editingCardId, edPendingSeqItems);
   A.commitLoopItems(state, editingCardId, edPendingLoopItems);
+  var timingUpdate = {
+    suggestedWeeklyTouches: edPendingTiming.suggestedWeeklyTouches || null,
+    scheduleStyleSuggestion: edPendingTiming.scheduleStyleSuggestion || null,
+    formApplicability: edPendingTiming.formApplicability || [],
+    notes: edPendingTiming.notes || null
+  };
+  if (edPendingTiming.lessonTargetMinutes) {
+    timingUpdate.lessonTimeConfig = { targetMinutes: edPendingTiming.lessonTargetMinutes };
+  }
+  A.updateCard(state, editingCardId, timingUpdate);
   closeEditor();
   render();
   markDirtyAndSave();

@@ -27,6 +27,7 @@ ok('+ Add subject buttons present', addBtns > 0);
 // --- build label visible ---
 const buildLabel = await page.$eval('span[title="Build identifier"]', el => el.textContent).catch(() => '');
 ok('Build label visible in toolbar', buildLabel.includes('build:'));
+ok('Build label is time-rhythm-reorder', buildLabel.includes('time-rhythm-reorder'));
 
 // --- TEST A: Family Read-Alouds — click and verify reading order ---
 const readaloudBlock = await page.$('.res-block-clickable[onclick*="card_readaloud"]');
@@ -47,6 +48,20 @@ if (readaloudBlock) {
   ok('Editor shows "Up next" status for upcoming item', sectionHTML.includes('seq-upcoming'));
   ok('Editor does NOT say "No resources attached yet"', !sectionHTML.includes('No resources attached yet'));
   ok('Editor uses "reading order" language', sectionHTML.toLowerCase().includes('reading order'));
+  // Check Time + rhythm section
+  const timingHTML = await page.$eval('#ed-timing-section', el => el.innerHTML).catch(() => '');
+  ok('Editor shows Time + rhythm section', timingHTML.includes('Time + rhythm'));
+  ok('Editor shows Times per week field', timingHTML.includes('Times per week'));
+  ok('Editor shows Lesson length field', timingHTML.includes('Lesson length'));
+  ok('Editor shows Rhythm style field', timingHTML.includes('Rhythm style'));
+  ok('Editor shows Form applicability section', timingHTML.includes('Form applicability'));
+  ok('Editor shows Notes field', timingHTML.includes('Notes'));
+  // Check reorder buttons are present
+  const reorderBtns = await page.$$eval('.ed-reorder-btn', els => els.length);
+  ok('Reading order reorder buttons present', reorderBtns >= 2);
+  // Check "Move this subject" language (not "Move this card")
+  const overlayHTML = await page.$eval('#card-editor-overlay', el => el.innerHTML).catch(() => '');
+  ok('Editor says "Move this subject" (not "Move this card")', overlayHTML.includes('Move this subject') && !overlayHTML.includes('Move this card'));
   // Add a new book to the reading order
   await page.click('#ed-add-seq-item-btn');
   await page.waitForTimeout(200);

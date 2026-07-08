@@ -80,6 +80,18 @@
 .work-item-notes { font-size:12px; color:var(--muted); font-style:italic; margin-top:4px; }
 .work-item-guidance { font-size:11px; color:var(--muted); margin-top:3px; }
 
+/* ---- Reading order / loop section ---- */
+.ed-pattern-label { font-size:11px; color:var(--muted); margin:2px 0 8px; }
+.ed-seq-row { display:flex; gap:6px; align-items:center; margin-bottom:4px; }
+.ed-seq-status { font-size:11px; padding:2px 7px; border-radius:4px; flex-shrink:0; white-space:nowrap; }
+.ed-seq-status.seq-current { background:var(--wonder-marine); color:#fff; font-weight:600; }
+.ed-seq-status.seq-completed { background:#eee; color:var(--muted); }
+.ed-seq-status.seq-upcoming { background:var(--field-mint); color:var(--muted); }
+.ed-res-empty { font-size:12px; color:var(--muted); font-style:italic; padding:4px 0; }
+.ed-reorder-btn { border:none; background:none; cursor:pointer; color:var(--muted); font-size:13px; line-height:1; padding:2px 3px; }
+.ed-reorder-btn:hover { color:var(--wonder-marine); }
+.ed-reorder-btn:disabled { opacity:0.25; cursor:default; }
+
 /* ---- Form badge ---- */
 .badge-form { background:#f0f4ff; color:#2a4a9e; border:1px solid #c8d5f5; }
 @media (prefers-color-scheme: dark) {
@@ -155,8 +167,10 @@
       <select id="item-audience"></select>
     </div>
 
+    <div id="sb-seq-loop-section"></div>
+
     <div class="form-row">
-      <label>Resources (books, curricula, materials)</label>
+      <label>Other resources (books, curricula, materials)</label>
       <div class="resource-list-editor" id="resource-rows"></div>
       <button class="add-resource-row-btn" id="add-resource-row-btn">+ Add resource</button>
     </div>
@@ -208,6 +222,8 @@ let state = null;
 let activeLearnerFilter = 'all';
 let editingCardId = null;
 let pendingResources = []; // [{id, title, type, status}] for the open editor
+let pendingSeqItems  = []; // [{_itemId, title, status}]
+let pendingLoopItems = []; // [{_itemId, title}]
 
 function loadState() {
   try {
@@ -439,6 +455,137 @@ const RES_TYPE_OPTIONS = [
   { value: 'no-resource', label: 'No resource' }
 ];
 
+function renderSeqLoopSection() {
+  const container = document.getElementById('sb-seq-loop-section');
+  if (!container) return;
+  const card = editingCardId ? A.findCard(state, editingCardId) : null;
+  const h3Style = 'margin:14px 0 3px;font-size:13px;color:var(--wonder-marine);font-weight:700;';
+
+  let html = '';
+
+  // ---- Reading order ----
+  if (card && card.sequenceId) {
+    const seq = A.getCardSequence(state, editingCardId);
+    html += `<h3 style="${h3Style}">Reading order${seq ? ': ' + escapeHtml(seq.title) : ''}</h3>`;
+    html += `<div class="ed-pattern-label">One at a time, in order</div>`;
+    html += `<div class="resource-list-editor" id="sb-seq-rows">`;
+    if (pendingSeqItems.length) {
+      pendingSeqItems.forEach((item, i) => {
+        const sc = item.status === 'current' ? 'seq-current' : (item.status === 'completed' ? 'seq-completed' : 'seq-upcoming');
+        const sl = item.status === 'current' ? 'Current' : (item.status === 'completed' ? 'Finished' : 'Up next');
+        const upDis = i === 0 ? ' disabled' : '';
+        const downDis = i === pendingSeqItems.length - 1 ? ' disabled' : '';
+        html += `<div class="ed-seq-row" data-seq-idx="${i}">
+          <div style="display:flex;flex-direction:column;gap:1px;">
+            <button class="ed-reorder-btn sb-seq-up" data-seq-idx="${i}" title="Move up"${upDis}>▲</button>
+            <button class="ed-reorder-btn sb-seq-down" data-seq-idx="${i}" title="Move down"${downDis}>▼</button>
+          </div>
+          <input type="text" class="sb-seq-title" placeholder="Book or resource title" value="${escapeHtml(item.title || '')}" data-seq-idx="${i}" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;font-family:inherit;">
+          <span class="ed-seq-status ${sc}">${sl}</span>
+          <button class="remove-res-btn sb-seq-remove" data-seq-idx="${i}" title="Remove">&times;</button>
+        </div>`;
+      });
+    } else {
+      html += `<div class="ed-res-empty">No books in this reading order yet.</div>`;
+    }
+    html += `</div>`;
+    html += `<button type="button" class="add-resource-row-btn" id="sb-add-seq-btn">+ Add book to reading order</button>`;
+  }
+
+  // ---- Loop / rotation ----
+  if (card && card.loopId) {
+    const loop = A.getCardLoop(state, editingCardId);
+    const turnsText = loop && loop.turnsPerWeek ? loop.turnsPerWeek + ' turns/week' : '';
+    html += `<h3 style="${h3Style}">Loop / rotation${loop ? ': ' + escapeHtml(loop.title) : ''}</h3>`;
+    html += `<div class="ed-pattern-label">Rotate through these resources${turnsText ? ' — ' + escapeHtml(turnsText) : ''}</div>`;
+    html += `<div class="resource-list-editor" id="sb-loop-rows">`;
+    if (pendingLoopItems.length) {
+      pendingLoopItems.forEach((item, i) => {
+        const upDis = i === 0 ? ' disabled' : '';
+        const downDis = i === pendingLoopItems.length - 1 ? ' disabled' : '';
+        html += `<div class="resource-row" data-loop-idx="${i}">
+          <div style="display:flex;flex-direction:column;gap:1px;">
+            <button class="ed-reorder-btn sb-loop-up" data-loop-idx="${i}" title="Move up"${upDis}>▲</button>
+            <button class="ed-reorder-btn sb-loop-down" data-loop-idx="${i}" title="Move down"${downDis}>▼</button>
+          </div>
+          <input type="text" class="sb-loop-title" placeholder="Loop item title" value="${escapeHtml(item.title || '')}" data-loop-idx="${i}" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;font-family:inherit;">
+          <button class="remove-res-btn sb-loop-remove" data-loop-idx="${i}" title="Remove">&times;</button>
+        </div>`;
+      });
+    } else {
+      html += `<div class="ed-res-empty">No items in this loop yet.</div>`;
+    }
+    html += `</div>`;
+    html += `<button type="button" class="add-resource-row-btn" id="sb-add-loop-btn">+ Add to loop</button>`;
+  }
+
+  container.innerHTML = html;
+
+  // Wire seq handlers
+  if (card && card.sequenceId) {
+    container.querySelectorAll('.sb-seq-title').forEach(inp => {
+      const i = Number(inp.dataset.seqIdx);
+      inp.addEventListener('input', () => { pendingSeqItems[i].title = inp.value; });
+    });
+    container.querySelectorAll('.sb-seq-remove').forEach(btn => {
+      btn.addEventListener('click', () => { pendingSeqItems.splice(Number(btn.dataset.seqIdx), 1); renderSeqLoopSection(); });
+    });
+    container.querySelectorAll('.sb-seq-up').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = Number(btn.dataset.seqIdx);
+        if (i > 0) { const tmp = pendingSeqItems[i-1]; pendingSeqItems[i-1] = pendingSeqItems[i]; pendingSeqItems[i] = tmp; }
+        renderSeqLoopSection();
+      });
+    });
+    container.querySelectorAll('.sb-seq-down').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = Number(btn.dataset.seqIdx);
+        if (i < pendingSeqItems.length - 1) { const tmp = pendingSeqItems[i+1]; pendingSeqItems[i+1] = pendingSeqItems[i]; pendingSeqItems[i] = tmp; }
+        renderSeqLoopSection();
+      });
+    });
+    const addSeqBtn = container.querySelector('#sb-add-seq-btn');
+    if (addSeqBtn) addSeqBtn.addEventListener('click', () => {
+      pendingSeqItems.push({ _itemId: null, title: '', status: 'upcoming' });
+      renderSeqLoopSection();
+      const inputs = container.querySelectorAll('.sb-seq-title');
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    });
+  }
+
+  // Wire loop handlers
+  if (card && card.loopId) {
+    container.querySelectorAll('.sb-loop-title').forEach(inp => {
+      const i = Number(inp.dataset.loopIdx);
+      inp.addEventListener('input', () => { pendingLoopItems[i].title = inp.value; });
+    });
+    container.querySelectorAll('.sb-loop-remove').forEach(btn => {
+      btn.addEventListener('click', () => { pendingLoopItems.splice(Number(btn.dataset.loopIdx), 1); renderSeqLoopSection(); });
+    });
+    container.querySelectorAll('.sb-loop-up').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = Number(btn.dataset.loopIdx);
+        if (i > 0) { const tmp = pendingLoopItems[i-1]; pendingLoopItems[i-1] = pendingLoopItems[i]; pendingLoopItems[i] = tmp; }
+        renderSeqLoopSection();
+      });
+    });
+    container.querySelectorAll('.sb-loop-down').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = Number(btn.dataset.loopIdx);
+        if (i < pendingLoopItems.length - 1) { const tmp = pendingLoopItems[i+1]; pendingLoopItems[i+1] = pendingLoopItems[i]; pendingLoopItems[i] = tmp; }
+        renderSeqLoopSection();
+      });
+    });
+    const addLoopBtn = container.querySelector('#sb-add-loop-btn');
+    if (addLoopBtn) addLoopBtn.addEventListener('click', () => {
+      pendingLoopItems.push({ _itemId: null, title: '' });
+      renderSeqLoopSection();
+      const inputs = container.querySelectorAll('.sb-loop-title');
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    });
+  }
+}
+
 function renderResourceRows() {
   const container = document.getElementById('resource-rows');
   if (!pendingResources.length) {
@@ -516,7 +663,10 @@ function openAddItem(colId) {
   selScheduleStyle.value = '';
   setFormCheckboxes([]);
   pendingResources = [];
+  pendingSeqItems  = [];
+  pendingLoopItems = [];
   deleteBtn.style.display = 'none';
+  renderSeqLoopSection();
   renderResourceRows();
   overlay.classList.add('open');
   inputTitle.focus();
@@ -541,7 +691,10 @@ function openEditItem(cardId) {
     const res = (state.resources || []).find(r => r.id === u.resourceId);
     return res ? { _resId: res.id, _useId: u.id, title: res.title, status: res.status, type: res.type } : null;
   }).filter(Boolean);
+  pendingSeqItems  = A.getCardSequenceItems(state, cardId).map(si => ({ _itemId: si.id, title: si.title, status: si.status }));
+  pendingLoopItems = A.getCardLoopItems(state, cardId).map(li => ({ _itemId: li.id, title: li.title }));
   deleteBtn.style.display = '';
+  renderSeqLoopSection();
   renderResourceRows();
   overlay.classList.add('open');
   inputTitle.focus();
@@ -551,6 +704,8 @@ function closeOverlay() {
   overlay.classList.remove('open');
   editingCardId = null;
   pendingResources = [];
+  pendingSeqItems  = [];
+  pendingLoopItems = [];
 }
 
 document.getElementById('item-cancel-btn').addEventListener('click', closeOverlay);
@@ -603,6 +758,8 @@ document.getElementById('item-save-btn').addEventListener('click', () => {
       ...audienceParsed
     });
     A.commitCardResources(state, editingCardId, pendingResources);
+    A.commitSequenceItems(state, editingCardId, pendingSeqItems);
+    A.commitLoopItems(state, editingCardId, pendingLoopItems);
   } else {
     const card = A.addCard(state, {
       title, subjectColumnId, planningStatus, notes, formApplicability,
@@ -610,6 +767,8 @@ document.getElementById('item-save-btn').addEventListener('click', () => {
       ...audienceParsed
     });
     A.commitCardResources(state, card.id, pendingResources);
+    A.commitSequenceItems(state, card.id, pendingSeqItems);
+    A.commitLoopItems(state, card.id, pendingLoopItems);
   }
 
   saveState();
