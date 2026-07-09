@@ -62,6 +62,27 @@
   .density-toggle button { border: none; background: var(--milk-white); padding: 6px 12px; font-size: 12px; cursor: pointer; }
   .density-toggle button.active { background: var(--wonder-marine); color: var(--milk-white); }
 
+  .combine-table th { background: var(--color-panel-bg,#f5f5f5); padding:6px 10px; text-align:left; border-bottom:2px solid var(--color-border,#ddd); }
+  .combine-table td { padding:5px 10px; border-bottom:1px solid var(--color-border,#eee); vertical-align:top; }
+  .rhythm-badge { font-size:0.78em; padding:2px 7px; border-radius:10px; display:inline-block; }
+  .rhythm-badge.placed { background:#d4edda; color:#155724; }
+  .rhythm-badge.covered { background:#cce5ff; color:#004085; }
+  .rhythm-badge.not-placed { background:#fff3cd; color:#856404; }
+
+  .loop-card { border:1px solid var(--border,#ddd); border-radius:8px; padding:12px 14px; margin-bottom:12px; background:var(--field-mint,#f9f9f9); }
+  .loop-card-header { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .loop-card-title { font-weight:600; font-size:1em; }
+  .loop-card-meta { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+  .loop-meta-tag { font-size:0.78em; background:var(--border,#e8e8e8); border-radius:10px; padding:2px 8px; }
+  .loop-items-list { display:flex; flex-direction:column; gap:4px; }
+  .loop-item-row { display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:4px; background:var(--milk-white,#fff); border:1px solid var(--border,#e8e8e8); }
+  .loop-item-row.loop-item-current { border-color:#4a90d9; background:#eaf3fd; }
+  .loop-item-handle { color:var(--muted,#aaa); cursor:grab; }
+  .loop-item-label { flex:1; font-size:0.88em; }
+  .btn-mini { font-size:0.75em; padding:1px 6px; border:1px solid var(--border,#ccc); border-radius:3px; cursor:pointer; background:var(--milk-white,#fff); }
+  .btn-mini.btn-danger { border-color:#e57373; color:#c62828; }
+  .btn-small { font-size:0.82em; padding:3px 10px; }
+
   .starter-panel { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; background: var(--field-mint); display: none; }
   .starter-panel.show { display: block; }
   .starter-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
@@ -209,13 +230,15 @@
   <label>View for
     <select id="lens-select"></select>
   </label>
-  <div class="density-toggle" id="mapview-toggle">
-    <button type="button" data-mapview="resources" class="active" title="Who needs what this year — resources, strands, and books">Family School Map</button>
-    <button type="button" data-mapview="subjects" title="Collapsed subject view — groups loop strands" style="font-size:11px;color:var(--muted);">Subject View</button>
-    <button type="button" data-mapview="detailed" title="Every underlying subject and work item" style="font-size:11px;color:var(--muted);">Detailed View</button>
+  <div class="density-toggle" id="main-tab-bar">
+    <button type="button" class="active" data-tab="map" onclick="switchTab('map')">Family School Map</button>
+    <button type="button" data-tab="combine" onclick="switchTab('combine')">Combine &amp; Plan</button>
+    <button type="button" data-tab="loopbuilder" onclick="switchTab('loopbuilder')">Loop Builder</button>
+    <button type="button" data-tab="subject" onclick="switchTab('subject')" style="font-size:11px;color:var(--muted);">Subject View</button>
+    <button type="button" data-tab="detailed" onclick="switchTab('detailed')" style="font-size:11px;color:var(--muted);">Detailed View</button>
   </div>
   <button onclick="render()">Refresh</button>
-  <span style="font-size:10px;color:var(--muted);margin-left:8px;font-family:monospace;" title="Build identifier">build:cm-pneu-aligned</span>
+  <span style="font-size:10px;color:var(--muted);margin-left:8px;font-family:monospace;" title="Build identifier">build:plan-loop-builder</span>
   <button class="accent" id="print-resource-btn">Print resource map</button>
   <button class="accent" onclick="document.body.classList.remove('print-resources'); window.print();">Print full map</button>
   <button class="accent" onclick="document.body.classList.add('print-resources'); window.print();">Print Book &amp; Resource List</button>
@@ -230,7 +253,7 @@
   <span><span class="status-dot dot-practice"></span>Practice / no resource</span>
   <span><span class="status-dot dot-coop"></span>Co-op / outside</span>
   <span><span class="status-dot dot-optional"></span>Optional</span>
-  <span><span class="status-dot dot-unplaced"></span>Needs placement</span>
+  <span><span class="status-dot dot-unplaced"></span>Not in weekly rhythm yet</span>
 </div>
 
 <div class="filters-row" id="filters-row"></div>
@@ -257,11 +280,16 @@
 
 <div id="review-panel"></div>
 
+<div id="combine-panel" style="display:none;"></div>
+<div id="loopbuilder-panel" style="display:none;"></div>
+
+<div id="map-body-wrapper">
 <div style="overflow-x:auto;">
 <table class="map" id="map-table">
   <thead><tr id="map-head-row"><th class="row-head"></th></tr></thead>
   <tbody id="map-body"></tbody>
 </table>
+</div>
 </div>
 
 <div class="panel" id="loops-panel">
@@ -359,6 +387,7 @@
       <option value="form1">Form I (younger)</option>
       <option value="form2">Form II (middle)</option>
       <option value="form3">Form III (older)</option>
+      <option value="form4">Grades 10–12 / Form IV+</option>
       <option value="custom">Custom / not sure yet</option>
     </select>
 
@@ -502,7 +531,7 @@ var FILTER_AUDIENCES = [
   { value: 'individual', label: 'Individual' },
   { value: 'coop-outside', label: 'Co-op' },
   { value: 'optional', label: 'Optional' },
-  { value: 'unplaced', label: 'Needs placement' }
+  { value: 'unplaced', label: 'Not in weekly rhythm yet' }
 ];
 var activeFilters = new Set();
 
@@ -1549,21 +1578,204 @@ function render() {
   renderReviewPanel();
 }
 
-function setMapViewMode(mode) {
-  mapViewMode = mode;
-  document.body.classList.toggle('map-resources', mode === 'resources');
-  document.body.classList.toggle('map-detailed', mode === 'detailed');
-  document.querySelectorAll('#mapview-toggle button').forEach(function (b) {
-    b.classList.toggle('active', b.getAttribute('data-mapview') === mode);
+var currentTab = 'map';
+
+function switchTab(tabId) {
+  currentTab = tabId;
+  document.querySelectorAll('#main-tab-bar button').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.tab === tabId);
   });
-  renderMap();
+  var mapWrapper = document.getElementById('map-body-wrapper');
+  var loopsPanel = document.getElementById('loops-panel');
+  var seqPanel = document.getElementById('sequences-panel');
+  var resPanel = document.getElementById('resources-panel');
+  var showMap = (tabId === 'map' || tabId === 'subject' || tabId === 'detailed');
+  if (mapWrapper) mapWrapper.style.display = showMap ? '' : 'none';
+  if (loopsPanel) loopsPanel.style.display = showMap ? '' : 'none';
+  if (seqPanel) seqPanel.style.display = showMap ? '' : 'none';
+  if (resPanel) resPanel.style.display = showMap ? '' : 'none';
+  document.getElementById('combine-panel').style.display = tabId === 'combine' ? '' : 'none';
+  document.getElementById('loopbuilder-panel').style.display = tabId === 'loopbuilder' ? '' : 'none';
+  if (tabId === 'subject') { mapViewMode = 'subjects'; }
+  else if (tabId === 'detailed') { mapViewMode = 'detailed'; }
+  else if (tabId === 'map') { mapViewMode = 'resources'; }
+  if (showMap) render();
+  if (tabId === 'combine') renderCombineAndPlan();
+  if (tabId === 'loopbuilder') renderLoopBuilder();
 }
 
-document.getElementById('mapview-toggle').addEventListener('click', function (e) {
-  var btn = e.target.closest('button[data-mapview]');
-  if (!btn) return;
-  setMapViewMode(btn.getAttribute('data-mapview'));
-});
+function escH(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+function renderCombineAndPlan() {
+  var panel = document.getElementById('combine-panel');
+  if (!panel) return;
+  var rows = A.buildCombineAndPlanRows(state);
+  var html = '<h2 style="margin:16px 0 8px;">Combine &amp; Plan</h2>';
+  html += '<p style="color:var(--muted);font-size:0.85em;margin:0 0 16px;">Review how subjects are grouped, who does them, whether Mom is needed, and their rhythm status. Edit individual subjects on the Family School Map tab.</p>';
+  html += '<div style="overflow-x:auto;"><table class="combine-table" style="width:100%;border-collapse:collapse;font-size:0.88em;">';
+  html += '<thead><tr>';
+  html += '<th>Subject / strand</th><th>Who</th><th>Together?</th><th>Mom needed?</th><th>Rhythm status</th><th>Approx time</th><th>Loop / block</th>';
+  html += '</tr></thead><tbody>';
+  rows.forEach(function(row) {
+    var rhythmLabel = row.rhythmStatus === 'placed' ? '<span class="rhythm-badge placed">In rhythm</span>'
+      : row.rhythmStatus === 'covered-by-loop' ? '<span class="rhythm-badge covered">Covered by loop</span>'
+      : '<span class="rhythm-badge not-placed">Not in weekly rhythm yet</span>';
+    var momLabel = !row.momNeeded ? '–'
+      : row.momNeeded === 'yes' ? 'Mom leads'
+      : row.momNeeded === 'nearby' ? 'Mom nearby'
+      : 'Independent';
+    var loopLabel = row.loopTitle ? escH(row.loopTitle) : (row.type === 'loop' ? '<em>This is a loop</em>' : '–');
+    var typeTag = row.type === 'loop' ? ' <span style="font-size:0.75em;opacity:0.6;">(loop)</span>' : '';
+    html += '<tr>';
+    html += '<td><strong>' + escH(row.title) + '</strong>' + typeTag + '</td>';
+    html += '<td>' + escH(row.who) + '</td>';
+    html += '<td style="text-align:center;">' + (row.together ? '✓' : '') + '</td>';
+    html += '<td>' + momLabel + '</td>';
+    html += '<td>' + rhythmLabel + '</td>';
+    html += '<td>' + escH(row.timeLabel) + '</td>';
+    html += '<td>' + loopLabel + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  panel.innerHTML = html;
+}
+
+function getLoopRhythmStatusLocal(loopId) {
+  var rhythm = state.weeklyRhythm;
+  if (!rhythm || !rhythm.assignments) return 'not-in-rhythm';
+  var found = (rhythm.assignments || []).some(function(a) { return a.assignmentType === 'loop' && a.referencedId === loopId; });
+  return found ? 'placed' : 'not-in-rhythm';
+}
+
+function renderLoopBuilder() {
+  var panel = document.getElementById('loopbuilder-panel');
+  if (!panel) return;
+  var loops = state.loops || [];
+  var loopItems = state.loopItems || [];
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;">';
+  html += '<h2 style="margin:0;">Loop Builder</h2>';
+  html += '<button class="btn-secondary" onclick="openNewLoopEditor()">+ New loop</button>';
+  html += '</div>';
+  html += '<p style="color:var(--muted);font-size:0.85em;margin:0 0 16px;">Loops let you rotate through subjects so you cover all of them over time without scheduling every one every day.</p>';
+  if (!loops.length) {
+    html += '<p style="color:var(--muted);">No loops yet. Click "+ New loop" to create one.</p>';
+  }
+  loops.forEach(function(loop) {
+    var items = loopItems.filter(function(li) { return li.loopId === loop.id; })
+      .sort(function(a,b) { return a.sortOrder - b.sortOrder; });
+    var rhythmStatus = getLoopRhythmStatusLocal(loop.id);
+    var rhythmBadge = rhythmStatus === 'placed'
+      ? '<span class="rhythm-badge placed">In weekly rhythm</span>'
+      : '<span class="rhythm-badge not-placed">Not in weekly rhythm yet</span>';
+    var momLabel = !loop.momNeeded ? '' : loop.momNeeded === 'yes' ? 'Mom leads' : loop.momNeeded === 'nearby' ? 'Mom nearby' : 'Independent';
+    var attnMap = {'read-aloud':'Read-aloud','guided':'Guided','independent':'Independent','listen':'Listen','look':'Look / observe'};
+    var attnLabel = !loop.kindOfAttention ? '' : (attnMap[loop.kindOfAttention] || loop.kindOfAttention);
+    html += '<div class="loop-card" data-loop-id="' + escH(loop.id) + '">';
+    html += '<div class="loop-card-header">';
+    html += '<span class="loop-card-title">' + escH(loop.title) + '</span>';
+    html += '<span style="margin-left:10px;">' + rhythmBadge + '</span>';
+    html += '<span style="flex:1;"></span>';
+    html += '<button class="btn-mini" onclick="editLoop(' + JSON.stringify(loop.id) + ')">Edit</button>';
+    html += '</div>';
+    html += '<div class="loop-card-meta">';
+    if (momLabel) html += '<span class="loop-meta-tag">' + escH(momLabel) + '</span>';
+    if (attnLabel) html += '<span class="loop-meta-tag">' + escH(attnLabel) + '</span>';
+    if (loop.approxTimeLabel) html += '<span class="loop-meta-tag">' + escH(loop.approxTimeLabel) + '</span>';
+    if (loop.touchesPerWeek) html += '<span class="loop-meta-tag">' + loop.touchesPerWeek + 'x/week</span>';
+    html += '</div>';
+    html += '<div class="loop-items-list">';
+    items.forEach(function(item, idx) {
+      var isCurrent = loop.currentItemId === item.id;
+      html += '<div class="loop-item-row' + (isCurrent ? ' loop-item-current' : '') + '" data-item-id="' + escH(item.id) + '">';
+      html += '<span class="loop-item-handle">☰</span>';
+      html += '<span class="loop-item-label">' + (isCurrent ? '▶ ' : '') + escH(item.title) + '</span>';
+      html += '<span style="flex:1;"></span>';
+      if (idx > 0) html += '<button class="btn-mini" onclick="moveLoopItem(' + JSON.stringify(loop.id) + ',' + JSON.stringify(item.id) + ',-1)">↑</button>';
+      if (idx < items.length - 1) html += '<button class="btn-mini" onclick="moveLoopItem(' + JSON.stringify(loop.id) + ',' + JSON.stringify(item.id) + ',1)">↓</button>';
+      html += '<button class="btn-mini btn-danger" onclick="removeLoopItem(' + JSON.stringify(loop.id) + ',' + JSON.stringify(item.id) + ')">✕</button>';
+      html += '</div>';
+    });
+    html += '</div>';
+    html += '<button class="btn-secondary btn-small" style="margin-top:6px;" onclick="addLoopItemPrompt(' + JSON.stringify(loop.id) + ')">+ Add item</button>';
+    html += '</div>';
+  });
+  panel.innerHTML = html;
+}
+
+function moveLoopItem(loopId, itemId, direction) {
+  var items = state.loopItems.filter(function(li) { return li.loopId === loopId; })
+    .sort(function(a,b) { return a.sortOrder - b.sortOrder; });
+  var idx = items.findIndex(function(li) { return li.id === itemId; });
+  var swapIdx = idx + direction;
+  if (swapIdx < 0 || swapIdx >= items.length) return;
+  var tmp = items[idx].sortOrder;
+  state.loopItems = state.loopItems.map(function(li) {
+    if (li.id === items[idx].id) return Object.assign({}, li, { sortOrder: items[swapIdx].sortOrder });
+    if (li.id === items[swapIdx].id) return Object.assign({}, li, { sortOrder: tmp });
+    return li;
+  });
+  markDirtyAndSave();
+  renderLoopBuilder();
+}
+
+function removeLoopItem(loopId, itemId) {
+  if (!confirm('Remove this item from the loop?')) return;
+  state.loopItems = state.loopItems.filter(function(li) { return li.id !== itemId; });
+  state.loops = state.loops.map(function(l) {
+    if (l.id !== loopId) return l;
+    return Object.assign({}, l, { itemIds: (l.itemIds || []).filter(function(id) { return id !== itemId; }) });
+  });
+  markDirtyAndSave();
+  renderLoopBuilder();
+}
+
+function addLoopItemPrompt(loopId) {
+  var title = prompt('New loop item title:');
+  if (!title || !title.trim()) return;
+  var loop = state.loops.find(function(l) { return l.id === loopId; });
+  if (!loop) return;
+  var maxOrder = (state.loopItems.filter(function(li) { return li.loopId === loopId; })
+    .reduce(function(m, li) { return Math.max(m, li.sortOrder); }, -1)) + 1;
+  var newItem = M.makeLoopItem({ loopId: loopId, title: title.trim(), sortOrder: maxOrder });
+  state.loopItems.push(newItem);
+  state.loops = state.loops.map(function(l) {
+    if (l.id !== loopId) return l;
+    return Object.assign({}, l, { itemIds: (l.itemIds || []).concat([newItem.id]) });
+  });
+  markDirtyAndSave();
+  renderLoopBuilder();
+}
+
+function openNewLoopEditor() {
+  var title = prompt('New loop title:');
+  if (!title || !title.trim()) return;
+  var newLoop = M.makeLoop({ title: title.trim(), sortOrder: state.loops.length });
+  state.loops.push(newLoop);
+  markDirtyAndSave();
+  renderLoopBuilder();
+}
+
+function editLoop(loopId) {
+  var loop = state.loops.find(function(l) { return l.id === loopId; });
+  if (!loop) return;
+  var newTitle = prompt('Loop title:', loop.title);
+  if (newTitle === null) return;
+  state.loops = state.loops.map(function(l) {
+    if (l.id !== loopId) return l;
+    return Object.assign({}, l, { title: newTitle.trim() });
+  });
+  markDirtyAndSave();
+  renderLoopBuilder();
+}
+
+window.switchTab = switchTab;
+window.renderCombineAndPlan = renderCombineAndPlan;
+window.renderLoopBuilder = renderLoopBuilder;
+window.moveLoopItem = moveLoopItem;
+window.removeLoopItem = removeLoopItem;
+window.addLoopItemPrompt = addLoopItemPrompt;
+window.openNewLoopEditor = openNewLoopEditor;
+window.editLoop = editLoop;
 
 document.getElementById('print-resource-btn').addEventListener('click', function () {
   var prev = mapViewMode;

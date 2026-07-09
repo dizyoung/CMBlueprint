@@ -1204,6 +1204,86 @@ test('sample state Form II/III cards include expected CM strand subjects', () =>
   assert.ok(ids.includes('card_citizenship_gov'), 'Citizenship / Government');
 });
 
+test('getCardRhythmStatus returns placed for card_nature_study', () => {
+  const state = A.buildSampleAppState();
+  const result = A.getCardRhythmStatus(state, 'card_nature_study');
+  assert.equal(result.status, 'placed');
+});
+
+test('getCardRhythmStatus returns covered-by-loop for card_bible via loop items', () => {
+  const state = A.buildSampleAppState();
+  const result = A.getCardRhythmStatus(state, 'card_bible');
+  assert.equal(result.status, 'covered-by-loop');
+  assert.equal(result.loopId, 'loop_bible');
+});
+
+test('getLoopRhythmStatus returns placed for loop_bible', () => {
+  const state = A.buildSampleAppState();
+  const result = A.getLoopRhythmStatus(state, 'loop_bible');
+  assert.equal(result.status, 'placed');
+});
+
+test('buildCombineAndPlanRows returns rows including card_bible and loop_bible', () => {
+  const state = A.buildSampleAppState();
+  const rows = A.buildCombineAndPlanRows(state);
+  const ids = rows.map(function(r) { return r.id; });
+  assert.ok(ids.includes('card_bible'), 'card_bible row present');
+  assert.ok(ids.includes('loop_bible'), 'loop_bible row present');
+});
+
+test('loop items in sample state have linkedCardId field', () => {
+  const state = A.buildSampleAppState();
+  const bibleItems = state.loopItems.filter(function(li) { return li.loopId === 'loop_bible'; });
+  assert.ok(bibleItems.length > 0, 'bible loop has items');
+  bibleItems.forEach(function(li) {
+    assert.equal(li.linkedCardId, 'card_bible', 'linkedCardId is card_bible');
+  });
+});
+
+test('makeLoop includes momNeeded and kindOfAttention fields', () => {
+  const loop = M.makeLoop({ title: 'Test' });
+  assert.ok('momNeeded' in loop, 'momNeeded field exists');
+  assert.ok('kindOfAttention' in loop, 'kindOfAttention field exists');
+  assert.equal(loop.momNeeded, null);
+  assert.equal(loop.kindOfAttention, null);
+});
+
+test('makeLoopItem includes linkedCardId field', () => {
+  const item = M.makeLoopItem({ loopId: 'test', title: 'Test' });
+  assert.ok('linkedCardId' in item, 'linkedCardId field exists');
+  assert.equal(item.linkedCardId, null);
+});
+
+test('GRADE_BANDS includes form4', () => {
+  const ids = M.GRADE_BANDS.map(function(b) { return b.id; });
+  assert.ok(ids.includes('form4'), 'form4 in GRADE_BANDS');
+  const f4 = M.GRADE_BANDS.find(function(b) { return b.id === 'form4'; });
+  assert.ok(f4.label.includes('10'), 'form4 label mentions grade 10+');
+});
+
+test('LESSON_TIME_GUARDRAILS.form4 exists', () => {
+  assert.ok(M.LESSON_TIME_GUARDRAILS.form4, 'form4 guardrail exists');
+  assert.equal(M.LESSON_TIME_GUARDRAILS.form4.min, 45);
+  assert.equal(M.LESSON_TIME_GUARDRAILS.form4.hardMax, 60);
+});
+
+test('formApplicabilityLabel([form4]) returns Form IV+', () => {
+  assert.equal(M.formApplicabilityLabel(['form4']), 'Form IV+');
+});
+
+test('RHYTHM_STATUS_LABELS exists and has not-in-rhythm', () => {
+  assert.ok(M.RHYTHM_STATUS_LABELS, 'RHYTHM_STATUS_LABELS exported');
+  assert.equal(M.RHYTHM_STATUS_LABELS['not-in-rhythm'], 'Not in weekly rhythm yet');
+  assert.equal(M.RHYTHM_STATUS_LABELS['placed'], 'In weekly rhythm');
+  assert.equal(M.RHYTHM_STATUS_LABELS['covered-by-loop'], 'Covered by a loop');
+});
+
+test('getLoopCoveredCardIds returns covered card IDs when loop is placed', () => {
+  const state = A.buildSampleAppState();
+  const coveredIds = R.getLoopCoveredCardIds(state.weeklyRhythm, state.loops, state.loopItems);
+  assert.ok(coveredIds.includes('card_bible'), 'card_bible is covered by loop_bible');
+});
+
 let passed = 0;
 let failed = 0;
 for (const t of tests) {

@@ -15,8 +15,16 @@ await page.waitForLoadState('networkidle');
 await page.waitForTimeout(500);
 
 // --- basic render ---
-const activeMode = await page.$eval('.density-toggle button.active', el => el.textContent).catch(() => '');
+const activeMode = await page.$eval('#main-tab-bar button.active', el => el.textContent).catch(() => '');
 ok('Family School Map is default active mode', activeMode.trim() === 'Family School Map');
+
+// --- tab bar checks ---
+const tabBar = await page.$('#main-tab-bar');
+ok('Main tab bar is present', !!tabBar);
+const combineTabPresent = await page.$eval('#main-tab-bar', el => el.innerHTML.includes('Combine')).catch(() => false);
+ok('"Combine & Plan" tab is present in toolbar', combineTabPresent);
+const loopBuilderTabPresent = await page.$eval('#main-tab-bar', el => el.innerHTML.includes('Loop Builder')).catch(() => false);
+ok('"Loop Builder" tab is present in toolbar', loopBuilderTabPresent);
 const clickableCount = await page.$$eval('.res-block-clickable', els => els.length);
 ok('Map blocks are clickable', clickableCount > 10);
 const cursor = await page.$eval('.res-block-clickable', el => window.getComputedStyle(el).cursor).catch(() => '');
@@ -27,7 +35,7 @@ ok('+ Add subject buttons present', addBtns > 0);
 // --- build label visible ---
 const buildLabel = await page.$eval('span[title="Build identifier"]', el => el.textContent).catch(() => '');
 ok('Build label visible in toolbar', buildLabel.includes('build:'));
-ok('Build label is cm-pneu-aligned', buildLabel.includes('cm-pneu-aligned'));
+ok('Build label is plan-loop-builder', buildLabel.includes('plan-loop-builder'));
 
 // --- TEST A: Family Read-Alouds — click and verify reading order ---
 const readaloudBlock = await page.$('.res-block-clickable[onclick*="card_readaloud"]');
@@ -139,6 +147,37 @@ if (readaloudBlock2) {
   ok('Editor uses "Other resources" (not "Additional direct resources")', !sectionHTML.includes('Additional direct resources'));
   await page.click('#ed-cancel');
   await page.waitForTimeout(200);
+}
+
+// --- TEST: Combine & Plan tab ---
+const combineTab = await page.$('#main-tab-bar button[data-tab="combine"]');
+if (combineTab) {
+  await combineTab.click();
+  await page.waitForTimeout(400);
+  const combinePanel = await page.$eval('#combine-panel', el => el.style.display !== 'none' && el.innerHTML.length > 0).catch(() => false);
+  ok('Combine & Plan tab click renders table', combinePanel);
+  const combineHTML = await page.$eval('#combine-panel', el => el.innerHTML).catch(() => '');
+  ok('Combine & Plan table has thead', combineHTML.includes('<thead'));
+  ok('"Not in weekly rhythm yet" appears in Combine & Plan', combineHTML.includes('Not in weekly rhythm yet'));
+}
+
+// --- TEST: Loop Builder tab ---
+const loopBuilderTab = await page.$('#main-tab-bar button[data-tab="loopbuilder"]');
+if (loopBuilderTab) {
+  await loopBuilderTab.click();
+  await page.waitForTimeout(400);
+  const loopPanel = await page.$eval('#loopbuilder-panel', el => el.style.display !== 'none' && el.innerHTML.length > 0).catch(() => false);
+  ok('Loop Builder tab click renders content', loopPanel);
+  const loopPanelHTML = await page.$eval('#loopbuilder-panel', el => el.innerHTML).catch(() => '');
+  ok('Loop Builder shows loop cards', loopPanelHTML.includes('loop-card'));
+  ok('Loop Builder shows Bible Loop', loopPanelHTML.includes('Bible Loop'));
+}
+
+// --- Go back to Family School Map ---
+const mapTab = await page.$('#main-tab-bar button[data-tab="map"]');
+if (mapTab) {
+  await mapTab.click();
+  await page.waitForTimeout(300);
 }
 
 ok('No JavaScript errors on page', jsErrors.length === 0);
