@@ -1284,6 +1284,26 @@ test('getLoopCoveredCardIds returns covered card IDs when loop is placed', () =>
   assert.ok(coveredIds.includes('card_bible'), 'card_bible is covered by loop_bible');
 });
 
+test('getPlacementSummary correctly identifies covered, placed, and unplaced items', () => {
+  const state = A.buildSampleAppState();
+  const summary = R.getPlacementSummary(
+    state.weeklyRhythm,
+    state.cards,
+    state.loops,
+    state.sequences,
+    state.loopItems,
+    { includeStatuses: ['active'] }
+  );
+  // Bible card should be in coveredCardIds (loop_bible is placed and has linkedCardId: card_bible)
+  assert.ok(summary.coveredCardIds.includes('card_bible'), 'card_bible should be in coveredCardIds');
+  // Bible Loop should be in placedLoopIds
+  assert.ok(summary.placedLoopIds.includes('loop_bible'), 'loop_bible should be in placedLoopIds');
+  // card_bible should NOT be in notPlacedCards
+  assert.ok(!summary.notPlacedCards.some((c) => c.id === 'card_bible'), 'card_bible should not appear in notPlacedCards');
+  // Nature Study should be placed directly (card assignment)
+  assert.ok(summary.placedCardIds.includes('card_nature_study'), 'card_nature_study should be in placedCardIds');
+});
+
 let passed = 0;
 let failed = 0;
 for (const t of tests) {

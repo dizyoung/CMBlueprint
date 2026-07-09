@@ -83,6 +83,25 @@
   .btn-mini.btn-danger { border-color:#e57373; color:#c62828; }
   .btn-small { font-size:0.82em; padding:3px 10px; }
 
+  /* Loop item picker modal */
+  #loop-item-picker-modal { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:9999; display:none; align-items:center; justify-content:center; }
+  #loop-item-picker-modal.open { display:flex; }
+  .lip-modal-card { background:var(--milk-white); border-radius:10px; padding:18px 20px; width:420px; max-width:95vw; max-height:80vh; display:flex; flex-direction:column; gap:10px; box-shadow:0 4px 24px rgba(0,0,0,0.18); }
+  .lip-list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:4px; max-height:260px; }
+  .lip-card-row { padding:7px 10px; border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:13px; display:flex; align-items:center; gap:8px; }
+  .lip-card-row:hover { background:var(--field-mint); }
+  .lip-card-row.selected { background:#eaf3fd; border-color:#4a90d9; }
+  .lip-subject-tag { font-size:10px; color:var(--muted); border:1px solid var(--border); border-radius:4px; padding:1px 5px; flex-shrink:0; }
+  .lip-linked-badge { font-size:10px; background:#cce5ff; color:#004085; border-radius:4px; padding:1px 5px; flex-shrink:0; }
+  .lip-custom-row { display:flex; gap:6px; align-items:center; padding-top:8px; border-top:1px solid var(--border); }
+
+  /* Combine edit panel */
+  .combine-edit-panel { background:var(--field-mint); border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin:4px 0 8px; display:none; }
+  .combine-edit-panel.open { display:block; }
+  .combine-edit-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; margin-bottom:10px; }
+  .combine-edit-field label { font-size:11px; font-weight:600; color:var(--ink); display:block; margin-bottom:3px; }
+  .combine-edit-field select, .combine-edit-field input { font-size:12px; padding:4px 6px; border:1px solid var(--border); border-radius:5px; background:var(--milk-white); width:100%; box-sizing:border-box; }
+
   .starter-panel { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; background: var(--field-mint); display: none; }
   .starter-panel.show { display: block; }
   .starter-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
@@ -238,7 +257,7 @@
     <button type="button" data-tab="detailed" onclick="switchTab('detailed')" style="font-size:11px;color:var(--muted);">Detailed View</button>
   </div>
   <button onclick="render()">Refresh</button>
-  <span style="font-size:10px;color:var(--muted);margin-left:8px;font-family:monospace;" title="Build identifier">build:plan-loop-builder</span>
+  <span style="font-size:10px;color:var(--muted);margin-left:8px;font-family:monospace;" title="Build identifier">build:repair-placement</span>
   <button class="accent" id="print-resource-btn">Print resource map</button>
   <button class="accent" onclick="document.body.classList.remove('print-resources'); window.print();">Print full map</button>
   <button class="accent" onclick="document.body.classList.add('print-resources'); window.print();">Print Book &amp; Resource List</button>
@@ -323,6 +342,21 @@
   <div id="resources-body"></div>
 </div>
 
+</div>
+
+<div id="loop-item-picker-modal">
+  <div class="lip-modal-card">
+    <h3 style="margin:0 0 6px;font-size:14px;">Add loop item</h3>
+    <p style="margin:0 0 8px;font-size:12px;color:var(--muted);">Pick a planned subject to link, or enter a custom label.</p>
+    <div class="lip-list" id="lip-card-list"></div>
+    <div class="lip-custom-row">
+      <input type="text" id="lip-custom-text" placeholder="Custom item title…" style="flex:1;font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--milk-white);">
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">
+      <button type="button" id="lip-cancel-btn">Cancel</button>
+      <button type="button" class="accent" id="lip-add-btn">Add</button>
+    </div>
+  </div>
 </div>
 
 <div class="overlay" id="card-editor-overlay" style="display:none;">
@@ -1555,13 +1589,17 @@ function renderFilterChips() {
 function renderReviewPanel() {
   var panel = document.getElementById('review-panel');
   var reviewItems = A.getRhythmReviewItems(state);
-  var cardsNoPlacement = A.getCardsWithoutRhythmPlacement(state);
+  // Exclude cards covered by a placed loop — they are "in rhythm" via their loop
+  var coveredCardIds = R.getLoopCoveredCardIds(state.weeklyRhythm, state.loops, state.loopItems);
+  var cardsNoPlacement = A.getCardsWithoutRhythmPlacement(state).filter(function(c) {
+    return coveredCardIds.indexOf(c.id) === -1;
+  });
   var html = '';
   if (reviewItems.length) {
     html += '<div class="notice"><strong>Worth a second look:</strong> ' + reviewItems.map(function (a) { return escapeHtml(a.label || a.id); }).join(', ') + '.</div>';
   }
   if (cardsNoPlacement.length) {
-    html += '<div class="notice"><strong>Not placed in weekly rhythm yet:</strong> ' +
+    html += '<div class="notice"><strong>Not in weekly rhythm yet:</strong> ' +
       '<span class="notice-compact">' + cardsNoPlacement.length + ' items — see Weekly Rhythm.</span>' +
       '<span class="notice-full-list">' + cardsNoPlacement.map(function (c) { return escapeHtml(c.title); }).join(', ') + '.</span>' +
     '</div>';
@@ -1606,19 +1644,22 @@ function switchTab(tabId) {
 
 function escH(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
+var _combineEditOpenId = null;
+
 function renderCombineAndPlan() {
   var panel = document.getElementById('combine-panel');
   if (!panel) return;
   var rows = A.buildCombineAndPlanRows(state);
   var html = '<h2 style="margin:16px 0 8px;">Combine &amp; Plan</h2>';
-  html += '<p style="color:var(--muted);font-size:0.85em;margin:0 0 16px;">Review how subjects are grouped, who does them, whether Mom is needed, and their rhythm status. Edit individual subjects on the Family School Map tab.</p>';
+  html += '<p style="color:var(--muted);font-size:0.85em;margin:0 0 16px;">Review how subjects are grouped, who does them, whether Mom is needed, and their rhythm status. Click Edit to change a row.</p>';
   html += '<div style="overflow-x:auto;"><table class="combine-table" style="width:100%;border-collapse:collapse;font-size:0.88em;">';
   html += '<thead><tr>';
-  html += '<th>Subject / strand</th><th>Who</th><th>Together?</th><th>Mom needed?</th><th>Rhythm status</th><th>Approx time</th><th>Loop / block</th>';
-  html += '</tr></thead><tbody>';
+  html += '<th>Subject / strand</th><th>Who</th><th>Together?</th><th>Mom needed?</th><th>Rhythm status</th><th>Approx time</th><th>Loop / block</th><th></th>';
+  html += '</tr></thead><tbody id="combine-tbody">';
   rows.forEach(function(row) {
-    var rhythmLabel = row.rhythmStatus === 'placed' ? '<span class="rhythm-badge placed">In rhythm</span>'
-      : row.rhythmStatus === 'covered-by-loop' ? '<span class="rhythm-badge covered">Covered by loop</span>'
+    var rhythmLabel = row.rhythmStatus === 'placed' ? '<span class="rhythm-badge placed">In weekly rhythm</span>'
+      : row.rhythmStatus === 'covered-by-loop'
+        ? '<span class="rhythm-badge covered">Covered by ' + escH(row.rhythmDetail && row.rhythmDetail.loopTitle ? row.rhythmDetail.loopTitle : 'loop') + '</span>'
       : '<span class="rhythm-badge not-placed">Not in weekly rhythm yet</span>';
     var momLabel = !row.momNeeded ? '–'
       : row.momNeeded === 'yes' ? 'Mom leads'
@@ -1626,7 +1667,7 @@ function renderCombineAndPlan() {
       : 'Independent';
     var loopLabel = row.loopTitle ? escH(row.loopTitle) : (row.type === 'loop' ? '<em>This is a loop</em>' : '–');
     var typeTag = row.type === 'loop' ? ' <span style="font-size:0.75em;opacity:0.6;">(loop)</span>' : '';
-    html += '<tr>';
+    html += '<tr data-combine-id="' + escH(row.id) + '" data-combine-type="' + escH(row.type) + '">';
     html += '<td><strong>' + escH(row.title) + '</strong>' + typeTag + '</td>';
     html += '<td>' + escH(row.who) + '</td>';
     html += '<td style="text-align:center;">' + (row.together ? '✓' : '') + '</td>';
@@ -1634,18 +1675,167 @@ function renderCombineAndPlan() {
     html += '<td>' + rhythmLabel + '</td>';
     html += '<td>' + escH(row.timeLabel) + '</td>';
     html += '<td>' + loopLabel + '</td>';
+    html += '<td><button class="btn-mini combine-edit-btn" data-id="' + escH(row.id) + '" data-type="' + escH(row.type) + '">Edit</button></td>';
     html += '</tr>';
+    html += '<tr class="combine-edit-row" id="cer-' + escH(row.id) + '" style="display:none;"><td colspan="8"><div class="combine-edit-panel open" id="cep-' + escH(row.id) + '"></div></td></tr>';
   });
   html += '</tbody></table></div>';
   panel.innerHTML = html;
+
+  panel.querySelectorAll('.combine-edit-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var id = btn.dataset.id;
+      var type = btn.dataset.type;
+      if (_combineEditOpenId === id) {
+        closeCombineEdit();
+      } else {
+        openCombineEdit(id, type, rows);
+      }
+    });
+  });
 }
 
-function getLoopRhythmStatusLocal(loopId) {
-  var rhythm = state.weeklyRhythm;
-  if (!rhythm || !rhythm.assignments) return 'not-in-rhythm';
-  var found = (rhythm.assignments || []).some(function(a) { return a.assignmentType === 'loop' && a.referencedId === loopId; });
-  return found ? 'placed' : 'not-in-rhythm';
+function closeCombineEdit() {
+  if (_combineEditOpenId) {
+    var row = document.getElementById('cer-' + _combineEditOpenId);
+    if (row) row.style.display = 'none';
+    _combineEditOpenId = null;
+  }
 }
+
+function openCombineEdit(id, type, rows) {
+  closeCombineEdit();
+  _combineEditOpenId = id;
+  var editRow = document.getElementById('cer-' + id);
+  var editPanel = document.getElementById('cep-' + id);
+  if (!editRow || !editPanel) return;
+  editRow.style.display = '';
+
+  var row = rows.find(function(r) { return r.id === id; });
+  if (!row) return;
+
+  var html = '';
+
+  if (type === 'card') {
+    var card = A.findCard(state, id);
+    if (!card) return;
+    // Who options
+    var rowOptions = A.buildMapRows(state).map(function(r) {
+      return '<option value="' + escH(r.id) + '"' + (A.rowIdForCard(card) === r.id ? ' selected' : '') + '>' + escH(r.label) + '</option>';
+    }).join('');
+    // Mom needed options
+    var momOpts = [['','–'],['yes','Mom leads'],['nearby','Mom nearby'],['no','Independent']].map(function(o) {
+      return '<option value="' + o[0] + '"' + (card.momNeeded === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('');
+    // Loop assignment options
+    var loopOpts = '<option value="">(none)</option>' + state.loops.map(function(l) {
+      return '<option value="' + escH(l.id) + '"' + (card.loopId === l.id ? ' selected' : '') + '>' + escH(l.title) + '</option>';
+    }).join('');
+    // Times per week
+    var freq = card.suggestedWeeklyTouches || '';
+    // Lesson time
+    var lessonMin = (card.lessonTimeConfig && card.lessonTimeConfig.targetMinutes) || '';
+
+    html += '<div class="combine-edit-grid">';
+    html += '<div class="combine-edit-field"><label>Who is this for?</label><select id="cef-row-' + escH(id) + '">' + rowOptions + '</select></div>';
+    html += '<div class="combine-edit-field"><label>Mom needed?</label><select id="cef-mom-' + escH(id) + '">' + momOpts + '</select></div>';
+    html += '<div class="combine-edit-field"><label>Times per week</label><input type="text" id="cef-freq-' + escH(id) + '" value="' + escH(freq) + '" placeholder="e.g. 3x/week"></div>';
+    html += '<div class="combine-edit-field"><label>Approx time (min)</label><input type="number" id="cef-time-' + escH(id) + '" value="' + escH(String(lessonMin)) + '" min="1" max="180"></div>';
+    html += '<div class="combine-edit-field"><label>Add to loop</label><select id="cef-loop-' + escH(id) + '">' + loopOpts + '</select><div style="font-size:10px;color:var(--muted);margin-top:2px;">Assigns this subject to a loop and creates a linked loop item.</div></div>';
+    html += '</div>';
+  } else if (type === 'loop') {
+    var loop = state.loops.find(function(l) { return l.id === id; });
+    if (!loop) return;
+    var momOpts2 = [['','–'],['yes','Mom leads'],['nearby','Mom nearby'],['no','Independent']].map(function(o) {
+      return '<option value="' + o[0] + '"' + (loop.momNeeded === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('');
+    var attnOpts = [['','–'],['read-aloud','Read-aloud'],['guided','Guided'],['independent','Independent'],['listen','Listen'],['look','Look / observe']].map(function(o) {
+      return '<option value="' + o[0] + '"' + (loop.kindOfAttention === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('');
+    var touches = loop.touchesPerWeek || '';
+    var approxTime = loop.approxTimeLabel || '';
+    html += '<div class="combine-edit-grid">';
+    html += '<div class="combine-edit-field"><label>Mom needed?</label><select id="cef-mom-' + escH(id) + '">' + momOpts2 + '</select></div>';
+    html += '<div class="combine-edit-field"><label>Kind of attention</label><select id="cef-attn-' + escH(id) + '">' + attnOpts + '</select></div>';
+    html += '<div class="combine-edit-field"><label>Touches/week</label><input type="number" id="cef-touches-' + escH(id) + '" value="' + escH(String(touches)) + '" min="1" max="30"></div>';
+    html += '<div class="combine-edit-field"><label>Approx time</label><input type="text" id="cef-time-' + escH(id) + '" value="' + escH(approxTime) + '" placeholder="e.g. 10–15 min"></div>';
+    html += '</div>';
+  }
+
+  html += '<div style="display:flex;gap:8px;justify-content:flex-end;">';
+  html += '<button class="btn-mini" id="cef-cancel-' + escH(id) + '">Cancel</button>';
+  html += '<button class="btn-mini accent" id="cef-save-' + escH(id) + '">Save</button>';
+  html += '</div>';
+
+  editPanel.innerHTML = html;
+
+  document.getElementById('cef-cancel-' + id).addEventListener('click', closeCombineEdit);
+  document.getElementById('cef-save-' + id).addEventListener('click', function() {
+    saveCombineEdit(id, type);
+  });
+}
+
+function saveCombineEdit(id, type) {
+  if (type === 'card') {
+    var card = A.findCard(state, id);
+    if (!card) { closeCombineEdit(); return; }
+    var rowSel = document.getElementById('cef-row-' + id);
+    if (rowSel) A.moveCardToRow(state, id, rowSel.value);
+    var momSel = document.getElementById('cef-mom-' + id);
+    if (momSel) card.momNeeded = momSel.value || null;
+    var freqInp = document.getElementById('cef-freq-' + id);
+    if (freqInp) card.suggestedWeeklyTouches = freqInp.value.trim() || null;
+    var timeInp = document.getElementById('cef-time-' + id);
+    if (timeInp && timeInp.value) {
+      var min = parseInt(timeInp.value, 10);
+      if (!isNaN(min)) card.lessonTimeConfig = Object.assign(card.lessonTimeConfig || {}, { targetMinutes: min });
+    }
+    // Handle loop assignment
+    var loopSel = document.getElementById('cef-loop-' + id);
+    if (loopSel) {
+      var newLoopId = loopSel.value || null;
+      var oldLoopId = card.loopId || null;
+      if (newLoopId !== oldLoopId) {
+        card.loopId = newLoopId;
+        if (newLoopId) {
+          // Add a loop item linking this card to the loop
+          var existingItem = state.loopItems.find(function(li) { return li.loopId === newLoopId && li.linkedCardId === id; });
+          if (!existingItem) {
+            var maxOrder = (state.loopItems.filter(function(li) { return li.loopId === newLoopId; })
+              .reduce(function(m, li) { return Math.max(m, li.sortOrder || 0); }, -1)) + 1;
+            var newItem = M.makeLoopItem({ loopId: newLoopId, title: card.title, sortOrder: maxOrder, linkedCardId: id });
+            state.loopItems.push(newItem);
+            state.loops = state.loops.map(function(l) {
+              if (l.id !== newLoopId) return l;
+              return Object.assign({}, l, { itemIds: (l.itemIds || []).concat([newItem.id]) });
+            });
+          }
+        }
+      }
+    }
+  } else if (type === 'loop') {
+    var loop = state.loops.find(function(l) { return l.id === id; });
+    if (!loop) { closeCombineEdit(); return; }
+    var momSel2 = document.getElementById('cef-mom-' + id);
+    if (momSel2) loop.momNeeded = momSel2.value || null;
+    var attnSel = document.getElementById('cef-attn-' + id);
+    if (attnSel) loop.kindOfAttention = attnSel.value || null;
+    var touchInp = document.getElementById('cef-touches-' + id);
+    if (touchInp && touchInp.value) {
+      var t2 = parseInt(touchInp.value, 10);
+      if (!isNaN(t2)) loop.touchesPerWeek = t2;
+    }
+    var timeInp2 = document.getElementById('cef-time-' + id);
+    if (timeInp2) loop.approxTimeLabel = timeInp2.value.trim() || null;
+  }
+  markDirtyAndSave();
+  closeCombineEdit();
+  renderCombineAndPlan();
+}
+
+window.saveCombineEdit = saveCombineEdit;
+window.closeCombineEdit = closeCombineEdit;
+
 
 function renderLoopBuilder() {
   var panel = document.getElementById('loopbuilder-panel');
@@ -1663,7 +1853,7 @@ function renderLoopBuilder() {
   loops.forEach(function(loop) {
     var items = loopItems.filter(function(li) { return li.loopId === loop.id; })
       .sort(function(a,b) { return a.sortOrder - b.sortOrder; });
-    var rhythmStatus = getLoopRhythmStatusLocal(loop.id);
+    var rhythmStatus = A.getLoopRhythmStatus(state, loop.id).status;
     var rhythmBadge = rhythmStatus === 'placed'
       ? '<span class="rhythm-badge placed">In weekly rhythm</span>'
       : '<span class="rhythm-badge not-placed">Not in weekly rhythm yet</span>';
@@ -1688,7 +1878,9 @@ function renderLoopBuilder() {
       var isCurrent = loop.currentItemId === item.id;
       html += '<div class="loop-item-row' + (isCurrent ? ' loop-item-current' : '') + '" data-item-id="' + escH(item.id) + '">';
       html += '<span class="loop-item-handle">☰</span>';
-      html += '<span class="loop-item-label">' + (isCurrent ? '▶ ' : '') + escH(item.title) + '</span>';
+      var linkedCard = item.linkedCardId ? (state.cards || []).find(function(c) { return c.id === item.linkedCardId; }) : null;
+      var linkedBadge = linkedCard ? ' <span class="lip-linked-badge" style="font-size:10px;">→ ' + escH(linkedCard.title) + '</span>' : '';
+      html += '<span class="loop-item-label">' + (isCurrent ? '▶ ' : '') + escH(item.title) + linkedBadge + '</span>';
       html += '<span style="flex:1;"></span>';
       if (idx > 0) html += '<button class="btn-mini" onclick="moveLoopItem(' + JSON.stringify(loop.id) + ',' + JSON.stringify(item.id) + ',-1)">↑</button>';
       if (idx < items.length - 1) html += '<button class="btn-mini" onclick="moveLoopItem(' + JSON.stringify(loop.id) + ',' + JSON.stringify(item.id) + ',1)">↓</button>';
@@ -1729,22 +1921,81 @@ function removeLoopItem(loopId, itemId) {
   renderLoopBuilder();
 }
 
+var _lipCurrentLoopId = null;
+var _lipSelectedCardId = null;
+
 function addLoopItemPrompt(loopId) {
-  var title = prompt('New loop item title:');
-  if (!title || !title.trim()) return;
+  _lipCurrentLoopId = loopId;
+  _lipSelectedCardId = null;
+  // Populate card list with cards not already linked in this loop
+  var alreadyLinked = state.loopItems.filter(function(li) { return li.loopId === loopId && li.linkedCardId; }).map(function(li) { return li.linkedCardId; });
+  var cardList = document.getElementById('lip-card-list');
+  var cards = (state.cards || []).filter(function(c) { return c.status === 'active'; });
+  var html = cards.map(function(c) {
+    var isLinked = alreadyLinked.indexOf(c.id) > -1;
+    return '<div class="lip-card-row' + (isLinked ? ' lip-linked' : '') + '" data-card-id="' + escH(c.id) + '" onclick="lipSelectCard(this,' + JSON.stringify(c.id) + ')">' +
+      '<span style="flex:1;">' + escH(c.title) + '</span>' +
+      (c.subjectArea ? '<span class="lip-subject-tag">' + escH(c.subjectArea) + '</span>' : '') +
+      (isLinked ? '<span class="lip-linked-badge">Already in loop</span>' : '') +
+      '</div>';
+  }).join('');
+  if (!html) html = '<p style="color:var(--muted);font-size:12px;padding:4px 0;">No active subjects found.</p>';
+  cardList.innerHTML = html;
+  document.getElementById('lip-custom-text').value = '';
+  document.getElementById('loop-item-picker-modal').classList.add('open');
+}
+
+function lipSelectCard(el, cardId) {
+  document.querySelectorAll('.lip-card-row').forEach(function(r) { r.classList.remove('selected'); });
+  if (_lipSelectedCardId === cardId) {
+    _lipSelectedCardId = null;
+  } else {
+    el.classList.add('selected');
+    _lipSelectedCardId = cardId;
+    // Pre-fill custom text with card title
+    var card = (state.cards || []).find(function(c) { return c.id === cardId; });
+    if (card) document.getElementById('lip-custom-text').value = card.title;
+  }
+}
+
+function lipClose() {
+  document.getElementById('loop-item-picker-modal').classList.remove('open');
+  _lipCurrentLoopId = null;
+  _lipSelectedCardId = null;
+}
+
+function lipAdd() {
+  var loopId = _lipCurrentLoopId;
+  if (!loopId) return;
+  var customText = document.getElementById('lip-custom-text').value.trim();
+  var title = customText;
+  var linkedCardId = _lipSelectedCardId || null;
+  if (!title && linkedCardId) {
+    var c = (state.cards || []).find(function(c) { return c.id === linkedCardId; });
+    title = c ? c.title : '';
+  }
+  if (!title) { alert('Please enter a title or select a subject.'); return; }
   var loop = state.loops.find(function(l) { return l.id === loopId; });
-  if (!loop) return;
+  if (!loop) { lipClose(); return; }
   var maxOrder = (state.loopItems.filter(function(li) { return li.loopId === loopId; })
-    .reduce(function(m, li) { return Math.max(m, li.sortOrder); }, -1)) + 1;
-  var newItem = M.makeLoopItem({ loopId: loopId, title: title.trim(), sortOrder: maxOrder });
+    .reduce(function(m, li) { return Math.max(m, li.sortOrder || 0); }, -1)) + 1;
+  var newItem = M.makeLoopItem({ loopId: loopId, title: title, sortOrder: maxOrder, linkedCardId: linkedCardId });
   state.loopItems.push(newItem);
   state.loops = state.loops.map(function(l) {
     if (l.id !== loopId) return l;
     return Object.assign({}, l, { itemIds: (l.itemIds || []).concat([newItem.id]) });
   });
   markDirtyAndSave();
+  lipClose();
   renderLoopBuilder();
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+  var cancelBtn = document.getElementById('lip-cancel-btn');
+  var addBtn = document.getElementById('lip-add-btn');
+  if (cancelBtn) cancelBtn.addEventListener('click', lipClose);
+  if (addBtn) addBtn.addEventListener('click', lipAdd);
+});
 
 function openNewLoopEditor() {
   var title = prompt('New loop title:');

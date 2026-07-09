@@ -103,10 +103,25 @@
     <label for="ed-block">Rhythm block</label>
     <select id="ed-block"></select>
 
-    <label for="ed-type">Type</label>
-    <select id="ed-type"></select>
+    <h3 style="margin:14px 0 6px;font-size:13px;color:var(--wonder-marine);">What does this cover?</h3>
+    <label for="wr-cover-type">Kind</label>
+    <select id="wr-cover-type">
+      <option value="custom">Custom label</option>
+      <option value="card">A planned subject (card)</option>
+      <option value="loop">A loop</option>
+      <option value="sequence">A sequence</option>
+      <option value="student">Student block</option>
+      <option value="group">Group block</option>
+      <option value="together">Together block</option>
+      <option value="coop">Co-op / External</option>
+    </select>
 
-    <div id="ed-ref-wrap">
+    <div id="wr-cover-picker" style="margin-top:6px;"></div>
+
+    <label for="ed-type" style="display:none;">Type (internal)</label>
+    <select id="ed-type" style="display:none;"></select>
+
+    <div id="ed-ref-wrap" style="display:none;">
       <label for="ed-ref" id="ed-ref-label">Linked item</label>
       <select id="ed-ref"></select>
     </div>
@@ -228,8 +243,9 @@ function openEditor(dayId, blockId, assignment) {
     return '<option value="' + t + '">' + escapeHtml(TYPE_LABELS[t] || t) + '</option>';
   }).join('');
   typeSel.value = assignment ? assignment.assignmentType : 'custom';
+  document.getElementById('wr-cover-type').value = assignment ? assignment.assignmentType : 'custom';
 
-  populateRefSelect(assignment ? assignment.referencedId : null);
+  populateCoverPicker(assignment ? assignment.referencedId : null);
 
   document.getElementById('editor-overlay').style.display = 'flex';
 }
@@ -257,7 +273,11 @@ function closeEditor() {
 }
 
 function saveEditor() {
-  var type = document.getElementById('ed-type').value;
+  // Sync visible cover picker into hidden ed-type/ed-ref before reading
+  var coverIdSel = document.getElementById('wr-cover-id');
+  if (coverIdSel) document.getElementById('ed-ref').value = coverIdSel.value;
+  var type = document.getElementById('wr-cover-type').value;
+  document.getElementById('ed-type').value = type;
   var refOpts = refOptionsForType(type);
   var refSel = document.getElementById('ed-ref').value;
   var checkedDays = Array.from(
@@ -303,6 +323,49 @@ function deleteEditorAssignment() {
   saveBar.scheduleSave(appState);
   closeEditor();
   render();
+}
+
+document.getElementById('wr-cover-type').addEventListener('change', function () {
+  syncCoverTypeToEdType();
+});
+
+function syncCoverTypeToEdType() {
+  var coverType = document.getElementById('wr-cover-type').value;
+  var typeSel = document.getElementById('ed-type');
+  typeSel.value = coverType;
+  populateCoverPicker(null);
+}
+
+function populateCoverPicker(selectedId) {
+  var coverType = document.getElementById('wr-cover-type').value;
+  var picker = document.getElementById('wr-cover-picker');
+  // Update the hidden ed-type select to match
+  document.getElementById('ed-type').value = coverType;
+  // Populate the hidden ed-ref via populateRefSelect, then mirror into the visible picker
+  populateRefSelect(selectedId);
+  var opts = refOptionsForType(coverType);
+  if (!opts) {
+    picker.innerHTML = '';
+    return;
+  }
+  var sel = document.getElementById('ed-ref');
+  // Render a visible select that mirrors ed-ref
+  picker.innerHTML = '<label for="wr-cover-id">' + escapeHtml(TYPE_LABELS[coverType] || 'Linked item') + '</label>' +
+    '<select id="wr-cover-id"></select>';
+  var coverIdSel = document.getElementById('wr-cover-id');
+  coverIdSel.innerHTML = sel.innerHTML;
+  if (selectedId) coverIdSel.value = selectedId;
+  else coverIdSel.value = sel.value;
+  coverIdSel.addEventListener('change', function () {
+    sel.value = coverIdSel.value;
+    // Auto-populate label from selected item
+    var selectedOpt = coverIdSel.options[coverIdSel.selectedIndex];
+    var labelInp = document.getElementById('ed-label');
+    if (selectedOpt && selectedOpt.value && (!labelInp.value || labelInp.dataset.autoSet === '1')) {
+      labelInp.value = selectedOpt.textContent.trim();
+      labelInp.dataset.autoSet = '1';
+    }
+  });
 }
 
 document.getElementById('ed-type').addEventListener('change', function () { populateRefSelect(null); });

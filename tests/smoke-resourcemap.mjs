@@ -35,7 +35,7 @@ ok('+ Add subject buttons present', addBtns > 0);
 // --- build label visible ---
 const buildLabel = await page.$eval('span[title="Build identifier"]', el => el.textContent).catch(() => '');
 ok('Build label visible in toolbar', buildLabel.includes('build:'));
-ok('Build label is plan-loop-builder', buildLabel.includes('plan-loop-builder'));
+ok('Build label is repair-placement', buildLabel.includes('repair-placement'));
 
 // --- TEST A: Family Read-Alouds — click and verify reading order ---
 const readaloudBlock = await page.$('.res-block-clickable[onclick*="card_readaloud"]');
@@ -171,6 +171,18 @@ if (loopBuilderTab) {
   const loopPanelHTML = await page.$eval('#loopbuilder-panel', el => el.innerHTML).catch(() => '');
   ok('Loop Builder shows loop cards', loopPanelHTML.includes('loop-card'));
   ok('Loop Builder shows Bible Loop', loopPanelHTML.includes('Bible Loop'));
+  ok('Loop Builder shows Bible Loop with "In weekly rhythm" badge', loopPanelHTML.includes('In weekly rhythm'));
+  ok('"Needs placement" does not appear in Loop Builder', !loopPanelHTML.includes('Needs placement'));
+}
+
+// --- TEST: placement coverage — Bible Loop cards not in "not placed" list ---
+const mapTabCheck = await page.$('#main-tab-bar button[data-tab="map"]');
+if (mapTabCheck) {
+  await mapTabCheck.click();
+  await page.waitForTimeout(300);
+  const reviewHTML = await page.$eval('#review-panel', el => el.innerHTML).catch(() => '');
+  ok('Review panel does not list Bible as unplaced', !reviewHTML.toLowerCase().includes('bible loop'));
+  ok('"Needs placement" does not appear in review panel', !reviewHTML.includes('Needs placement'));
 }
 
 // --- Go back to Family School Map ---
