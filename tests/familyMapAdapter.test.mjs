@@ -1304,6 +1304,123 @@ test('getPlacementSummary correctly identifies covered, placed, and unplaced ite
   assert.ok(summary.placedCardIds.includes('card_nature_study'), 'card_nature_study should be in placedCardIds');
 });
 
+// ---------------------------------------------------------------------------
+// StrandAssignment model tests
+// ---------------------------------------------------------------------------
+
+test('makeStrandAssignment creates a strand assignment with defaults', () => {
+  const sa = M.makeStrandAssignment({ strandId: 'bible', strandLabel: 'Bible', assignmentMode: 'loop', loopId: 'loop_bible' });
+  assert.equal(sa.strandId, 'bible');
+  assert.equal(sa.strandLabel, 'Bible');
+  assert.equal(sa.assignmentMode, 'loop');
+  assert.equal(sa.loopId, 'loop_bible');
+  assert.ok(sa.id.startsWith('sa'));
+  assert.deepEqual(sa.studentIds, []);
+  assert.deepEqual(sa.generatedCardIds, []);
+});
+
+test('STRAND_ASSIGNMENT_MODES contains expected modes', () => {
+  assert.ok(Array.isArray(M.STRAND_ASSIGNMENT_MODES));
+  assert.ok(M.STRAND_ASSIGNMENT_MODES.includes('everyone'));
+  assert.ok(M.STRAND_ASSIGNMENT_MODES.includes('loop'));
+  assert.ok(M.STRAND_ASSIGNMENT_MODES.includes('not-this-year'));
+  assert.ok(M.STRAND_ASSIGNMENT_MODES.includes('individual'));
+});
+
+test('makeLoopItem includes linkedStrandId field', () => {
+  const li = M.makeLoopItem({ title: 'Test', loopId: 'loop_x' });
+  assert.ok('linkedStrandId' in li, 'makeLoopItem should have linkedStrandId');
+  assert.equal(li.linkedStrandId, null);
+  const li2 = M.makeLoopItem({ linkedStrandId: 'bible' });
+  assert.equal(li2.linkedStrandId, 'bible');
+});
+
+test('deriveRequiredCards — everyone mode produces one family card', () => {
+  const assignments = [M.makeStrandAssignment({ strandId: 'nature-study', strandLabel: 'Nature Study', assignmentMode: 'everyone' })];
+  const required = M.deriveRequiredCards(assignments, [], [], []);
+  assert.equal(required.length, 1);
+  assert.equal(required[0].audience, 'together');
+  assert.equal(required[0].title, 'Nature Study');
+});
+
+test('deriveRequiredCards — loop mode produces no card', () => {
+  const assignments = [M.makeStrandAssignment({ strandId: 'bible', strandLabel: 'Bible', assignmentMode: 'loop', loopId: 'loop_bible' })];
+  const required = M.deriveRequiredCards(assignments, [], [], []);
+  assert.equal(required.length, 0);
+});
+
+test('deriveRequiredCards — not-this-year mode produces no card', () => {
+  const assignments = [M.makeStrandAssignment({ strandId: 'art', strandLabel: 'Art', assignmentMode: 'not-this-year' })];
+  const required = M.deriveRequiredCards(assignments, [], [], []);
+  assert.equal(required.length, 0);
+});
+
+test('deriveRequiredCards — individual mode produces one card per student', () => {
+  const students = [
+    M.makeStudent({ id: 's1', name: 'Alice' }),
+    M.makeStudent({ id: 's2', name: 'Bob' })
+  ];
+  const assignments = [M.makeStrandAssignment({ strandId: 'math', strandLabel: 'Math', assignmentMode: 'individual', studentIds: ['s1', 's2'] })];
+  const required = M.deriveRequiredCards(assignments, students, [], []);
+  assert.equal(required.length, 2);
+  assert.equal(required[0].participantMode, 'individual');
+  assert.ok(required[0].title.includes('Alice'));
+  assert.ok(required[1].title.includes('Bob'));
+});
+
+test('sample state includes strandAssignments', () => {
+  const state = A.buildSampleAppState();
+  assert.ok(Array.isArray(state.strandAssignments), 'strandAssignments should be an array');
+  assert.ok(state.strandAssignments.length > 0, 'strandAssignments should be non-empty');
+  const bibleAssignment = state.strandAssignments.find((sa) => sa.id === 'sa_bible');
+  assert.ok(bibleAssignment, 'sa_bible should exist in sample strandAssignments');
+  assert.equal(bibleAssignment.assignmentMode, 'loop');
+  assert.equal(bibleAssignment.loopId, 'loop_bible');
+});
+
+test('getStrandsCoveredByLoop returns strands assigned to a loop', () => {
+  const state = A.buildSampleAppState();
+  const covered = A.getStrandsCoveredByLoop(state, 'loop_bible');
+  assert.ok(covered.length > 0, 'should find strands covered by loop_bible');
+  assert.ok(covered.every((sa) => sa.loopId === 'loop_bible'), 'all returned should have loopId loop_bible');
+});
+
+test('getLoopCoveredStrandIds returns all strand IDs covered by loops', () => {
+  const state = A.buildSampleAppState();
+  const ids = A.getLoopCoveredStrandIds(state);
+  assert.ok(ids.includes('bible'), 'bible should be in loop-covered strand ids');
+  assert.ok(ids.includes('hymn'), 'hymn should be in loop-covered strand ids');
+});
+
+test('getUnassignedStrands returns strands not yet assigned', () => {
+  const state = A.buildSampleAppState();
+  const unassigned = A.getUnassignedStrands(state);
+  const assignedIds = state.strandAssignments.map((sa) => sa.strandId);
+  unassigned.forEach((strand) => {
+    assert.ok(!assignedIds.includes(strand.id), strand.id + ' should not be in assignedIds');
+  });
+});
+
+test('assignStrandToLoop adds a strand assignment to state', () => {
+  const state = A.buildSampleAppState();
+  const before = state.strandAssignments.length;
+  A.assignStrandToLoop(state, 'art', 'Art', 'loop_beauty');
+  assert.equal(state.strandAssignments.length, before + 1);
+  const added = state.strandAssignments[state.strandAssignments.length - 1];
+  assert.equal(added.strandId, 'art');
+  assert.equal(added.assignmentMode, 'loop');
+  assert.equal(added.loopId, 'loop_beauty');
+});
+
+test('buildMapRows unplaced label is "Still to place" (not "Needs placement")', () => {
+  const state = A.buildSampleAppState();
+  const rows = A.buildMapRows(state);
+  const unplacedRow = rows.find((r) => r.id === 'unplaced');
+  assert.ok(unplacedRow, 'unplaced row should exist');
+  assert.equal(unplacedRow.label, 'Still to place');
+  assert.ok(!unplacedRow.label.includes('Needs placement'), 'label should not say "Needs placement"');
+});
+
 let passed = 0;
 let failed = 0;
 for (const t of tests) {

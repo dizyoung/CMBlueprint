@@ -35,7 +35,7 @@ ok('+ Add subject buttons present', addBtns > 0);
 // --- build label visible ---
 const buildLabel = await page.$eval('span[title="Build identifier"]', el => el.textContent).catch(() => '');
 ok('Build label visible in toolbar', buildLabel.includes('build:'));
-ok('Build label is repair-placement', buildLabel.includes('repair-placement'));
+ok('Build label is strand-card-model', buildLabel.includes('strand-card-model'));
 
 // --- TEST A: Family Read-Alouds — click and verify reading order ---
 const readaloudBlock = await page.$('.res-block-clickable[onclick*="card_readaloud"]');
@@ -190,6 +190,23 @@ const mapTab = await page.$('#main-tab-bar button[data-tab="map"]');
 if (mapTab) {
   await mapTab.click();
   await page.waitForTimeout(300);
+}
+
+// --- TEST: Planning View panel exists in DOM ---
+const planningPanel = await page.$('#planning-view-panel');
+ok('Planning View panel exists in DOM', !!planningPanel);
+
+// --- TEST: "Needs placement" does not appear anywhere on the map page ---
+const fullPageHTML = await page.evaluate(() => document.body.innerHTML);
+ok('"Needs placement" does not appear anywhere on page', !fullPageHTML.includes('Needs placement'));
+
+// --- TEST: Loop Builder shows coverage info for Bible Loop ---
+const loopBuilderTab2 = await page.$('#main-tab-bar button[data-tab="loopbuilder"]');
+if (loopBuilderTab2) {
+  await loopBuilderTab2.click();
+  await page.waitForTimeout(400);
+  const loopPanelHTML2 = await page.$eval('#loopbuilder-panel', el => el.innerHTML).catch(() => '');
+  ok('Loop Builder shows "Covers:" strand coverage info', loopPanelHTML2.includes('Covers:'));
 }
 
 ok('No JavaScript errors on page', jsErrors.length === 0);

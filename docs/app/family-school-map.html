@@ -257,13 +257,14 @@
     <button type="button" data-tab="detailed" onclick="switchTab('detailed')" style="font-size:11px;color:var(--muted);">Detailed View</button>
   </div>
   <button onclick="render()">Refresh</button>
-  <span style="font-size:10px;color:var(--muted);margin-left:8px;font-family:monospace;" title="Build identifier">build:repair-placement</span>
+  <span style="font-size:10px;color:var(--muted);margin-left:8px;font-family:monospace;" title="Build identifier">build:strand-card-model</span>
   <button class="accent" id="print-resource-btn">Print resource map</button>
   <button class="accent" onclick="document.body.classList.remove('print-resources'); window.print();">Print full map</button>
   <button class="accent" onclick="document.body.classList.add('print-resources'); window.print();">Print Book &amp; Resource List</button>
   <button type="button" id="starter-toggle-btn">Add starter cards</button>
   <button type="button" id="learners-toggle-btn">Family members</button>
   <button type="button" id="subjects-toggle-btn">Subjects</button>
+  <button type="button" id="planning-view-toggle-btn" onclick="togglePlanningView()">Planning View</button>
 </div>
 
 <div class="legend">
@@ -301,6 +302,7 @@
 
 <div id="combine-panel" style="display:none;"></div>
 <div id="loopbuilder-panel" style="display:none;"></div>
+<div id="planning-view-panel" style="display:none;"></div>
 
 <div id="map-body-wrapper">
 <div style="overflow-x:auto;">
@@ -497,6 +499,8 @@ window.M = M;
 
 var initial = loadInitialState();
 window.state = initial.state;
+// Migrate persisted state to ensure new fields exist
+if (window.state && !window.state.strandAssignments) window.state.strandAssignments = [];
 window.lens = { type: 'all' };
 window.editingCardId = null;
 
@@ -1888,6 +1892,13 @@ function renderLoopBuilder() {
       html += '</div>';
     });
     html += '</div>';
+    // Strand coverage section
+    var coveredStrands = A.getStrandsCoveredByLoop(state, loop.id);
+    if (coveredStrands.length > 0) {
+      html += '<div style="margin-top:8px;font-size:0.82em;color:var(--muted);">Covers: ';
+      html += coveredStrands.map(function(sa) { return escH(sa.strandLabel); }).join(', ');
+      html += '</div>';
+    }
     html += '<button class="btn-secondary btn-small" style="margin-top:6px;" onclick="addLoopItemPrompt(' + JSON.stringify(loop.id) + ')">+ Add item</button>';
     html += '</div>';
   });
@@ -2017,6 +2028,38 @@ function editLoop(loopId) {
   });
   markDirtyAndSave();
   renderLoopBuilder();
+}
+
+function togglePlanningView() {
+  var panel = document.getElementById('planning-view-panel');
+  var btn = document.getElementById('planning-view-toggle-btn');
+  if (!panel) return;
+  var visible = panel.style.display !== 'none';
+  panel.style.display = visible ? 'none' : 'block';
+  if (btn) btn.textContent = visible ? 'Planning View' : 'Hide Planning View';
+  if (!visible) {
+    // Render planning view content — strand assignments summary
+    var assignments = (state.strandAssignments || []);
+    var html = '<h3 style="margin:0 0 8px;">Strand assignments</h3>';
+    if (assignments.length === 0) {
+      html += '<p class="sub">No strand assignments yet. Use grouping decisions to generate teaching cards.</p>';
+    } else {
+      html += '<ul style="margin:0;padding-left:18px;">';
+      assignments.forEach(function(sa) {
+        html += '<li><strong>' + escH(sa.strandLabel) + '</strong>: ' + escH(sa.assignmentMode);
+        if (sa.loopId) html += ' (loop: ' + escH(sa.loopId) + ')';
+        html += '</li>';
+      });
+      html += '</ul>';
+    }
+    panel.innerHTML = html;
+  }
+}
+
+// localStorage migration: ensure strandAssignments array exists in persisted state
+function migrateAppState(s) {
+  if (s && !s.strandAssignments) s.strandAssignments = [];
+  return s;
 }
 
 window.switchTab = switchTab;
