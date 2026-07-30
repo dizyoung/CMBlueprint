@@ -244,6 +244,50 @@ ok('Changing one Who select updates the derived card preview', !!firstSelect && 
 ok('No JavaScript errors on feast prototype page', fErrors.length === 0);
 if (fErrors.length) fErrors.forEach(e => console.log('  JS error:', e));
 
+// --- REGRESSION: the feast grid must survive degenerate saved state ---
+// Reported bug: "Cannot read properties of undefined (reading 'some')" left the
+// shell painted and the grid empty. Root cause was a stale familyMap.mjs, but
+// these guard the state-shaped variants of the same class of crash.
+const STATE_KEY = 'cmblueprint.familySchoolMap.v1';
+const degenerateStates = [
+  ['legacy state with no strandAssignments', {
+    students: [{ id: 's1', name: 'Lucy', active: true }],
+    cards: [], loops: [], loopItems: [], resources: [], resourceUses: [], weeklyRhythm: null
+  }],
+  ['assignments missing optional arrays', {
+    students: [{ id: 's1', name: 'Lucy', active: true }],
+    strandAssignments: [{ id: 'sa1', strandId: 'feast_form1_math_math', assignmentMode: 'individual' }]
+  }],
+  ['assignments pointing at deleted loops/groups', {
+    students: [{ id: 's1', name: 'Lucy', active: true }],
+    groups: [], loops: [], loopItems: [], cards: [], resources: [], resourceUses: [],
+    weeklyRhythm: { days: [], blocks: [], assignments: [] },
+    strandAssignments: [
+      { id: 'a', strandId: 'feast_alltogether_bible_newtestament', assignmentMode: 'loop', loopId: 'ghost_loop' },
+      { id: 'b', strandId: 'feast_form1_math_math', assignmentMode: 'custom-group', groupId: 'ghost_group' },
+      { id: 'c', strandId: 'feast_form2_language-arts_dictation', assignmentMode: 'individual' }
+    ]
+  }],
+  ['empty object state', {}]
+];
+
+for (const [label, seed] of degenerateStates) {
+  const dpage = await browser.newPage();
+  const dErrors = [];
+  dpage.on('pageerror', e => dErrors.push(e.message));
+  await dpage.goto(BASE + '/docs/app/feast-prototype.html');
+  await dpage.evaluate(([k, v]) => localStorage.setItem(k, v), [STATE_KEY, JSON.stringify(seed)]);
+  await dpage.goto(BASE + '/docs/app/feast-prototype.html');
+  await dpage.waitForLoadState('networkidle');
+  await dpage.waitForTimeout(300);
+  const dChips = await dpage.$$eval('.strand-chip', els => els.length).catch(() => 0);
+  ok('Feast grid renders with ' + label, dChips > 40);
+  ok('No JS errors with ' + label, dErrors.length === 0);
+  if (dErrors.length) dErrors.forEach(e => console.log('  JS error:', e));
+  await dpage.evaluate(k => localStorage.removeItem(k), STATE_KEY);
+  await dpage.close();
+}
+
 await browser.close();
 console.log('\n' + passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total');
 if (failed > 0) process.exit(1);

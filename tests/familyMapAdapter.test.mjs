@@ -1606,6 +1606,69 @@ test('makeStrandAssignment defaults createdBy to null and FEAST_LIBRARY ids are 
 
 let passed = 0;
 let failed = 0;
+// --- REGRESSION: degenerate / legacy state must not crash the feast builders ---
+// Reported: "Cannot read properties of undefined (reading 'some')". The root
+// cause was a stale familyMap.mjs missing FEAST_LIBRARY, but buildFeastRows and
+// buildDerivedCardPreview must also tolerate saved plans that predate these
+// fields or reference deleted loops/groups.
+const DEGENERATE_STATES = {
+  'empty object': {},
+  'legacy, no strandAssignments': {
+    students: [{ id: 's1', name: 'Lucy', active: true }],
+    cards: [], loops: [], loopItems: [], resources: [], resourceUses: [], weeklyRhythm: null
+  },
+  'assignment missing studentIds/groupId': {
+    students: [{ id: 's1', name: 'Lucy', active: true }],
+    strandAssignments: [{ id: 'sa1', strandId: 'feast_form1_math_math', assignmentMode: 'individual' }]
+  },
+  'assignments referencing deleted loop and group': {
+    students: [{ id: 's1', name: 'Lucy', active: true }],
+    groups: [], loops: [], loopItems: [], cards: [], resources: [], resourceUses: [],
+    weeklyRhythm: { days: [], blocks: [], assignments: [] },
+    strandAssignments: [
+      { id: 'a', strandId: 'feast_alltogether_bible_newtestament', assignmentMode: 'loop', loopId: 'ghost_loop' },
+      { id: 'b', strandId: 'feast_form1_math_math', assignmentMode: 'custom-group', groupId: 'ghost_group' }
+    ]
+  }
+};
+
+for (const [label, degenerate] of Object.entries(DEGENERATE_STATES)) {
+  test(`buildFeastRows returns the full feast for degenerate state: ${label}`, () => {
+    const rows = A.buildFeastRows(degenerate);
+    assert.ok(Array.isArray(rows), 'rows must be an array');
+    assert.equal(rows.length, M.FEAST_LIBRARY.length,
+      'every feast strand must still produce a row');
+    for (const r of rows) {
+      assert.ok(r.strandId && r.form && r.column && r.label, 'row fields must be populated');
+      assert.ok(Array.isArray(r.warnings), 'warnings must always be an array');
+      assert.ok(typeof r.placementState === 'string', 'placementState must be derived');
+    }
+  });
+
+  test(`buildDerivedCardPreview returns arrays for degenerate state: ${label}`, () => {
+    const p = A.buildDerivedCardPreview(degenerate);
+    for (const key of ['familyCards', 'groupCards', 'individualCards', 'loopCovered', 'coopCards', 'excluded']) {
+      assert.ok(Array.isArray(p[key]), `${key} must be an array`);
+    }
+  });
+}
+
+test('feast rows flag assignments that point at a deleted loop', () => {
+  const rows = A.buildFeastRows(DEGENERATE_STATES['assignments referencing deleted loop and group']);
+  const ghost = rows.find((r) => r.strandId === 'feast_alltogether_bible_newtestament');
+  assert.ok(ghost, 'row must still exist even though its loop is gone');
+  assert.ok(ghost.warnings.length > 0, 'a dangling loop reference must surface a warning');
+});
+
+test('FEAST_LIBRARY and FEAST_FORMS are non-empty arrays (guards the stale-module bug)', () => {
+  assert.ok(Array.isArray(M.FEAST_LIBRARY) && M.FEAST_LIBRARY.length > 0);
+  assert.ok(Array.isArray(M.FEAST_FORMS) && M.FEAST_FORMS.length > 0);
+  for (const col of M.FEAST_LIBRARY.map((s) => s.column)) {
+    assert.ok(typeof col === 'string' && col.length > 0, 'every feast entry needs a column');
+  }
+});
+
+
 for (const t of tests) {
   try {
     t.fn();
@@ -1617,5 +1680,6 @@ for (const t of tests) {
     failed++;
   }
 }
+
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total`);
 if (failed > 0) process.exit(1);

@@ -72,6 +72,19 @@
   .guide ol { margin: 6px 0 0; padding-left: 20px; }
   .guide li { margin-bottom: 3px; }
 
+  /* ---- Stale-module banner ---- */
+  .stale-module-banner {
+    border: 1px solid var(--poppy); border-left: 5px solid var(--poppy); background: var(--blush);
+    border-radius: 10px; padding: 14px 16px; font-size: 13px; color: var(--ink);
+  }
+  .stale-module-banner p { margin: 8px 0 0; line-height: 1.5; }
+  .stale-module-banner code { font-family: monospace; font-size: 12px; }
+  .stale-module-banner kbd {
+    font-family: monospace; font-size: 11px; border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 5px; background: var(--milk-white);
+  }
+  .stale-module-banner .stale-detail { font-size: 11px; color: var(--muted); font-family: monospace; }
+
   /* ---- Dark mode ---- */
   @media (prefers-color-scheme: dark) {
     :root {
@@ -180,9 +193,54 @@ function markDirtyAndSave() { saveBar.scheduleSave(state); }
 
 function escH(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
+// ---------------------------------------------------------------------------
+// Module-shape guards.
+//
+// This page reads several exported constants from familyMap.mjs. If the browser
+// is holding a CACHED copy of familyMap.mjs from before FEAST_LIBRARY existed —
+// or the deployed/pulled lib/ is older than this page — those reads are
+// `undefined` and every array call on them throws at module scope, so the shell
+// paints and the grid never renders.
+//
+// arr() normalizes ANY expected-array export to a real array so no call site
+// can throw, and moduleIsStale() lets render() explain the problem instead of
+// silently drawing an empty grid.
+// ---------------------------------------------------------------------------
+function arr(value) { return Array.isArray(value) ? value : []; }
+
+var FEAST_LIBRARY = arr(M.FEAST_LIBRARY);
+var FEAST_FORMS = arr(M.FEAST_FORMS);
+var SUBJECT_COLUMNS = arr(M.DEFAULT_VISIBLE_SUBJECT_COLUMNS);
+
+// The required exports for this page, so the banner can name what is missing.
+var REQUIRED_EXPORTS = [
+  { name: 'FEAST_LIBRARY', ok: FEAST_LIBRARY.length > 0 },
+  { name: 'FEAST_FORMS', ok: FEAST_FORMS.length > 0 },
+  { name: 'DEFAULT_VISIBLE_SUBJECT_COLUMNS', ok: SUBJECT_COLUMNS.length > 0 },
+  { name: 'buildFeastRows', ok: typeof A.buildFeastRows === 'function' },
+  { name: 'buildDerivedCardPreview', ok: typeof A.buildDerivedCardPreview === 'function' }
+];
+function missingExports() {
+  return REQUIRED_EXPORTS.filter(function (e) { return !e.ok; }).map(function (e) { return e.name; });
+}
+function moduleIsStale() { return missingExports().length > 0; }
+
+function staleModuleBannerHTML() {
+  return '<div class="stale-module-banner" role="alert">' +
+    '<strong>This page needs a newer copy of the planner library than your browser has.</strong>' +
+    '<p>Your browser is using a cached or older <code>lib/familyMap.mjs</code>, ' +
+    'so the feast grid cannot be built. Nothing in your saved plan has been changed or lost.</p>' +
+    '<p><strong>To fix:</strong> hard-refresh this page — ' +
+    '<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> (Windows/Linux) or ' +
+    '<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> (Mac). ' +
+    'If that does not help, make sure the latest <code>lib/</code> files are pulled/deployed alongside this page.</p>' +
+    '<p class="stale-detail">Not found: ' + escH(missingExports().join(', ')) + '</p>' +
+    '</div>';
+}
+
 // Subject columns used by the feast, in Family School Map column order.
-var FEAST_COLUMNS = M.DEFAULT_VISIBLE_SUBJECT_COLUMNS.filter(function (col) {
-  return M.FEAST_LIBRARY.some(function (s) { return s.column === col.id; });
+var FEAST_COLUMNS = SUBJECT_COLUMNS.filter(function (col) {
+  return FEAST_LIBRARY.some(function (s) { return s.column === col.id; });
 });
 
 // ---------------------------------------------------------------------------
@@ -247,7 +305,7 @@ function chipHTML(row) {
 
 function renderGrid(rows) {
   var html = '';
-  M.FEAST_FORMS.forEach(function (form) {
+  FEAST_FORMS.forEach(function (form) {
     var formRows = rows.filter(function (r) { return r.form === form.id; });
     html += '<div class="form-section">';
     html += '<h2 class="section-title">' + escH(form.label) +
@@ -316,7 +374,15 @@ function renderStillToPlace(rows) {
 }
 
 function render() {
-  var rows = A.buildFeastRows(state);
+  // A stale/older lib/familyMap.mjs cannot build the feast. Say so plainly
+  // rather than painting an empty grid that looks like "you have no subjects".
+  if (moduleIsStale()) {
+    document.getElementById('feast-grid').innerHTML = staleModuleBannerHTML();
+    document.getElementById('preview-panel').innerHTML = '';
+    document.getElementById('still-panel').innerHTML = '';
+    return;
+  }
+  var rows = arr(A.buildFeastRows(state));
   renderGrid(rows);
   renderPreview();
   renderStillToPlace(rows);
@@ -326,7 +392,7 @@ function render() {
 // The only two decisions this page allows.
 // ---------------------------------------------------------------------------
 function strandLabelFor(strandId) {
-  var entry = M.FEAST_LIBRARY.find(function (s) { return s.id === strandId; });
+  var entry = FEAST_LIBRARY.find(function (s) { return s.id === strandId; });
   return entry ? entry.label : strandId;
 }
 
