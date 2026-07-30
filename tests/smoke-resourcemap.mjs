@@ -209,8 +209,41 @@ if (loopBuilderTab2) {
   ok('Loop Builder shows "Covers:" strand coverage info', loopPanelHTML2.includes('Covers:'));
 }
 
+// --- TEST: single Feast Prototype link in the toolbar ---
+const feastLink = await page.$('#feast-prototype-link');
+ok('Feast Prototype link present in toolbar', !!feastLink);
+const feastHref = await page.$eval('#feast-prototype-link', el => el.getAttribute('href')).catch(() => '');
+ok('Feast Prototype link points at feast-prototype.html', feastHref === './feast-prototype.html');
+
 ok('No JavaScript errors on page', jsErrors.length === 0);
 if (jsErrors.length) jsErrors.forEach(e => console.log('  JS error:', e));
+
+// --- Feast prototype page (separate page so map assertions stay independent) ---
+const fpage = await browser.newPage();
+const fErrors = [];
+fpage.on('pageerror', e => fErrors.push(e.message));
+await fpage.goto(BASE + '/docs/app/feast-prototype.html');
+await fpage.waitForLoadState('networkidle');
+await fpage.waitForTimeout(400);
+
+const chipCount = await fpage.$$eval('.strand-chip', els => els.length).catch(() => 0);
+ok('Feast grid renders more than 40 strand chips', chipCount > 40);
+const badgeText = await fpage.$eval('.proto-badge', el => el.textContent).catch(() => '');
+ok('Prototype badge is visible', badgeText.includes('PROTOTYPE') && badgeText.includes('does not change your saved plan'));
+const feastBuild = await fpage.$eval('.build-label', el => el.textContent).catch(() => '');
+ok('Feast build label visible', feastBuild.includes('build:feast-prototype'));
+
+const previewBefore = await fpage.$eval('#preview-panel', el => el.innerHTML).catch(() => '');
+const firstSelect = await fpage.$('.strand-chip select[data-role="who"]');
+if (firstSelect) {
+  await firstSelect.selectOption('everyone');
+  await fpage.waitForTimeout(300);
+}
+const previewAfter = await fpage.$eval('#preview-panel', el => el.innerHTML).catch(() => '');
+ok('Changing one Who select updates the derived card preview', !!firstSelect && previewAfter !== previewBefore);
+ok('No JavaScript errors on feast prototype page', fErrors.length === 0);
+if (fErrors.length) fErrors.forEach(e => console.log('  JS error:', e));
+
 await browser.close();
 console.log('\n' + passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total');
 if (failed > 0) process.exit(1);

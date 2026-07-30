@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Feast Planning Prototype</title>
+<link rel="stylesheet" href="./shared.css">
+<style>
+  /* ---- Prototype badge / header ---- */
+  .proto-badge {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+    background: var(--sunshine); color: #5a4400; border-radius: 12px; padding: 5px 12px;
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+  .proto-note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  /* The shared save bar's "Reset to sample plan" would replace the whole plan,
+     which would make the prototype badge a lie. Hidden here on purpose — the
+     prototype's own reset only clears choices made on this page. */
+  #save-bar #reset-btn { display: none; }
+  .build-label { font-size: 10px; color: var(--muted); font-family: monospace; }
+
+  /* ---- Feast grid ---- */
+  .form-section { margin-bottom: 26px; }
+  table.feast { border-collapse: collapse; width: 100%; background: var(--milk-white); border-radius: 10px; overflow: hidden; }
+  table.feast th, table.feast td { border: 1px solid var(--border); vertical-align: top; padding: 8px; font-size: 13px; }
+  table.feast th.row-head { background: var(--field-mint); color: var(--navy-story); text-align: left; font-weight: 600; width: 190px; font-size: 13px; }
+  table.feast td.strand-cell { padding: 6px; }
+  .cell-strands { display: flex; flex-wrap: wrap; gap: 8px; }
+  .cell-empty { color: var(--muted); font-size: 11px; font-style: italic; }
+
+  /* ---- Strand chip ---- */
+  .strand-chip {
+    border: 1px solid var(--border); border-left: 4px solid var(--lagoon-light); border-radius: 8px;
+    padding: 7px 9px; background: var(--milk-white); min-width: 210px; max-width: 260px; flex: 1 1 210px;
+  }
+  .strand-chip .chip-label { font-weight: 600; font-size: 13px; line-height: 1.25; overflow-wrap: break-word; }
+  .strand-chip .chip-who { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .strand-chip .chip-badge {
+    display: inline-block; font-size: 10px; border-radius: 9px; padding: 2px 7px; margin-top: 4px;
+    background: var(--field-mint); color: var(--wonder-marine); border: 1px solid var(--border);
+  }
+  .strand-chip .chip-warn { font-size: 10px; color: var(--poppy); margin-top: 4px; }
+  .strand-chip .chip-controls { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+  .strand-chip .chip-use { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .strand-chip select { font-size: 11px; padding: 3px 5px; width: 100%; }
+  .chip-off-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.4px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+
+  /* Muted, never hidden. A strand that is off / looped / placed stays on the
+     page — it just reads quieter. Nothing here uses display:none. */
+  .strand-chip.state-not-this-year { opacity: 0.5; filter: saturate(0.35); border-left-color: var(--muted); }
+  .strand-chip.state-not-this-year .chip-label { text-decoration: line-through; }
+  .strand-chip.state-covered-by-loop { background: #eef6fb; border-left-color: var(--navy-story); }
+  .strand-chip.state-covered-by-loop .chip-badge { background: #dceaf6; color: var(--navy-story); }
+  .strand-chip.state-in-loop-not-placed { background: #f7f4ea; border-left-color: var(--sunshine); }
+  .strand-chip.state-in-loop-not-placed .chip-badge { background: #f3ebd2; color: #6a5400; }
+  .strand-chip.state-placed { border-left-color: #4a9b5e; }
+  .strand-chip.state-placed .chip-badge { background: #e4f2e7; color: #24632f; }
+  .strand-chip.state-coop-outside { border-left-color: var(--poppy); opacity: 0.85; }
+  .strand-chip.state-still-to-place { border-left-color: var(--poppy); }
+  .strand-chip.state-still-to-place .chip-badge { background: var(--blush); color: var(--poppy); }
+  .strand-chip.state-unassigned { border-left-color: var(--border); }
+
+  /* ---- Side panels ---- */
+  .panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 900px) { .panel-grid { grid-template-columns: 1fr; } }
+  .preview-group { margin-bottom: 14px; }
+  .preview-group h3 { font-size: 12px; margin: 0 0 6px; color: var(--wonder-marine); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .preview-group ul { margin: 0; padding-left: 18px; font-size: 12px; }
+  .preview-group li { margin-bottom: 2px; }
+  .preview-group .empty { font-size: 12px; color: var(--muted); font-style: italic; }
+  .count-big { font-size: 28px; font-weight: 700; color: var(--wonder-marine); line-height: 1; }
+  .guide { font-size: 13px; }
+  .guide ol { margin: 6px 0 0; padding-left: 20px; }
+  .guide li { margin-bottom: 3px; }
+
+  /* ---- Dark mode ---- */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --border: #2b4247;
+      --field-mint: #10262a;
+      --milk-white: #0d1c20;
+      --ink: #e6f1f2;
+      --inkwell: #e6f1f2;
+      --muted: #93b0b4;
+      --navy-story: #9fc7ea;
+      --wonder-marine: #6fd3d3;
+      --blush: #3a2124;
+    }
+    body { background: #08171a; }
+    .strand-chip.state-covered-by-loop { background: #12242f; }
+    .strand-chip.state-in-loop-not-placed { background: #262214; }
+    .strand-chip.state-placed .chip-badge { background: #17301c; color: #a5dcae; }
+    .strand-chip.state-covered-by-loop .chip-badge { background: #16293a; color: #a8cdec; }
+    .strand-chip.state-in-loop-not-placed .chip-badge { background: #332d16; color: #e2cf94; }
+    .proto-badge { background: #6a5400; color: #ffe9a8; }
+  }
+</style>
+</head>
+<body>
+<div id="app-header"></div>
+
+<div class="page-wrap">
+
+<div class="banner">
+  <span class="proto-badge">PROTOTYPE — does not change your saved plan's cards, loops, or rhythm</span>
+  <p class="proto-note">
+    This page only records one thing: your grouping decision for each strand of the feast
+    (<code>strandAssignments</code>). It never creates, edits, or deletes cards, loops, sequences,
+    resources, or anything in your Weekly Rhythm. Everything else you see here is derived live and
+    thrown away on every render.
+  </p>
+</div>
+
+<div id="save-bar"></div>
+
+<h1 class="page-title">Feast Planning Prototype</h1>
+<p class="sub">
+  The whole feast at once — All Together first, then each Form — laid out under the same broad subject
+  families as the Family School Map. Every strand always stays on the page. Turning one off or handing it
+  to a loop makes it quieter, never invisible.
+</p>
+
+<div class="toolbar">
+  <a href="./family-school-map.html">← Back to Family School Map</a>
+  <span class="build-label" title="Build identifier">build:feast-prototype</span>
+  <button type="button" id="reset-proto-btn" class="danger">Reset prototype choices</button>
+  <span style="font-size:11px;color:var(--muted);">Only clears choices made in this prototype. Assignments made elsewhere in the app are left alone.</span>
+</div>
+
+<div id="feast-grid"></div>
+
+<div class="panel-grid">
+  <div class="panel" id="preview-panel"></div>
+  <div>
+    <div class="panel" id="still-panel"></div>
+    <div class="panel guide">
+      <h2 class="section-title">Try this</h2>
+      <ol>
+        <li>Find one suggested strand.</li>
+        <li>Turn it off and back on.</li>
+        <li>Assign it to Everyone.</li>
+        <li>Assign another to a custom group.</li>
+        <li>Assign another to a loop.</li>
+        <li>Confirm the derived-card preview changes.</li>
+        <li>Confirm "Still to place" changes without duplicated state.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script type="module">
+import * as A from '../../lib/familyMapAdapter.mjs';
+import * as M from '../../lib/familyMap.mjs';
+import { createSaveBar, loadInitialState } from './saveBar.mjs';
+import { appHeaderHTML } from './nav.mjs';
+
+document.getElementById('app-header').outerHTML = appHeaderHTML('feast');
+
+var initial = loadInitialState();
+var state = initial.state;
+if (state && !state.strandAssignments) state.strandAssignments = [];
+
+var saveBar = createSaveBar({
+  onStateReplaced: function (newState, source) {
+    state = newState;
+    if (state && !state.strandAssignments) state.strandAssignments = [];
+    render();
+    saveBar.setStatus(source === 'sample' ? 'Using sample plan' : 'Saved in this browser', source === 'sample' ? 'sample' : 'saved');
+  }
+});
+saveBar.mountControls(document.getElementById('save-bar'));
+saveBar.wire(function () { return state; });
+saveBar.setStatus(initial.source === 'saved' ? 'Saved in this browser' : 'Using sample plan', initial.source === 'saved' ? 'saved' : 'sample');
+if (initial.source === 'reset-after-invalid') {
+  saveBar.saveNow(state);
+  window.alert('Your saved plan could not be opened, so the sample plan was loaded instead.');
+}
+function markDirtyAndSave() { saveBar.scheduleSave(state); }
+
+function escH(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+// Subject columns used by the feast, in Family School Map column order.
+var FEAST_COLUMNS = M.DEFAULT_VISIBLE_SUBJECT_COLUMNS.filter(function (col) {
+  return M.FEAST_LIBRARY.some(function (s) { return s.column === col.id; });
+});
+
+// ---------------------------------------------------------------------------
+// Who / Group select — the ONE place audience is entered.
+// ---------------------------------------------------------------------------
+function whoValueForRow(row) {
+  var mode = row.assignmentMode;
+  if (mode === 'everyone') return 'everyone';
+  if (mode === 'custom-group') return 'group:' + (row.assignment.groupId || '');
+  if (mode === 'older-students') return 'group:older';
+  if (mode === 'littles') return 'group:littles';
+  if (mode === 'individual') return 'student:' + ((row.assignment.studentIds || [])[0] || '');
+  if (mode === 'loop') return 'loop:' + (row.loopId || '');
+  if (mode === 'coop-outside') return 'coop';
+  return '';
+}
+
+function whoSelectHTML(row) {
+  var current = whoValueForRow(row);
+  var html = '<select data-role="who" data-strand="' + escH(row.strandId) + '" aria-label="Who is this for?">';
+  function opt(value, label) {
+    html += '<option value="' + escH(value) + '"' + (value === current ? ' selected' : '') + '>' + escH(label) + '</option>';
+  }
+  opt('', 'Not decided yet');
+  opt('everyone', 'Everyone');
+  (state.groups || []).filter(function (g) { return g.active; }).forEach(function (g) {
+    opt('group:' + g.id, g.label);
+  });
+  (state.students || []).filter(function (s) { return s.active; }).forEach(function (s) {
+    opt('student:' + s.id, s.name);
+  });
+  (state.loops || []).forEach(function (l) {
+    opt('loop:' + l.id, 'In: ' + (l.title || l.id));
+  });
+  opt('coop', 'Co-op / outside');
+  // A stored value that is no longer offered (e.g. a deleted loop) still needs
+  // to show, or the select would silently lie about what is saved.
+  if (current && html.indexOf('value="' + escH(current) + '"') === -1) {
+    opt(current, row.whoLabel || current);
+  }
+  html += '</select>';
+  return html;
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+function chipHTML(row) {
+  var html = '<div class="strand-chip state-' + escH(row.placementState) + '" data-strand="' + escH(row.strandId) + '">';
+  html += '<div class="chip-label">' + escH(row.label) +
+    (row.activeThisYear ? '' : '<span class="chip-off-tag">OFF</span>') + '</div>';
+  if (row.whoLabel) html += '<div class="chip-who">Who: ' + escH(row.whoLabel) + '</div>';
+  if (row.placementLabel) html += '<div><span class="chip-badge">' + escH(row.placementLabel) + '</span></div>';
+  (row.warnings || []).forEach(function (w) { html += '<div class="chip-warn">' + escH(w) + '</div>'; });
+  html += '<div class="chip-controls">';
+  html += '<label class="chip-use"><input type="checkbox" data-role="use" data-strand="' + escH(row.strandId) + '"' +
+    (row.activeThisYear ? ' checked' : '') + '> Use this year</label>';
+  html += whoSelectHTML(row);
+  html += '</div></div>';
+  return html;
+}
+
+function renderGrid(rows) {
+  var html = '';
+  M.FEAST_FORMS.forEach(function (form) {
+    var formRows = rows.filter(function (r) { return r.form === form.id; });
+    html += '<div class="form-section">';
+    html += '<h2 class="section-title">' + escH(form.label) +
+      ' <span class="hint">' + formRows.length + ' strands</span></h2>';
+    html += '<table class="feast"><tbody>';
+    FEAST_COLUMNS.forEach(function (col) {
+      var cellRows = formRows.filter(function (r) { return r.column === col.id; });
+      html += '<tr><th class="row-head">' + escH(col.label) + '</th>';
+      html += '<td class="strand-cell">';
+      if (!cellRows.length) {
+        html += '<span class="cell-empty">—</span>';
+      } else {
+        html += '<div class="cell-strands">' + cellRows.map(chipHTML).join('') + '</div>';
+      }
+      html += '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  });
+  document.getElementById('feast-grid').innerHTML = html;
+}
+
+function listHTML(items, emptyText) {
+  if (!items.length) return '<p class="empty">' + escH(emptyText) + '</p>';
+  return '<ul>' + items.map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul>';
+}
+
+function renderPreview() {
+  var p = A.buildDerivedCardPreview(state);
+  var html = '<h2 class="section-title">Derived card preview <span class="hint">read-only</span></h2>';
+  html += '<p class="sub" style="margin:0 0 12px;">Preview only — these cards are not created yet.</p>';
+
+  html += '<div class="preview-group"><h3>Family cards</h3>' +
+    listHTML(p.familyCards.map(function (c) { return escH(c.title); }), 'Nothing assigned to Everyone yet.') + '</div>';
+
+  html += '<div class="preview-group"><h3>Group cards</h3>' +
+    listHTML(p.groupCards.map(function (c) { return escH(c.title) + ' <span style="color:var(--muted);">(' + escH(c.groupLabel) + ')</span>'; }), 'No group work assigned yet.') + '</div>';
+
+  html += '<div class="preview-group"><h3>Individual cards</h3>' +
+    listHTML(p.individualCards.map(function (c) { return escH(c.title) + ' <span style="color:var(--muted);">(' + escH(c.studentName) + ')</span>'; }), 'No individual work assigned yet.') + '</div>';
+
+  html += '<div class="preview-group"><h3>Covered by loops</h3>' +
+    listHTML(p.loopCovered.map(function (l) {
+      return escH(l.loopTitle) + ' <span style="color:var(--muted);">— ' + escH(l.strandLabels.join(', ')) + '</span>';
+    }), 'Nothing handed to a loop yet.') + '</div>';
+
+  html += '<div class="preview-group"><h3>Co-op / outside</h3>' +
+    listHTML(p.coopCards.map(function (c) { return escH(c.title); }), 'Nothing at co-op or outside yet.') + '</div>';
+
+  html += '<div class="preview-group"><h3>Not this year</h3>' +
+    listHTML(p.excluded.map(function (e) { return escH(e.label); }), 'Nothing turned off yet.') + '</div>';
+
+  document.getElementById('preview-panel').innerHTML = html;
+}
+
+function renderStillToPlace(rows) {
+  // Recomputed from buildFeastRows on every render — never cached in state.
+  var pending = rows.filter(function (r) { return r.placementState === 'still-to-place'; });
+  var html = '<h2 class="section-title">Still to place</h2>';
+  html += '<p><span class="count-big" id="still-count">' + pending.length + '</span> ' +
+    '<span style="font-size:12px;color:var(--muted);">strand' + (pending.length === 1 ? '' : 's') +
+    ' decided but not yet in the weekly rhythm</span></p>';
+  html += listHTML(pending.map(function (r) {
+    return escH(r.formLabel) + ' · ' + escH(r.label) + (r.whoLabel ? ' <span style="color:var(--muted);">(' + escH(r.whoLabel) + ')</span>' : '');
+  }), 'Nothing waiting — every decided strand is looped, placed, or set aside.');
+  document.getElementById('still-panel').innerHTML = html;
+}
+
+function render() {
+  var rows = A.buildFeastRows(state);
+  renderGrid(rows);
+  renderPreview();
+  renderStillToPlace(rows);
+}
+
+// ---------------------------------------------------------------------------
+// The only two decisions this page allows.
+// ---------------------------------------------------------------------------
+function strandLabelFor(strandId) {
+  var entry = M.FEAST_LIBRARY.find(function (s) { return s.id === strandId; });
+  return entry ? entry.label : strandId;
+}
+
+function applyDecision(strandId, fields) {
+  A.setStrandAssignmentForStrand(state, strandId, strandLabelFor(strandId), fields);
+  markDirtyAndSave();
+  render();
+}
+
+document.getElementById('feast-grid').addEventListener('change', function (ev) {
+  var el = ev.target;
+  var strandId = el.getAttribute('data-strand');
+  var role = el.getAttribute('data-role');
+  if (!strandId || !role) return;
+
+  if (role === 'use') {
+    // Unchecked -> not this year. Rechecked -> back to undecided.
+    applyDecision(strandId, el.checked ? { assignmentMode: null } : { assignmentMode: 'not-this-year' });
+    return;
+  }
+
+  if (role === 'who') {
+    var v = el.value;
+    if (!v) { applyDecision(strandId, { assignmentMode: null }); return; }
+    if (v === 'everyone') { applyDecision(strandId, { assignmentMode: 'everyone' }); return; }
+    if (v === 'coop') { applyDecision(strandId, { assignmentMode: 'coop-outside' }); return; }
+    if (v.indexOf('group:') === 0) { applyDecision(strandId, { assignmentMode: 'custom-group', groupId: v.slice(6) }); return; }
+    if (v.indexOf('student:') === 0) { applyDecision(strandId, { assignmentMode: 'individual', studentIds: [v.slice(8)] }); return; }
+    if (v.indexOf('loop:') === 0) { applyDecision(strandId, { assignmentMode: 'loop', loopId: v.slice(5) }); return; }
+  }
+});
+
+document.getElementById('reset-proto-btn').addEventListener('click', function () {
+  var confirmed = window.confirm(
+    'Reset the choices you made in this prototype?\n\n' +
+    'This only clears strand assignments created here. Assignments made anywhere else in the app, ' +
+    'and all of your cards, loops, and weekly rhythm, are left exactly as they are.'
+  );
+  if (!confirmed) return;
+  state = A.resetPrototypeStrandAssignments(state);
+  saveBar.saveNow(state);
+  render();
+});
+
+render();
+</script>
+</body>
+</html>

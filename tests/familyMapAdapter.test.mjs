@@ -1421,6 +1421,189 @@ test('buildMapRows unplaced label is "Still to place" (not "Needs placement")', 
   assert.ok(!unplacedRow.label.includes('Needs placement'), 'label should not say "Needs placement"');
 });
 
+// ---------------------------------------------------------------------------
+// Feast prototype — Form x Subject x Strand rows, derived card preview,
+// derived (never stored) placement, and prototype-only reset.
+// ---------------------------------------------------------------------------
+
+function feastRowById(rows, strandId) { return rows.find((r) => r.strandId === strandId); }
+const FEAST_HYMN = 'feast_alltogether_beauty_hymn';
+const FEAST_COPYWORK = 'feast_form1_language-arts_copywork';
+const FEAST_NT = 'feast_alltogether_bible_newtestament';
+
+test('buildFeastRows returns exactly one row per FEAST_LIBRARY entry', () => {
+  const state = A.buildSampleAppState();
+  const rows = A.buildFeastRows(state);
+  assert.equal(rows.length, M.FEAST_LIBRARY.length);
+  M.FEAST_LIBRARY.forEach((entry) => {
+    assert.ok(feastRowById(rows, entry.id), 'row missing for ' + entry.id);
+  });
+  const ids = rows.map((r) => r.strandId);
+  assert.equal(new Set(ids).size, ids.length, 'strand ids should be unique');
+});
+
+test('every feast row has a non-empty strandId, form, column, and label', () => {
+  const state = A.buildSampleAppState();
+  A.buildFeastRows(state).forEach((row) => {
+    assert.ok(row.strandId && row.strandId.length, 'strandId');
+    assert.ok(row.form && row.form.length, 'form on ' + row.strandId);
+    assert.ok(row.column && row.column.length, 'column on ' + row.strandId);
+    assert.ok(row.label && row.label.length, 'label on ' + row.strandId);
+    assert.ok(row.formLabel && row.formLabel.length, 'formLabel on ' + row.strandId);
+    assert.ok(row.columnLabel && row.columnLabel.length, 'columnLabel on ' + row.strandId);
+    assert.ok(Array.isArray(row.warnings), 'warnings array on ' + row.strandId);
+  });
+});
+
+test('source strands stay present when assigned to a loop', () => {
+  const state = A.buildSampleAppState();
+  const before = A.buildFeastRows(state).length;
+  A.setStrandAssignmentForStrand(state, FEAST_HYMN, 'Hymn', { assignmentMode: 'loop', loopId: 'loop_bible' });
+  const rows = A.buildFeastRows(state);
+  assert.equal(rows.length, before, 'row count must not change when a strand is assigned');
+  const row = feastRowById(rows, FEAST_HYMN);
+  assert.ok(row, 'row still present after assignment');
+  assert.equal(row.strandId, FEAST_HYMN);
+  assert.equal(row.assignmentMode, 'loop');
+  assert.equal(row.loopTitle, 'Bible Loop');
+});
+
+test('turning a strand off does not remove its row', () => {
+  const state = A.buildSampleAppState();
+  const before = A.buildFeastRows(state).length;
+  A.setStrandAssignmentForStrand(state, FEAST_COPYWORK, 'Copywork', { assignmentMode: 'not-this-year' });
+  const rows = A.buildFeastRows(state);
+  assert.equal(rows.length, before);
+  const row = feastRowById(rows, FEAST_COPYWORK);
+  assert.ok(row, 'row still present when turned off');
+  assert.equal(row.activeThisYear, false);
+  assert.equal(row.placementState, 'not-this-year');
+  assert.equal(row.placementLabel, 'Not this year');
+});
+
+test('audience is stored exactly once per strand — reassigning updates, never appends', () => {
+  const state = A.buildSampleAppState();
+  const before = state.strandAssignments.length;
+  A.setStrandAssignmentForStrand(state, FEAST_NT, 'New Testament', { assignmentMode: 'everyone' });
+  assert.equal(state.strandAssignments.length, before + 1);
+  assert.equal(state.strandAssignments.filter((sa) => sa.strandId === FEAST_NT).length, 1);
+
+  A.setStrandAssignmentForStrand(state, FEAST_NT, 'New Testament', { assignmentMode: 'individual', studentIds: ['lucy'] });
+  assert.equal(state.strandAssignments.length, before + 1, 'reassigning must not append a second entry');
+  const matches = state.strandAssignments.filter((sa) => sa.strandId === FEAST_NT);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].assignmentMode, 'individual');
+  assert.deepEqual(matches[0].studentIds, ['lucy']);
+  assert.equal(matches[0].loopId, null, 'stale loopId must be cleared on reassignment');
+});
+
+test('buildDerivedCardPreview follows assignments (everyone / individual / loop)', () => {
+  const state = A.buildSampleAppState();
+  A.setStrandAssignmentForStrand(state, FEAST_NT, 'New Testament', { assignmentMode: 'everyone' });
+  A.setStrandAssignmentForStrand(state, FEAST_COPYWORK, 'Copywork', { assignmentMode: 'individual', studentIds: ['charis', 'kayla'] });
+  A.setStrandAssignmentForStrand(state, FEAST_HYMN, 'Hymn', { assignmentMode: 'loop', loopId: 'loop_bible' });
+
+  const preview = A.buildDerivedCardPreview(state);
+
+  assert.ok(preview.familyCards.some((c) => c.strandIds.includes(FEAST_NT)), 'everyone -> familyCards');
+
+  const copyworkIndividual = preview.individualCards.filter((c) => c.strandIds.includes(FEAST_COPYWORK));
+  assert.equal(copyworkIndividual.length, 2, 'individual with 2 students -> 2 individual cards');
+  assert.deepEqual(copyworkIndividual.map((c) => c.studentName).sort(), ['Charis', 'Kayla']);
+
+  const looped = preview.loopCovered.find((l) => l.strandIds.includes(FEAST_HYMN));
+  assert.ok(looped, 'loop -> loopCovered');
+  assert.equal(looped.loopTitle, 'Bible Loop');
+  assert.ok(looped.strandLabels.includes('Hymn'));
+  assert.ok(!preview.familyCards.some((c) => c.strandIds.includes(FEAST_HYMN)), 'loop strand must not be a family card');
+  assert.ok(!preview.groupCards.some((c) => c.strandIds.includes(FEAST_HYMN)), 'loop strand must not be a group card');
+
+  A.setStrandAssignmentForStrand(state, 'feast_form2_history_historyspine', 'History Spine', { assignmentMode: 'custom-group', groupId: 'older' });
+  const preview2 = A.buildDerivedCardPreview(state);
+  const grouped = preview2.groupCards.find((c) => c.strandIds.includes('feast_form2_history_historyspine'));
+  assert.ok(grouped, 'custom-group -> groupCards');
+  assert.equal(grouped.groupLabel, 'Older Students');
+});
+
+test('a strand in a placed loop is covered-by-loop, not still-to-place', () => {
+  const state = A.buildSampleAppState();
+  assert.ok(A.loopHasRhythmPlacement(state, 'loop_bible'), 'sample rhythm places loop_bible');
+  A.setStrandAssignmentForStrand(state, FEAST_NT, 'New Testament', { assignmentMode: 'loop', loopId: 'loop_bible' });
+  const row = feastRowById(A.buildFeastRows(state), FEAST_NT);
+  assert.equal(row.placementState, 'covered-by-loop');
+  assert.equal(row.placementLabel, 'Covered by Bible Loop');
+  assert.notEqual(row.placementState, 'still-to-place');
+});
+
+test('a strand in an unplaced loop is in-loop-not-placed, not still-to-place', () => {
+  const state = A.buildSampleAppState();
+  state.loops.push(M.makeLoop({ id: 'loop_beauty', title: 'Beauty Loop' }));
+  assert.ok(!A.loopHasRhythmPlacement(state, 'loop_beauty'), 'loop_beauty is not in the sample rhythm');
+  A.setStrandAssignmentForStrand(state, FEAST_HYMN, 'Hymn', { assignmentMode: 'loop', loopId: 'loop_beauty' });
+  const row = feastRowById(A.buildFeastRows(state), FEAST_HYMN);
+  assert.equal(row.placementState, 'in-loop-not-placed');
+  assert.equal(row.placementLabel, 'In Beauty Loop, not in weekly rhythm yet');
+  assert.notEqual(row.placementState, 'still-to-place');
+});
+
+test('placement is derived, never persisted into strandAssignments', () => {
+  const state = A.buildSampleAppState();
+  A.setStrandAssignmentForStrand(state, FEAST_NT, 'New Testament', { assignmentMode: 'everyone' });
+  A.setStrandAssignmentForStrand(state, FEAST_COPYWORK, 'Copywork', { assignmentMode: 'not-this-year' });
+  const rows = A.buildFeastRows(state);
+  assert.ok(rows.length > 0);
+  const serialized = JSON.stringify(state.strandAssignments);
+  assert.ok(!serialized.includes('placementState'), 'placementState must never be stored');
+  assert.ok(!serialized.includes('placementLabel'), 'placementLabel must never be stored');
+  assert.ok(!serialized.includes('activeThisYear'), 'activeThisYear must never be stored');
+  assert.ok(!serialized.includes('resourceState'), 'resourceState must never be stored');
+  // A strand with no assignment at all reads as unassigned with a blank label.
+  const untouched = feastRowById(rows, 'feast_form4_math_uppermath');
+  assert.equal(untouched.placementState, 'unassigned');
+  assert.equal(untouched.placementLabel, '');
+  assert.equal(untouched.assignment, null);
+});
+
+test('existing app cards are untouched by buildFeastRows / buildDerivedCardPreview', () => {
+  const state = A.buildSampleAppState();
+  const beforeLength = state.cards.length;
+  const beforeIds = state.cards.map((c) => c.id).join(',');
+  const beforeJson = JSON.stringify(state.cards);
+  A.setStrandAssignmentForStrand(state, FEAST_NT, 'New Testament', { assignmentMode: 'everyone' });
+  A.buildFeastRows(state);
+  A.buildDerivedCardPreview(state);
+  assert.equal(state.cards.length, beforeLength);
+  assert.equal(state.cards.map((c) => c.id).join(','), beforeIds);
+  assert.equal(JSON.stringify(state.cards), beforeJson, 'no card may be mutated');
+});
+
+test('resetPrototypeStrandAssignments removes only prototype-created entries', () => {
+  const state = A.buildSampleAppState();
+  const preExisting = state.strandAssignments.map((sa) => sa.id);
+  A.setStrandAssignmentForStrand(state, FEAST_NT, 'New Testament', { assignmentMode: 'everyone' });
+  A.setStrandAssignmentForStrand(state, FEAST_HYMN, 'Hymn', { assignmentMode: 'not-this-year' });
+  assert.equal(state.strandAssignments.length, preExisting.length + 2);
+
+  const reset = A.resetPrototypeStrandAssignments(state);
+  assert.equal(reset.strandAssignments.length, preExisting.length);
+  assert.deepEqual(reset.strandAssignments.map((sa) => sa.id), preExisting);
+  assert.ok(reset.strandAssignments.every((sa) => sa.createdBy !== 'feast-prototype'));
+  assert.equal(state.strandAssignments.length, preExisting.length + 2, 'reset returns a new state; the old one is unchanged');
+  assert.equal(reset.cards, state.cards, 'reset does not touch cards');
+});
+
+test('makeStrandAssignment defaults createdBy to null and FEAST_LIBRARY ids are stable', () => {
+  assert.equal(M.makeStrandAssignment({}).createdBy, null);
+  assert.equal(M.feastStrandId('all-together', 'bible', 'New Testament'), FEAST_NT);
+  assert.equal(M.feastStrandId('form1', 'language-arts', 'Copywork'), FEAST_COPYWORK);
+  assert.equal(M.FEAST_FORMS.length, 6);
+  M.FEAST_LIBRARY.forEach((entry) => {
+    assert.equal(entry.id, M.feastStrandId(entry.form, entry.column, entry.label));
+    assert.ok(M.FEAST_FORMS.some((f) => f.id === entry.form), 'unknown form ' + entry.form);
+    assert.ok(M.DEFAULT_VISIBLE_SUBJECT_COLUMNS.some((c) => c.id === entry.column), 'unknown column ' + entry.column);
+  });
+});
+
 let passed = 0;
 let failed = 0;
 for (const t of tests) {
