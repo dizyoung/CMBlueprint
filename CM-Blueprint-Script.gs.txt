@@ -1,0 +1,3484 @@
+ /************************************************************
+ * CM FAMILY RHYTHM PLANNER
+ * Consolidated workbook utilities and Student Work automation
+ ************************************************************/
+
+const PLANNER_CONFIG = {
+  studentWorkSheet: 'Student Work',
+  strandPlacementSheet: 'Strand Placement',
+  setupSheet: 'Setup',
+
+  studentWorkFirstRow: 24,
+  studentWorkLastRow: 223,
+
+  setupFirstStudentRow: 6,
+  setupLastStudentRow: 13,
+  setupStudentNameColumn: 2, // B
+  setupStudentFormColumn: 4, // D
+
+  studentWorkStudentColumn: 1, // A
+  studentWorkSettingColumn: 2, // B
+  studentWorkStrandColumn: 3,  // C
+  studentWorkMomRoleColumn: 4, // D
+  studentWorkRhythmColumn: 5,  // E
+  studentWorkNotesColumn: 6,   // F
+  studentWorkCheckColumn: 7,   // G
+  studentWorkSequenceColumn: 8 // H
+};
+
+
+/************************************************************
+ * RUN THIS ONCE AFTER PASTING THE COMPLETE SCRIPT
+ ************************************************************/
+
+function installPlannerAutomation() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  removeLegacyStudentWorkTriggers_();
+  addStudentWorkDropdowns();
+  repairStudentWorkChecksAndHelpers();
+  refreshStudentWorkFormDropdowns();
+
+  SpreadsheetApp.flush();
+
+  ss.toast(
+    'Student Work automation installed and repaired.',
+    'CM Family Rhythm Planner',
+    6
+  );
+}
+
+
+/************************************************************
+ * ONE FAST AUTOMATIC EDIT HANDLER
+ *
+ * Do not create an installable trigger for this function.
+ * Google Sheets runs a function named onEdit automatically.
+ ************************************************************/
+
+/************************************************************
+ * STUDENT WORK: SHRINKING STRAND MENUS
+ *
+ * A Strand disappears when:
+ * - it is already placed in Strand Placement, or
+ * - the same student selected it on another Student Work row.
+ *
+ * Different students may still use the same strand.
+ ************************************************************/
+
+function onEdit(e) {
+  if (!e || !e.range) return;
+
+  const sheet = e.range.getSheet();
+  const sheetName = sheet.getName();
+
+  if (sheetName === 'Family Map') {
+    handleFamilyMapCombineEdit_(e);
+    return;
+  }
+
+  if (sheetName === 'Student Work') {
+    handleShrinkingStudentWorkEdit_(e);
+    return;
+  }
+
+  // Refresh menus after changing student activation, name, or form.
+  if (
+    sheetName === 'Setup' &&
+    shrinkingRangesIntersect_(e.range, 6, 1, 13, 4)
+  ) {
+    refreshAllShrinkingStudentWorkMenus();
+    return;
+  }
+
+  // Refresh menus when a strand is added to or removed from a loop.
+  if (
+    sheetName === 'Strand Placement' &&
+    shrinkingEditTouchesPlacement_(e.range)
+  ) {
+    refreshAllShrinkingStudentWorkMenus();
+  }
+}
+
+
+function handleShrinkingStudentWorkEdit_(e) {
+  const range = e.range;
+
+  if (
+    range.getLastRow() < 24 ||
+    range.getRow() > 223
+  ) {
+    return;
+  }
+
+  const touchesStudent =
+    range.getColumn() <= 1 &&
+    range.getLastColumn() >= 1;
+
+  const touchesStrand =
+    range.getColumn() <= 3 &&
+    range.getLastColumn() >= 3;
+
+  if (!touchesStudent && !touchesStrand) return;
+
+  // Pasted blocks are safer to refresh together.
+  if (
+    range.getNumRows() > 1 ||
+    range.getNumColumns() > 1
+  ) {
+    refreshAllShrinkingStudentWorkMenus();
+    return;
+  }
+
+  const sheet = range.getSheet();
+  const row = range.getRow();
+  const affectedStudents = new Set();
+
+  // Remember the previous student so a cleared strand becomes
+  // available again in that student's other dropdowns.
+  if (
+    touchesStudent &&
+    typeof e.oldValue !== 'undefined' &&
+    String(e.oldValue).trim()
+  ) {
+    affectedStudents.add(
+      normalizeText_(e.oldValue)
+    );
+  }
+
+  // First clear a strand that does not belong to the newly
+  // selected student's form.
+  if (touchesStudent) {
+    const firstContext =
+      buildShrinkingStudentWorkContext_();
+
+    applyShrinkingStrandMenuToRow_(
+      sheet,
+      row,
+      firstContext
+    );
+  }
+
+  // Rebuild after any incompatible strand was cleared.
+  const context =
+    buildShrinkingStudentWorkContext_();
+
+  const currentStudent = sheet
+    .getRange(row, 1)
+    .getDisplayValue()
+    .trim();
+
+  if (currentStudent) {
+    affectedStudents.add(
+      normalizeText_(currentStudent)
+    );
+  }
+
+  if (affectedStudents.size > 0) {
+    refreshShrinkingMenusForStudents_(
+      sheet,
+      context,
+      affectedStudents
+    );
+  } else {
+    applyShrinkingStrandMenuToRow_(
+      sheet,
+      row,
+      context
+    );
+  }
+
+  SpreadsheetApp.flush();
+}
+
+
+function buildShrinkingStudentWorkContext_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Student Work');
+
+  if (!sheet) {
+    throw new Error(
+      'The Student Work sheet was not found.'
+    );
+  }
+
+  return {
+    studentForms: getStudentFormMap_(),
+    activeStrands: getActiveStrands_(),
+    loopPlacedStrands:
+      getLoopPlacedStrandsForMenus_(),
+    entries:
+      getStudentWorkEntriesForMenus_(sheet)
+  };
+}
+
+
+function applyShrinkingStrandMenuToRow_(
+  sheet,
+  row,
+  context
+) {
+  const studentCell = sheet.getRange(row, 1);
+  const strandCell = sheet.getRange(row, 3);
+
+  const student = studentCell
+    .getDisplayValue()
+    .trim();
+
+  const studentKey = normalizeText_(student);
+
+  let currentStrand = strandCell
+    .getDisplayValue()
+    .trim();
+
+  if (!student) {
+    if (currentStrand) {
+      strandCell.clearContent();
+    }
+
+    strandCell.clearDataValidations();
+    return;
+  }
+
+  const form =
+    context.studentForms[studentKey];
+
+  if (!form) {
+    if (currentStrand) {
+      strandCell.clearContent();
+    }
+
+    strandCell.clearDataValidations();
+    return;
+  }
+
+  const formPrefix = `${form} /`;
+
+  const applicableStrands =
+    context.activeStrands.filter(strand =>
+      strand.startsWith(formPrefix)
+    );
+
+  const loopPlaced = new Set(
+    context.loopPlacedStrands
+  );
+
+  // Choices already used by THIS student on another row.
+  const usedElsewhere = new Set(
+    context.entries
+      .filter(entry =>
+        entry.row !== row &&
+        entry.studentKey === studentKey &&
+        entry.strand
+      )
+      .map(entry => entry.strand)
+  );
+
+  // Clear a strand that belongs to another form or has since
+  // been placed into a loop.
+  if (
+    currentStrand &&
+    (
+      !applicableStrands.includes(currentStrand) ||
+      loopPlaced.has(currentStrand)
+    )
+  ) {
+    strandCell.clearContent();
+    currentStrand = '';
+  }
+
+  let availableStrands =
+    applicableStrands.filter(strand =>
+      !loopPlaced.has(strand) &&
+      !usedElsewhere.has(strand)
+    );
+
+  // The current row must retain its existing selection.
+  if (
+    currentStrand &&
+    !availableStrands.includes(currentStrand)
+  ) {
+    availableStrands.unshift(currentStrand);
+  }
+
+  availableStrands = [
+    ...new Set(availableStrands)
+  ];
+
+  if (availableStrands.length === 0) {
+    strandCell.clearDataValidations();
+    return;
+  }
+
+  const rule = SpreadsheetApp
+    .newDataValidation()
+    .requireValueInList(
+      availableStrands,
+      true
+    )
+    .setAllowInvalid(false)
+    .setHelpText(
+      `Choose an unused ${form} strand for ${student}.`
+    )
+    .build();
+
+  strandCell.setDataValidation(rule);
+}
+
+
+function refreshShrinkingMenusForStudents_(
+  sheet,
+  context,
+  studentKeys
+) {
+  context.entries.forEach(entry => {
+    if (
+      entry.studentKey &&
+      studentKeys.has(entry.studentKey)
+    ) {
+      applyShrinkingStrandMenuToRow_(
+        sheet,
+        entry.row,
+        context
+      );
+    }
+  });
+}
+
+
+function refreshAllShrinkingStudentWorkMenus() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Student Work');
+
+  if (!sheet) {
+    throw new Error(
+      'The Student Work sheet was not found.'
+    );
+  }
+
+  const context =
+    buildShrinkingStudentWorkContext_();
+
+  context.entries.forEach(entry => {
+    if (entry.student || entry.strand) {
+      applyShrinkingStrandMenuToRow_(
+        sheet,
+        entry.row,
+        context
+      );
+    }
+  });
+
+  SpreadsheetApp.flush();
+}
+
+
+function getStudentWorkEntriesForMenus_(sheet) {
+  const values = sheet
+    .getRange('A24:C223')
+    .getDisplayValues();
+
+  return values.map((valuesRow, index) => {
+    const student = valuesRow[0].trim();
+    const strand = valuesRow[2].trim();
+
+    return {
+      row: index + 24,
+      student,
+      studentKey: normalizeText_(student),
+      strand
+    };
+  });
+}
+
+
+/**
+ * Reads only actual placement cells, never the
+ * Still Unplaced helper list.
+ */
+function getLoopPlacedStrandsForMenus_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const placement =
+    ss.getSheetByName('Strand Placement');
+
+  if (!placement) {
+    throw new Error(
+      'The Strand Placement sheet was not found.'
+    );
+  }
+
+  const ranges = [
+    'B21:B26',
+    'B30:B35',
+    'B39:B44',
+    'B48:B53',
+    'B57:B62',
+    'B66:B71',
+    'B75:B80',
+    'B84:B89'
+  ];
+
+  const strands = [];
+
+  ranges.forEach(rangeA1 => {
+    placement
+      .getRange(rangeA1)
+      .getDisplayValues()
+      .flat()
+      .map(value => value.trim())
+      .filter(Boolean)
+      .forEach(value => strands.push(value));
+  });
+
+  return [...new Set(strands)];
+}
+
+
+function shrinkingRangesIntersect_(
+  editedRange,
+  firstRow,
+  firstColumn,
+  lastRow,
+  lastColumn
+) {
+  return !(
+    editedRange.getLastRow() < firstRow ||
+    editedRange.getRow() > lastRow ||
+    editedRange.getLastColumn() < firstColumn ||
+    editedRange.getColumn() > lastColumn
+  );
+}
+
+
+function shrinkingEditTouchesPlacement_(
+  editedRange
+) {
+  if (
+    editedRange.getColumn() > 2 ||
+    editedRange.getLastColumn() < 2
+  ) {
+    return false;
+  }
+
+  const rowBlocks = [
+    [21, 26],
+    [30, 35],
+    [39, 44],
+    [48, 53],
+    [57, 62],
+    [66, 71],
+    [75, 80],
+    [84, 89]
+  ];
+
+  return rowBlocks.some(
+    ([firstRow, lastRow]) =>
+      !(
+        editedRange.getLastRow() < firstRow ||
+        editedRange.getRow() > lastRow
+      )
+  );
+}
+
+
+/**
+ * Repairs the duplicate warning so the same strand is allowed
+ * for different students, but not twice for the same student.
+ */
+function upgradeStudentWorkShrinkingMenus() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Student Work');
+
+  if (!sheet) {
+    throw new Error(
+      'The Student Work sheet was not found.'
+    );
+  }
+
+  // Remove any older installed Student Work edit triggers.
+  const oldHandlers = new Set([
+    'studentWorkFormDropdownOnEdit',
+    'onEdit'
+  ]);
+
+  ScriptApp.getProjectTriggers()
+    .filter(trigger =>
+      oldHandlers.has(
+        trigger.getHandlerFunction()
+      )
+    )
+    .forEach(trigger =>
+      ScriptApp.deleteTrigger(trigger)
+    );
+
+  const formulas = [];
+
+  for (let row = 24; row <= 223; row++) {
+    formulas.push([
+      `=IF(COUNTA($A${row}:$F${row})=0,"",` +
+      `IF($A${row}="","⚠ choose student",` +
+      `IF($B${row}="","⚠ choose work setting",` +
+      `IF($C${row}="","⚠ choose strand",` +
+      `IF($D${row}="","⚠ choose mom role",` +
+      `IF($E${row}="","⚠ add touch rhythm",` +
+      `IF(COUNTIF($J$24:$J$223,$C${row})>0,` +
+      `"⚠ already placed in a loop",` +
+      `IF(COUNTIFS($A$24:$A$223,$A${row},` +
+      `$C$24:$C$223,$C${row})>1,` +
+      `"⚠ already used for this student",""))))))))`
+    ]);
+  }
+
+  sheet
+    .getRange('G24:G223')
+    .setFormulas(formulas);
+
+  refreshAllShrinkingStudentWorkMenus();
+
+  SpreadsheetApp.flush();
+
+  ss.toast(
+    'Used strands now disappear from Student Work menus.',
+    'Student Work',
+    6
+  );
+}
+
+
+
+/**
+ * Rebuilds the form-filtered Strand dropdown when a Student
+ * cell is edited on Student Work.
+ */
+function handleStudentWorkStudentEdit_(editedRange) {
+  const firstEditedColumn = editedRange.getColumn();
+  const lastEditedColumn = editedRange.getLastColumn();
+
+  const includesStudentColumn =
+    firstEditedColumn <= PLANNER_CONFIG.studentWorkStudentColumn &&
+    lastEditedColumn >= PLANNER_CONFIG.studentWorkStudentColumn;
+
+  if (!includesStudentColumn) return;
+
+  const firstRow = Math.max(
+    PLANNER_CONFIG.studentWorkFirstRow,
+    editedRange.getRow()
+  );
+
+  const lastRow = Math.min(
+    PLANNER_CONFIG.studentWorkLastRow,
+    editedRange.getLastRow()
+  );
+
+  if (firstRow > lastRow) return;
+
+  const context = buildStudentWorkFormContext_();
+  const sheet = editedRange.getSheet();
+
+  for (let row = firstRow; row <= lastRow; row++) {
+    applyStudentFormStrandDropdown_(sheet, row, context);
+  }
+
+  SpreadsheetApp.flush();
+}
+
+
+/**
+ * Refreshes used Student Work rows when a student name or form
+ * is changed on Setup.
+ */
+function handleSetupStudentEdit_(editedRange) {
+  if (
+    !rangesIntersect_(
+      editedRange,
+      PLANNER_CONFIG.setupFirstStudentRow,
+      PLANNER_CONFIG.setupStudentNameColumn,
+      PLANNER_CONFIG.setupLastStudentRow,
+      PLANNER_CONFIG.setupStudentFormColumn
+    )
+  ) {
+    return;
+  }
+
+  refreshStudentWorkFormDropdowns();
+}
+
+
+function rangesIntersect_(
+  editedRange,
+  firstRow,
+  firstColumn,
+  lastRow,
+  lastColumn
+) {
+  return !(
+    editedRange.getLastRow() < firstRow ||
+    editedRange.getRow() > lastRow ||
+    editedRange.getLastColumn() < firstColumn ||
+    editedRange.getColumn() > lastColumn
+  );
+}
+
+
+/************************************************************
+ * STUDENT WORK DROPDOWNS
+ ************************************************************/
+
+/**
+ * Adds the standard Student Work dropdowns.
+ *
+ * The Strand dropdown is intentionally left blank until a
+ * student is selected. It is then built by onEdit.
+ */
+function addStudentWorkDropdowns() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const studentWork = ss.getSheetByName(
+    PLANNER_CONFIG.studentWorkSheet
+  );
+  const strandPlacement = ss.getSheetByName(
+    PLANNER_CONFIG.strandPlacementSheet
+  );
+
+  if (!studentWork || !strandPlacement) {
+    throw new Error(
+      'Student Work or Strand Placement sheet was not found.'
+    );
+  }
+
+  if (
+    studentWork.getRange('A23').getDisplayValue() !== 'Student'
+  ) {
+    throw new Error(
+      'Student Work records table was not found at row 23.'
+    );
+  }
+
+  const studentRule = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(
+      studentWork.getRange('A5:A19'),
+      true
+    )
+    .setAllowInvalid(false)
+    .setHelpText('Choose an active student.')
+    .build();
+
+  studentWork
+    .getRange('A24:A223')
+    .setDataValidation(studentRule);
+
+  const workSettingRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(
+      [
+        'Table Work with Mom',
+        'Independent Work'
+      ],
+      true
+    )
+    .setAllowInvalid(false)
+    .setHelpText(
+      'Choose where this individual work belongs.'
+    )
+    .build();
+
+  studentWork
+    .getRange('B24:B223')
+    .setDataValidation(workSettingRule);
+
+  // Remove stale or generic Strand validations.
+  // Form-filtered rules are added row by row afterward.
+  studentWork
+    .getRange('C24:C223')
+    .clearDataValidations();
+
+  const momRoleRule = strandPlacement
+    .getRange('D21')
+    .getDataValidation();
+
+  if (!momRoleRule) {
+    throw new Error(
+      'No Mom Role dropdown was found in Strand Placement!D21.'
+    );
+  }
+
+  studentWork
+    .getRange('D24:D223')
+    .setDataValidation(momRoleRule);
+
+  const touchRhythmRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(
+      [
+        'Daily',
+        '4x/week',
+        '3x/week',
+        '2x/week',
+        '1x/week',
+        'Every other week',
+        'Custom'
+      ],
+      true
+    )
+    .setAllowInvalid(false)
+    .setHelpText(
+      'Choose how often this student touches this strand.'
+    )
+    .build();
+
+  studentWork
+    .getRange('E24:E223')
+    .setDataValidation(touchRhythmRule);
+
+  SpreadsheetApp.flush();
+}
+
+
+/**
+ * Manually rebuilds every used Student Work Strand dropdown.
+ *
+ * Run this only when needed, such as after changing several
+ * forms or active strands at once.
+ */
+function refreshStudentWorkFormDropdowns() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const studentWork = ss.getSheetByName(
+    PLANNER_CONFIG.studentWorkSheet
+  );
+
+  if (!studentWork) {
+    throw new Error('The Student Work sheet was not found.');
+  }
+
+  const context = buildStudentWorkFormContext_();
+
+  for (
+    let row = PLANNER_CONFIG.studentWorkFirstRow;
+    row <= PLANNER_CONFIG.studentWorkLastRow;
+    row++
+  ) {
+    applyStudentFormStrandDropdown_(
+      studentWork,
+      row,
+      context
+    );
+  }
+
+  SpreadsheetApp.flush();
+}
+
+
+/**
+ * Builds:
+ * - Student name to form mapping
+ * - Complete active-strand list
+ */
+function buildStudentWorkFormContext_() {
+  return {
+    studentForms: getStudentFormMap_(),
+    activeStrands: getActiveStrands_()
+  };
+}
+
+
+/**
+ * Applies the correct form-filtered Strand dropdown to one row.
+ */
+function applyStudentFormStrandDropdown_(
+  sheet,
+  row,
+  context
+) {
+  const studentCell = sheet.getRange(
+    row,
+    PLANNER_CONFIG.studentWorkStudentColumn
+  );
+
+  const strandCell = sheet.getRange(
+    row,
+    PLANNER_CONFIG.studentWorkStrandColumn
+  );
+
+  const student = studentCell
+    .getDisplayValue()
+    .trim();
+
+  const currentStrand = strandCell
+    .getDisplayValue()
+    .trim();
+
+  if (!student) {
+    if (currentStrand) {
+      strandCell.clearContent();
+    }
+
+    strandCell.clearDataValidations();
+    return;
+  }
+
+  const form =
+    context.studentForms[normalizeText_(student)];
+
+  if (!form) {
+    if (currentStrand) {
+      strandCell.clearContent();
+    }
+
+    strandCell.clearDataValidations();
+    return;
+  }
+
+  const formPrefix = `${form} /`;
+
+  const applicableStrands = context.activeStrands
+    .filter(strand => strand.startsWith(formPrefix));
+
+  if (applicableStrands.length === 0) {
+    if (currentStrand) {
+      strandCell.clearContent();
+    }
+
+    strandCell.clearDataValidations();
+    return;
+  }
+
+  // Clear a strand belonging to the previously selected student
+  // or form before installing the new rule.
+  if (
+    currentStrand &&
+    !applicableStrands.includes(currentStrand)
+  ) {
+    strandCell.clearContent();
+  }
+
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(applicableStrands, true)
+    .setAllowInvalid(false)
+    .setHelpText(
+      `Choose an active strand for ${student}, ${form}.`
+    )
+    .build();
+
+  strandCell.setDataValidation(rule);
+}
+
+
+/**
+ * Reads student names and forms directly from the established
+ * Setup layout:
+ *
+ * B6:B13 = Student names
+ * D6:D13 = Student forms
+ */
+function getStudentFormMap_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const setup = ss.getSheetByName(
+    PLANNER_CONFIG.setupSheet
+  );
+
+  if (!setup) {
+    throw new Error('The Setup sheet was not found.');
+  }
+
+  const rowCount =
+    PLANNER_CONFIG.setupLastStudentRow -
+    PLANNER_CONFIG.setupFirstStudentRow +
+    1;
+
+  const names = setup
+    .getRange(
+      PLANNER_CONFIG.setupFirstStudentRow,
+      PLANNER_CONFIG.setupStudentNameColumn,
+      rowCount,
+      1
+    )
+    .getDisplayValues();
+
+  const forms = setup
+    .getRange(
+      PLANNER_CONFIG.setupFirstStudentRow,
+      PLANNER_CONFIG.setupStudentFormColumn,
+      rowCount,
+      1
+    )
+    .getDisplayValues();
+
+  const map = {};
+
+  for (let index = 0; index < rowCount; index++) {
+    const name = names[index][0].trim();
+    const form = forms[index][0].trim();
+
+    if (name && form) {
+      map[normalizeText_(name)] = form;
+    }
+  }
+
+  return map;
+}
+
+
+/**
+ * Reads the active-strand source from the existing dropdown in
+ * Strand Placement!B21.
+ */
+function getActiveStrands_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const placement = ss.getSheetByName(
+    PLANNER_CONFIG.strandPlacementSheet
+  );
+
+  if (!placement) {
+    throw new Error(
+      'The Strand Placement sheet was not found.'
+    );
+  }
+
+  const validation = placement
+    .getRange('B21')
+    .getDataValidation();
+
+  if (!validation) {
+    throw new Error(
+      'No active-strand dropdown was found in Strand Placement!B21.'
+    );
+  }
+
+  const criteriaType = validation.getCriteriaType();
+  const criteriaValues = validation.getCriteriaValues();
+
+  let strands = [];
+
+  if (
+    criteriaType ===
+    SpreadsheetApp.DataValidationCriteria.VALUE_IN_RANGE
+  ) {
+    const sourceRange = criteriaValues[0];
+
+    strands = sourceRange
+      .getDisplayValues()
+      .flat()
+      .map(value => value.trim())
+      .filter(Boolean);
+  } else if (
+    criteriaType ===
+    SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST
+  ) {
+    strands = criteriaValues[0]
+      .map(value => String(value).trim())
+      .filter(Boolean);
+  } else {
+    throw new Error(
+      'The Strand Placement validation is not a supported list or range.'
+    );
+  }
+
+  return [...new Set(strands)];
+}
+
+
+function normalizeText_(value) {
+  return String(value)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+
+/************************************************************
+ * STUDENT WORK CHECKS AND ENGINE HELPERS
+ ************************************************************/
+
+/**
+ * Repairs:
+ * - Student Work Check formulas in G
+ * - Engine Sequence Key formulas in H
+ * - Placed-strand helper list in J
+ */
+function repairStudentWorkChecksAndHelpers() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(
+    PLANNER_CONFIG.studentWorkSheet
+  );
+
+  if (!sheet) {
+    throw new Error('The Student Work sheet was not found.');
+  }
+
+  // Remove the old helper array formula and its spill.
+  sheet.getRange('J24').clearContent();
+  sheet.getRange('J24:J223').clearContent();
+
+  sheet.getRange('J24').setFormula(
+    `=TOCOL({` +
+    `'Strand Placement'!B21:B26;` +
+    `'Strand Placement'!B30:B35;` +
+    `'Strand Placement'!B39:B44;` +
+    `'Strand Placement'!B48:B53;` +
+    `'Strand Placement'!B57:B62;` +
+    `'Strand Placement'!B66:B71;` +
+    `'Strand Placement'!B75:B80;` +
+    `'Strand Placement'!B84:B89` +
+    `},1)`
+  );
+
+  const checkFormulas = [];
+  const sequenceFormulas = [];
+
+  for (
+    let row = PLANNER_CONFIG.studentWorkFirstRow;
+    row <= PLANNER_CONFIG.studentWorkLastRow;
+    row++
+  ) {
+    checkFormulas.push([
+      `=IF(COUNTA($A${row}:$F${row})=0,"",` +
+      `IF($A${row}="","⚠ choose student",` +
+      `IF($B${row}="","⚠ choose work setting",` +
+      `IF($C${row}="","⚠ choose strand",` +
+      `IF($D${row}="","⚠ choose mom role",` +
+      `IF($E${row}="","⚠ add touch rhythm",` +
+      `IF(COUNTIF($J$24:$J$223,$C${row})>0,` +
+      `"⚠ already placed in a loop",` +
+      `IF(COUNTIF($C$24:$C$223,$C${row})>1,` +
+      `"⚠ strand assigned more than once",` +
+      `""))))))))`
+    ]);
+
+    sequenceFormulas.push([
+      `=IF(OR($A${row}="",$C${row}=""),"",` +
+      `$A${row}&" | "&$C${row})`
+    ]);
+  }
+
+  sheet
+    .getRange(
+      PLANNER_CONFIG.studentWorkFirstRow,
+      PLANNER_CONFIG.studentWorkCheckColumn,
+      checkFormulas.length,
+      1
+    )
+    .setFormulas(checkFormulas);
+
+  sheet
+    .getRange(
+      PLANNER_CONFIG.studentWorkFirstRow,
+      PLANNER_CONFIG.studentWorkSequenceColumn,
+      sequenceFormulas.length,
+      1
+    )
+    .setFormulas(sequenceFormulas);
+
+  // Hide engine/helper columns H:J.
+  sheet.hideColumns(8, 3);
+
+  SpreadsheetApp.flush();
+
+  ss.toast(
+    'Student Work checks and helpers repaired.',
+    'Student Work',
+    5
+  );
+}
+
+
+/************************************************************
+ * REMOVE OLD COMPETING INSTALLED TRIGGERS
+ ************************************************************/
+
+function removeLegacyStudentWorkTriggers_() {
+  const obsoleteHandlers = new Set([
+    'studentWorkFormDropdownOnEdit',
+    'onEdit'
+  ]);
+
+  ScriptApp.getProjectTriggers()
+    .filter(trigger =>
+      obsoleteHandlers.has(
+        trigger.getHandlerFunction()
+      )
+    )
+    .forEach(trigger =>
+      ScriptApp.deleteTrigger(trigger)
+    );
+}
+
+
+/************************************************************
+ * SETUP MAINTENANCE
+ ************************************************************/
+
+function repairSetupFormsAndCheckboxes() {
+  const ss = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName('Setup');
+
+  if (!sheet) {
+    throw new Error('Sheet not found: Setup');
+  }
+
+  const formValues = [
+    'Form I',
+    'Form II',
+    'Form III',
+    'Form IV',
+    'Form V-VI'
+  ];
+
+  const formRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(formValues, true)
+    .setAllowInvalid(false)
+    .build();
+
+  convertToCheckboxes_(
+    sheet.getRange('A6:A13')
+  );
+
+  sheet
+    .getRange('D6:D13')
+    .clearDataValidations()
+    .setDataValidation(formRule);
+
+  convertToCheckboxes_(
+    sheet.getRange('A17:A26')
+  );
+
+  convertToCheckboxes_(
+    sheet.getRange('C17:J26')
+  );
+
+  sheet
+    .getRange('L1:AF60')
+    .clearDataValidations();
+
+  SpreadsheetApp.flush();
+}
+
+
+function convertToCheckboxes_(range) {
+  const values = range.getValues();
+
+  const converted = values.map(row =>
+    row.map(value => {
+      const text = String(value)
+        .trim()
+        .toLowerCase();
+
+      return (
+        value === true ||
+        text === 'true' ||
+        text === 'yes' ||
+        text === 'y' ||
+        text === '✓' ||
+        text === '✔' ||
+        text === '☑' ||
+        text === 'checked'
+      );
+    })
+  );
+
+  range.clearDataValidations();
+  range.insertCheckboxes();
+  range.setValues(converted);
+}
+
+
+function cleanSetupReferenceDropdowns() {
+  const ss = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName('Setup');
+
+  if (!sheet) {
+    throw new Error('Sheet not found: Setup');
+  }
+
+  sheet
+    .getRange('A27:J35')
+    .clearDataValidations();
+
+  sheet
+    .getRange('A28:C35')
+    .setBackground('#F2F9FA');
+
+  sheet
+    .getRange('C29:C35')
+    .setFontStyle('italic')
+    .setFontColor('#5f6f85');
+
+  SpreadsheetApp.flush();
+}
+
+
+/************************************************************
+ * STRAND PLACEMENT MAINTENANCE
+ ************************************************************/
+
+function addStrandPlacementDropdowns() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(
+    'Strand Placement'
+  );
+
+  if (!sheet) {
+    throw new Error(
+      'Strand Placement sheet was not found.'
+    );
+  }
+
+  if (
+    sheet.getRange('E20').getDisplayValue() !==
+      'Touch Rhythm' ||
+    sheet.getRange('F20').getDisplayValue() !==
+      'Check'
+  ) {
+    throw new Error(
+      'The expected Strand Placement layout was not found.'
+    );
+  }
+
+  const touchRhythmRule =
+    SpreadsheetApp.newDataValidation()
+      .requireValueInList(
+        [
+          'Daily',
+          '4x/week',
+          '3x/week',
+          '2x/week',
+          '1x/week',
+          'Every other week',
+          'Custom'
+        ],
+        true
+      )
+      .setAllowInvalid(false)
+      .setHelpText(
+        'Choose how often this particular strand is scheduled.'
+      )
+      .build();
+
+  [
+    'E21:E26',
+    'E30:E35',
+    'E39:E44',
+    'E48:E53',
+    'E57:E62',
+    'E66:E71',
+    'E75:E80',
+    'E84:E89'
+  ].forEach(rangeA1 => {
+    sheet
+      .getRange(rangeA1)
+      .setDataValidation(touchRhythmRule);
+  });
+
+  const loopTouchesRule =
+    SpreadsheetApp.newDataValidation()
+      .requireValueInList(
+        [
+          'Daily',
+          'Daily-ish',
+          '4x/week',
+          '3x/week',
+          '2x/week',
+          '1x/week',
+          '2–3x/week',
+          '1–2x/week',
+          'Every other week',
+          'Weekly anchor',
+          'Optional',
+          'Custom'
+        ],
+        true
+      )
+      .setAllowInvalid(false)
+      .setHelpText(
+        'Choose how often this loop or block is opened.'
+      )
+      .build();
+
+  sheet
+    .getRange('F6:F13')
+    .setDataValidation(loopTouchesRule);
+
+  SpreadsheetApp.flush();
+}
+
+
+function addUsuallyDoDropdown() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(
+    'Strand Placement'
+  );
+
+  if (!sheet) {
+    throw new Error(
+      'Strand Placement sheet was not found.'
+    );
+  }
+
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(
+      [
+        'Next 1',
+        'Next 2',
+        'Next 3',
+        'All',
+        'As assigned'
+      ],
+      true
+    )
+    .setAllowInvalid(false)
+    .setHelpText(
+      'Choose how many items are normally handled when this loop or block opens.'
+    )
+    .build();
+
+  sheet
+    .getRange('G6:G13')
+    .setDataValidation(rule);
+
+  SpreadsheetApp.flush();
+}
+
+
+/************************************************************
+ * RESOURCE PLANNER MAINTENANCE
+ ************************************************************/
+
+function cleanResourcePlannerInheritedValidations() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(
+    'Resource Planner'
+  );
+
+  if (!sheet) {
+    throw new Error(
+      'Resource Planner sheet not found.'
+    );
+  }
+
+  sheet
+    .getRange('B10:C69')
+    .clearDataValidations();
+
+  SpreadsheetApp.flush();
+}
+
+
+/************************************************************
+ * ASSIGNMENT VIEW MAINTENANCE
+ ************************************************************/
+
+function repairAssignmentViewFilterDropdowns() {
+  const ss = SpreadsheetApp.getActive();
+  const assignment = ss.getSheetByName(
+    'Assignment View'
+  );
+  const custom = ss.getSheetByName(
+    'Custom Views'
+  );
+
+  if (!assignment) {
+    throw new Error(
+      'Sheet not found: Assignment View'
+    );
+  }
+
+  if (!custom) {
+    throw new Error(
+      'Sheet not found: Custom Views'
+    );
+  }
+
+  const existingFilter = assignment.getFilter();
+
+  if (existingFilter) {
+    existingFilter.remove();
+  }
+
+  assignment
+    .getRange('A5:H5')
+    .clearDataValidations();
+
+  applyRangeDropdown_(
+    assignment,
+    'A5',
+    findHelperRange_(
+      custom,
+      'who choices',
+      'J5:J100'
+    )
+  );
+
+  applyRangeDropdown_(
+    assignment,
+    'B5',
+    findHelperRange_(
+      custom,
+      'block choices',
+      'K5:K100'
+    )
+  );
+
+  applyRangeDropdown_(
+    assignment,
+    'C5',
+    findHelperRange_(
+      custom,
+      'subject choices',
+      'L5:L100'
+    )
+  );
+
+  applyRangeDropdown_(
+    assignment,
+    'D5',
+    findHelperRange_(
+      custom,
+      'strand choices',
+      'M5:M100'
+    )
+  );
+
+  applyRangeDropdown_(
+    assignment,
+    'E5',
+    findHelperRange_(
+      custom,
+      'resource choices',
+      'O5:O100'
+    )
+  );
+
+  applyRangeDropdown_(
+    assignment,
+    'F5',
+    findHelperRange_(
+      custom,
+      'status choices',
+      'P5:P100'
+    )
+  );
+
+  assignment
+    .getRange('G5:H5')
+    .setNumberFormat('m/d/yyyy');
+
+  assignment.setFrozenRows(7);
+
+  assignment.setColumnWidth(1, 140);
+  assignment.setColumnWidth(2, 150);
+  assignment.setColumnWidth(3, 150);
+  assignment.setColumnWidth(4, 300);
+  assignment.setColumnWidth(5, 190);
+  assignment.setColumnWidth(6, 110);
+  assignment.setColumnWidth(7, 95);
+  assignment.setColumnWidth(8, 95);
+
+  SpreadsheetApp.flush();
+}
+
+
+function removeOldAssignmentSavedViewDropdown() {
+  const ss = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName(
+    'Assignment View'
+  );
+
+  if (!sheet) {
+    throw new Error(
+      'Sheet not found: Assignment View'
+    );
+  }
+
+  sheet
+    .getRange('F2:H2')
+    .clearContent()
+    .clearDataValidations()
+    .clearNote();
+
+  SpreadsheetApp.flush();
+}
+
+
+/************************************************************
+ * TERM GRID MAINTENANCE
+ ************************************************************/
+
+function cleanTermGridHeaderDropdowns() {
+  const ss = SpreadsheetApp.getActive();
+  const term = ss.getSheetByName('Term Grid');
+  const custom = ss.getSheetByName(
+    'Custom Views'
+  );
+
+  if (!term) {
+    throw new Error(
+      'Sheet not found: Term Grid'
+    );
+  }
+
+  if (!custom) {
+    throw new Error(
+      'Sheet not found: Custom Views'
+    );
+  }
+
+  const existingFilter = term.getFilter();
+
+  if (existingFilter) {
+    existingFilter.remove();
+  }
+
+  term
+    .getRange('A4:G4')
+    .clearDataValidations();
+
+  term.getRange('A4').setValue('Who / Group');
+  term.getRange('B4').setValue('Block / Loop');
+  term.getRange('C4').setValue('Subject Area');
+  term.getRange('D4').setValue('Strand');
+  term.getRange('E4').setValue('Resource');
+  term.getRange('F4').setValue('Term');
+  term.getRange('G4').setValue('Status');
+
+  term
+    .getRange('A5:G5')
+    .clearDataValidations();
+
+  applyRangeDropdown_(
+    term,
+    'A5',
+    findHelperRange_(
+      custom,
+      'who choices',
+      'J5:J100'
+    )
+  );
+
+  applyRangeDropdown_(
+    term,
+    'B5',
+    findHelperRange_(
+      custom,
+      'block choices',
+      'K5:K100'
+    )
+  );
+
+  applyRangeDropdown_(
+    term,
+    'C5',
+    findHelperRange_(
+      custom,
+      'subject choices',
+      'L5:L100'
+    )
+  );
+
+  applyRangeDropdown_(
+    term,
+    'D5',
+    findHelperRange_(
+      custom,
+      'strand choices',
+      'M5:M100'
+    )
+  );
+
+  applyRangeDropdown_(
+    term,
+    'E5',
+    findHelperRange_(
+      custom,
+      'resource choices',
+      'O5:O100'
+    )
+  );
+
+  applyListDropdown_(
+    term,
+    'F5',
+    [
+      'Term 1',
+      'Term 2',
+      'Term 3'
+    ]
+  );
+
+  applyRangeDropdown_(
+    term,
+    'G5',
+    findHelperRange_(
+      custom,
+      'status choices',
+      'P5:P100'
+    )
+  );
+
+  term.setFrozenRows(7);
+
+  SpreadsheetApp.flush();
+}
+
+
+/************************************************************
+ * SHARED DROPDOWN HELPERS
+ ************************************************************/
+
+function findHelperRange_(
+  helperSheet,
+  labelText,
+  fallbackA1
+) {
+  const searchRows = Math.min(
+    12,
+    helperSheet.getMaxRows()
+  );
+
+  const searchColumns =
+    helperSheet.getLastColumn();
+
+  const values = helperSheet
+    .getRange(
+      1,
+      1,
+      searchRows,
+      searchColumns
+    )
+    .getDisplayValues();
+
+  const target = labelText
+    .toLowerCase()
+    .trim();
+
+  for (let row = 0; row < values.length; row++) {
+    for (
+      let column = 0;
+      column < values[row].length;
+      column++
+    ) {
+      const cell = String(
+        values[row][column] || ''
+      )
+        .toLowerCase()
+        .trim();
+
+      if (cell.includes(target)) {
+        const startRow = row + 2;
+        const sourceColumn = column + 1;
+
+        return helperSheet.getRange(
+          startRow,
+          sourceColumn,
+          100,
+          1
+        );
+      }
+    }
+  }
+
+  return helperSheet.getRange(fallbackA1);
+}
+
+
+function applyRangeDropdown_(
+  targetSheet,
+  targetA1,
+  sourceRange
+) {
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(
+      sourceRange,
+      true
+    )
+    .setAllowInvalid(false)
+    .build();
+
+  targetSheet
+    .getRange(targetA1)
+    .setDataValidation(rule);
+}
+
+
+function applyListDropdown_(
+  targetSheet,
+  targetA1,
+  values
+) {
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(values, true)
+    .setAllowInvalid(false)
+    .build();
+
+  targetSheet
+    .getRange(targetA1)
+    .setDataValidation(rule);
+}
+/************************************************************
+ * FAMILY MAP: COMPACT CUSTOMIZE STRANDS EDITOR
+ *
+ * Paste this entire block at the BOTTOM of the current script.
+ * Run finishFamilyMapStrandEditor() once.
+ ************************************************************/
+
+function finishFamilyMapStrandEditor() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Family Map');
+
+  if (!sheet) {
+    throw new Error('The Family Map sheet was not found.');
+  }
+
+  const editor = findFamilyMapStrandEditor_(sheet);
+  const rowCount = editor.dataEndRow - editor.dataStartRow + 1;
+
+  if (rowCount < 1) {
+    throw new Error('No Customize Strands data rows were found.');
+  }
+
+  /*
+   * USE? CHECKBOXES
+   *
+   * Existing strand rows remain active.
+   * Blank custom rows remain unchecked.
+   */
+  const useRange = sheet.getRange(
+    editor.dataStartRow,
+    1,
+    rowCount,
+    1
+  );
+
+  const existingUseValues = useRange.getValues();
+
+  const fullLabels = sheet
+    .getRange(
+      editor.dataStartRow,
+      6,
+      rowCount,
+      1
+    )
+    .getDisplayValues();
+
+  const checkboxValues = existingUseValues.map(
+    (row, index) => {
+      const value = row[0];
+      const text = String(value)
+        .trim()
+        .toLowerCase();
+
+      const hasExistingLabel =
+        fullLabels[index][0].trim() !== '';
+
+      const isChecked =
+        value === true ||
+        text === 'true' ||
+        text === 'yes' ||
+        text === 'y' ||
+        text === '1' ||
+        text === '✓' ||
+        text === '✔' ||
+        text === '☑' ||
+        (
+          text === '' &&
+          hasExistingLabel
+        );
+
+      return [isChecked];
+    }
+  );
+
+  useRange.clearDataValidations();
+  useRange.insertCheckboxes();
+  useRange.setValues(checkboxValues);
+
+  /*
+   * FORM / STAGE DROPDOWN
+   */
+  const setup = ss.getSheetByName('Setup');
+
+  if (!setup) {
+    throw new Error('The Setup sheet was not found.');
+  }
+
+  const formRule = SpreadsheetApp
+    .newDataValidation()
+    .requireValueInRange(
+      setup.getRange('B38:B44'),
+      true
+    )
+    .setAllowInvalid(false)
+    .setHelpText(
+      'Choose the family stage or Form for this strand.'
+    )
+    .build();
+
+  sheet
+    .getRange(
+      editor.dataStartRow,
+      2,
+      rowCount,
+      1
+    )
+    .setDataValidation(formRule);
+
+  /*
+   * SUBJECT AREA SUGGESTIONS
+   *
+   * Existing subjects appear in the dropdown, but a parent
+   * may still type a new subject area.
+   */
+  const subjectValues = sheet
+    .getRange(
+      editor.dataStartRow,
+      3,
+      rowCount,
+      1
+    )
+    .getDisplayValues()
+    .flat()
+    .map(value => value.trim())
+    .filter(Boolean);
+
+  const uniqueSubjects = [
+    ...new Set(subjectValues)
+  ].sort();
+
+  if (uniqueSubjects.length > 0) {
+    const subjectRule = SpreadsheetApp
+      .newDataValidation()
+      .requireValueInList(
+        uniqueSubjects,
+        true
+      )
+      .setAllowInvalid(true)
+      .setHelpText(
+        'Choose an existing subject area or type a new one.'
+      )
+      .build();
+
+    sheet
+      .getRange(
+        editor.dataStartRow,
+        3,
+        rowCount,
+        1
+      )
+      .setDataValidation(subjectRule);
+  }
+
+  /*
+   * ENGINE COLUMN
+   */
+  sheet.hideColumns(6);
+
+  /*
+   * KEEP THE EDITOR COMPACT
+   *
+   * Leave the title row visible.
+   * Group everything beneath it through the end marker.
+   */
+  const groupStartRow = editor.titleRow + 1;
+  const groupRowCount =
+    editor.endMarkerRow - editor.titleRow;
+
+  const groupRange = sheet.getRange(
+    groupStartRow,
+    1,
+    groupRowCount,
+    1
+  );
+
+  // Remove an earlier copy of this exact grouping if rerun.
+  while (groupRange.getRowGroupDepth() > 0) {
+    groupRange.shiftRowGroupDepth(-1);
+  }
+
+  groupRange.shiftRowGroupDepth(1);
+
+  const group = sheet.getRowGroup(
+    groupStartRow,
+    1
+  );
+
+  if (group) {
+    group.collapse();
+  }
+
+  sheet
+    .getRange(editor.titleRow, 1)
+    .setNote(
+      'Use the + control beside these rows to review, rename, turn off, duplicate, or add strands. Turning off a strand does not delete existing resources or placements.'
+    );
+
+  /*
+   * FAMILY MAP EDITS
+   *
+   * The workbook's single simple onEdit(e) handles Family Map
+   * edits. Remove the older installed Family Map edit trigger
+   * so the same edit is never processed twice.
+   */
+  ScriptApp.getProjectTriggers()
+    .filter(trigger =>
+      trigger.getHandlerFunction() ===
+      'familyMapStrandEditorOnEdit'
+    )
+    .forEach(trigger =>
+      ScriptApp.deleteTrigger(trigger)
+    );
+
+  SpreadsheetApp.flush();
+  installFamilyMapCombineStrands_();
+  refreshStudentMenusFromFamilyMapIfAvailable_();
+
+  ss.toast(
+    'Customize Strands is ready and collapsed.',
+    'Family Map',
+    6
+  );
+}
+
+
+/**
+ * Runs automatically after finishFamilyMapStrandEditor()
+ * installs its trigger.
+ *
+ * Do not run this function manually.
+ */
+function familyMapStrandEditorOnEdit(e) {
+  if (!e || !e.range) return;
+
+  const sheet = e.range.getSheet();
+
+  if (sheet.getName() !== 'Family Map') {
+    return;
+  }
+
+  const editor =
+    findFamilyMapStrandEditor_(sheet);
+
+  const touchesEditorRows =
+    e.range.getLastRow() >= editor.dataStartRow &&
+    e.range.getRow() <= editor.dataEndRow;
+
+  const touchesEditableColumns =
+    e.range.getColumn() <= 4 &&
+    e.range.getLastColumn() >= 1;
+
+  if (
+    !touchesEditorRows ||
+    !touchesEditableColumns
+  ) {
+    return;
+  }
+
+  SpreadsheetApp.flush();
+  refreshStudentMenusFromFamilyMapIfAvailable_();
+}
+
+
+/**
+ * Finds the editor from its labels and marker instead of
+ * depending on fixed row numbers.
+ */
+function findFamilyMapStrandEditor_(sheet) {
+  const lastRow = sheet.getLastRow();
+
+  const columnA = sheet
+    .getRange(1, 1, lastRow, 1)
+    .getDisplayValues()
+    .flat()
+    .map(value => value.trim());
+
+  const titleIndex = columnA.findIndex(
+    value =>
+      value.toLowerCase() ===
+      'customize strands, optional'
+  );
+
+  const endIndex = columnA.findIndex(
+    value =>
+      value === 'END CUSTOMIZE STRANDS'
+  );
+
+  if (titleIndex < 0) {
+    throw new Error(
+      'Could not find "Customize Strands, optional" on Family Map.'
+    );
+  }
+
+  if (endIndex < 0) {
+    throw new Error(
+      'Could not find "END CUSTOMIZE STRANDS" on Family Map.'
+    );
+  }
+
+  const titleRow = titleIndex + 1;
+  const endMarkerRow = endIndex + 1;
+
+  let headerRow = -1;
+
+  for (
+    let row = titleRow + 1;
+    row < endMarkerRow;
+    row++
+  ) {
+    const headers = sheet
+      .getRange(row, 1, 1, 4)
+      .getDisplayValues()[0]
+      .map(value =>
+        value.trim().toLowerCase()
+      );
+
+    if (
+      headers[0] === 'use?' &&
+      headers[1] === 'form / stage' &&
+      headers[2] === 'subject area' &&
+      headers[3] === 'strand name'
+    ) {
+      headerRow = row;
+      break;
+    }
+  }
+
+  if (headerRow < 0) {
+    throw new Error(
+      'Could not find the Customize Strands header row.'
+    );
+  }
+
+  return {
+    titleRow,
+    headerRow,
+    dataStartRow: headerRow + 1,
+    dataEndRow: endMarkerRow - 1,
+    endMarkerRow
+  };
+}
+
+
+/**
+ * Calls the existing Student Work refresh function when it
+ * is present in the workbook script.
+ */
+function refreshStudentMenusFromFamilyMapIfAvailable_() {
+  if (
+    typeof refreshAllShrinkingStudentWorkMenus ===
+    'function'
+  ) {
+    refreshAllShrinkingStudentWorkMenus();
+    return;
+  }
+
+  if (
+    typeof refreshStudentWorkFormDropdowns ===
+    'function'
+  ) {
+    refreshStudentWorkFormDropdowns();
+  }
+}
+
+/************************************************************
+ * RESOURCE PLANNER: FOCUS WHILE ADDING
+ *
+ * Adds same-tab filters and summaries without sorting or
+ * moving Resource Planner records.
+ *
+ * Run installResourcePlannerFocusControls() once.
+ ************************************************************/
+
+function installResourcePlannerFocusControls() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Resource Planner');
+
+  if (!sheet) {
+    throw new Error('The Resource Planner sheet was not found.');
+  }
+
+  if (
+    sheet.getRange('D9').getDisplayValue() !== 'Strand' ||
+    sheet.getRange('E9').getDisplayValue() !== 'Resource'
+  ) {
+    throw new Error(
+      'The expected Resource Planner table was not found at row 9.'
+    );
+  }
+
+  // Show the compact control area above the existing table.
+  sheet.showRows(3, 6);
+  sheet.setRowHeight(3, 28);
+  sheet.setRowHeight(4, 30);
+  sheet.setRowHeight(5, 34);
+  sheet.setRowHeight(6, 30);
+  sheet.setRowHeight(7, 28);
+  sheet.setRowHeight(8, 8);
+
+  // Clear only the intended control area.
+  sheet.getRange('D3:J7').breakApart();
+  sheet.getRange('D3:J7').clearContent();
+  sheet.getRange('D3:J7').clearDataValidations();
+  sheet.getRange('D3:J7').clearNote();
+
+  // Instruction line.
+  sheet.getRange('D3:J3').merge();
+  sheet
+    .getRange('D3')
+    .setValue(
+      'Focus while adding: choose a strand to see what is already entered. Blank rows remain available for the next resource.'
+    )
+    .setFontStyle('italic')
+    .setFontColor('#385B63')
+    .setBackground('#EAF5F6')
+    .setWrap(true)
+    .setVerticalAlignment('middle');
+
+  // Filter labels.
+  sheet.getRange('D4').setValue('Who / Group');
+  sheet.getRange('E4').setValue('Subject Area');
+  sheet.getRange('F4:H4').merge().setValue('Focus Strand');
+  sheet.getRange('I4').setValue('Show');
+  sheet.getRange('J4').setValue('');
+
+  sheet
+    .getRange('D4:J4')
+    .setBackground('#2B8794')
+    .setFontColor('#FFFFFF')
+    .setFontWeight('bold')
+    .setVerticalAlignment('middle');
+
+  // Input cells.
+  sheet.getRange('F5:H5').merge();
+  sheet.getRange('D5').setValue('All');
+  sheet.getRange('E5').setValue('All');
+  sheet.getRange('F5').setValue('All');
+  sheet.getRange('I5').setValue('All');
+
+  sheet
+    .getRange('D5:I5')
+    .setBackground('#FFF7D6')
+    .setFontColor('#1266B3')
+    .setFontWeight('bold')
+    .setVerticalAlignment('middle');
+
+  // Summary strip.
+  sheet.getRange('D6').setValue('Resources Entered');
+  sheet.getRange('F6').setValue('Next Order');
+  sheet.getRange('H6').setValue('Planned Through');
+  sheet.getRange('J6').setValue('Set filters to All to reset.');
+
+  sheet
+    .getRange('D6:J6')
+    .setBackground('#F2F9FA')
+    .setFontColor('#385B63')
+    .setVerticalAlignment('middle');
+
+  sheet.getRange('D6').setFontWeight('bold');
+  sheet.getRange('F6').setFontWeight('bold');
+  sheet.getRange('H6').setFontWeight('bold');
+  sheet.getRange('J6').setFontStyle('italic').setFontSize(9);
+
+  sheet.getRange('E6').setFormula(
+    '=IF(OR($F$5="",$F$5="All"),COUNTIF($E$10:$E$69,"<>"),COUNTIFS($D$10:$D$69,$F$5,$E$10:$E$69,"<>"))'
+  );
+
+  sheet.getRange('G6').setFormula(
+    '=IF(OR($F$5="",$F$5="All"),"",IFERROR(MAX(FILTER($P$10:$P$69,$D$10:$D$69=$F$5,$E$10:$E$69<>""))+1,1))'
+  );
+
+  sheet.getRange('I6').setFormula(
+    '=IF(OR($F$5="",$F$5="All"),"",IFERROR(MAX(FILTER($S$10:$S$69,$D$10:$D$69=$F$5,$E$10:$E$69<>"")),""))'
+  );
+
+  sheet.getRange('I6').setNumberFormat('m/d/yyyy');
+  sheet.getRange('E6').setFontWeight('bold');
+  sheet.getRange('G6').setFontWeight('bold');
+  sheet.getRange('I6').setFontWeight('bold');
+
+  sheet.getRange('D7:J7').merge();
+  sheet
+    .getRange('D7')
+    .setValue(
+      'Rows are only hidden, never moved. With a Focus Strand selected, typing a Resource in a blank row fills that strand automatically.'
+    )
+    .setFontStyle('italic')
+    .setFontSize(9)
+    .setFontColor('#5F6F85')
+    .setBackground('#F8FBFC')
+    .setWrap(true);
+
+  // Helper lists live far to the right and stay hidden.
+  rpFocusRefreshLists_();
+  rpFocusApplyValidations_();
+  sheet.hideColumns(31, 4); // AE:AH
+
+  // Remove duplicate copies of this installed trigger.
+  const handlerName = 'resourcePlannerFocusOnEdit';
+  ScriptApp.getProjectTriggers()
+    .filter(trigger => trigger.getHandlerFunction() === handlerName)
+    .forEach(trigger => ScriptApp.deleteTrigger(trigger));
+
+  ScriptApp.newTrigger(handlerName)
+    .forSpreadsheet(ss)
+    .onEdit()
+    .create();
+
+  rpFocusApply_();
+  SpreadsheetApp.flush();
+
+  ss.toast(
+    'Resource Planner focus controls are ready.',
+    'Resource Planner',
+    6
+  );
+}
+
+
+/**
+ * Runs automatically after installResourcePlannerFocusControls().
+ * Do not run this function manually.
+ */
+function resourcePlannerFocusOnEdit(e) {
+  if (!e || !e.range) return;
+
+  const sheet = e.range.getSheet();
+  const sheetName = sheet.getName();
+
+  if (sheetName === 'Resource Planner') {
+    const range = e.range;
+
+    const touchesControls =
+      range.getLastRow() >= 5 &&
+      range.getRow() <= 5 &&
+      range.getLastColumn() >= 4 &&
+      range.getColumn() <= 9;
+
+    const touchesResourceRows =
+      range.getLastRow() >= 10 &&
+      range.getRow() <= 69 &&
+      range.getLastColumn() >= 4 &&
+      range.getColumn() <= 21;
+
+    if (!touchesControls && !touchesResourceRows) return;
+
+    // When Mom starts by typing a Resource, inherit the current Focus Strand.
+    if (
+      range.getNumRows() === 1 &&
+      range.getNumColumns() === 1 &&
+      range.getRow() >= 10 &&
+      range.getRow() <= 69 &&
+      range.getColumn() === 5
+    ) {
+      const row = range.getRow();
+      const resource = range.getDisplayValue().trim();
+      const strandCell = sheet.getRange(row, 4);
+      const focusStrand = sheet.getRange('F5').getDisplayValue().trim();
+
+      if (
+        resource &&
+        !strandCell.getDisplayValue().trim() &&
+        focusStrand &&
+        focusStrand !== 'All'
+      ) {
+        strandCell.setValue(focusStrand);
+      }
+    }
+
+    SpreadsheetApp.flush();
+    rpFocusRefreshLists_();
+    rpFocusApplyValidations_();
+    rpFocusApply_();
+    return;
+  }
+
+  // Keep filter choices current when upstream planning data changes.
+  if (
+    sheetName === 'Family Map' ||
+    sheetName === 'Setup' ||
+    sheetName === 'Strand Placement' ||
+    sheetName === 'Student Work'
+  ) {
+    rpFocusRefreshLists_();
+    rpFocusApplyValidations_();
+  }
+}
+
+
+/**
+ * Manual reset if hidden rows ever look wrong.
+ */
+function resetResourcePlannerFocus() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Resource Planner');
+
+  if (!sheet) {
+    throw new Error('The Resource Planner sheet was not found.');
+  }
+
+  sheet.getRange('D5').setValue('All');
+  sheet.getRange('E5').setValue('All');
+  sheet.getRange('F5').setValue('All');
+  sheet.getRange('I5').setValue('All');
+  sheet.showRows(10, 60);
+
+  SpreadsheetApp.flush();
+
+  ss.toast(
+    'Resource Planner focus was reset.',
+    'Resource Planner',
+    5
+  );
+}
+
+
+function rpFocusApply_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Resource Planner');
+
+  if (!sheet) return;
+
+  const whoFilter = sheet.getRange('D5').getDisplayValue().trim() || 'All';
+  const subjectFilter = sheet.getRange('E5').getDisplayValue().trim() || 'All';
+  const strandFilter = sheet.getRange('F5').getDisplayValue().trim() || 'All';
+  const showFilter = sheet.getRange('I5').getDisplayValue().trim() || 'All';
+
+  const values = sheet.getRange('C10:U69').getDisplayValues();
+  const visible = [];
+
+  values.forEach(row => {
+    const who = row[0].trim();       // C
+    const strand = row[1].trim();    // D
+    const resource = row[2].trim();  // E
+    const check = row[18].trim();    // U
+
+    const blankEntryRow = !strand && !resource;
+    const subject = rpFocusExtractSubject_(strand);
+
+    const matchesWho =
+      whoFilter === 'All' ||
+      who === whoFilter;
+
+    const matchesSubject =
+      subjectFilter === 'All' ||
+      subject === subjectFilter;
+
+    const matchesStrand =
+      strandFilter === 'All' ||
+      strand === strandFilter;
+
+    const matchesShow =
+      showFilter === 'All' ||
+      (showFilter === 'Needs Attention' && check !== '');
+
+    visible.push(
+      blankEntryRow ||
+      (
+        matchesWho &&
+        matchesSubject &&
+        matchesStrand &&
+        matchesShow
+      )
+    );
+  });
+
+  // Start from a clean visible state, then hide nonmatching blocks.
+  sheet.showRows(10, 60);
+
+  let blockStart = null;
+
+  for (let index = 0; index < visible.length; index++) {
+    if (!visible[index] && blockStart === null) {
+      blockStart = index;
+    }
+
+    const atEnd = index === visible.length - 1;
+    const blockEnds =
+      blockStart !== null &&
+      (visible[index] || atEnd);
+
+    if (blockEnds) {
+      const endIndex = visible[index] ? index - 1 : index;
+      const startRow = 10 + blockStart;
+      const count = endIndex - blockStart + 1;
+
+      if (count > 0) {
+        sheet.hideRows(startRow, count);
+      }
+
+      blockStart = null;
+    }
+  }
+}
+
+
+function rpFocusRefreshLists_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Resource Planner');
+
+  if (!sheet) return;
+
+  const activeStrands = rpFocusGetStrandChoices_(sheet);
+  const subjects = [
+    ...new Set(
+      activeStrands
+        .map(rpFocusExtractSubject_)
+        .filter(Boolean)
+    )
+  ].sort();
+
+  const whoValues = new Set(['Everyone']);
+
+  // Existing effective Who / Group values.
+  sheet
+    .getRange('C10:C69')
+    .getDisplayValues()
+    .flat()
+    .map(value => value.trim())
+    .filter(Boolean)
+    .forEach(value => whoValues.add(value));
+
+  const setup = ss.getSheetByName('Setup');
+
+  if (setup) {
+    // Active students.
+    const studentRows = setup.getRange('A6:B13').getValues();
+    studentRows.forEach(([active, name]) => {
+      if (rpFocusTruthy_(active) && String(name).trim()) {
+        whoValues.add(String(name).trim());
+      }
+    });
+
+    // Active groups.
+    const groupRows = setup.getRange('A17:B26').getValues();
+    groupRows.forEach(([active, name]) => {
+      if (rpFocusTruthy_(active) && String(name).trim()) {
+        whoValues.add(String(name).trim());
+      }
+    });
+  }
+
+  const whoChoices = ['All', ...[...whoValues].sort()];
+  const subjectChoices = ['All', ...subjects];
+  const strandChoices = ['All', ...activeStrands];
+  const showChoices = ['All', 'Needs Attention'];
+
+  sheet.getRange('AE4:AH200').clearContent();
+
+  sheet.getRange('AE4').setValue('Who Choices');
+  sheet.getRange('AF4').setValue('Subject Choices');
+  sheet.getRange('AG4').setValue('Strand Choices');
+  sheet.getRange('AH4').setValue('Show Choices');
+
+  sheet
+    .getRange(5, 31, whoChoices.length, 1)
+    .setValues(whoChoices.map(value => [value]));
+
+  sheet
+    .getRange(5, 32, subjectChoices.length, 1)
+    .setValues(subjectChoices.map(value => [value]));
+
+  sheet
+    .getRange(5, 33, strandChoices.length, 1)
+    .setValues(strandChoices.map(value => [value]));
+
+  sheet
+    .getRange(5, 34, showChoices.length, 1)
+    .setValues(showChoices.map(value => [value]));
+}
+
+
+function rpFocusApplyValidations_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Resource Planner');
+
+  if (!sheet) return;
+
+  const whoRule = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(sheet.getRange('AE5:AE100'), true)
+    .setAllowInvalid(false)
+    .build();
+
+  const subjectRule = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(sheet.getRange('AF5:AF100'), true)
+    .setAllowInvalid(false)
+    .build();
+
+  const strandRule = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(sheet.getRange('AG5:AG200'), true)
+    .setAllowInvalid(false)
+    .build();
+
+  const showRule = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(sheet.getRange('AH5:AH10'), true)
+    .setAllowInvalid(false)
+    .build();
+
+  sheet.getRange('D5').setDataValidation(whoRule);
+  sheet.getRange('E5').setDataValidation(subjectRule);
+  sheet.getRange('F5').setDataValidation(strandRule);
+  sheet.getRange('I5').setDataValidation(showRule);
+
+  rpFocusKeepValidSelection_(sheet.getRange('D5'), sheet.getRange('AE5:AE100'));
+  rpFocusKeepValidSelection_(sheet.getRange('E5'), sheet.getRange('AF5:AF100'));
+  rpFocusKeepValidSelection_(sheet.getRange('F5'), sheet.getRange('AG5:AG200'));
+  rpFocusKeepValidSelection_(sheet.getRange('I5'), sheet.getRange('AH5:AH10'));
+}
+
+
+function rpFocusKeepValidSelection_(targetCell, sourceRange) {
+  const current = targetCell.getDisplayValue().trim();
+  const choices = sourceRange
+    .getDisplayValues()
+    .flat()
+    .map(value => value.trim())
+    .filter(Boolean);
+
+  if (!current || !choices.includes(current)) {
+    targetCell.setValue('All');
+  }
+}
+
+
+function rpFocusGetStrandChoices_(sheet) {
+  const validation = sheet.getRange('D10').getDataValidation();
+
+  if (!validation) {
+    throw new Error(
+      'No Strand dropdown was found in Resource Planner!D10.'
+    );
+  }
+
+  const criteriaType = validation.getCriteriaType();
+  const criteriaValues = validation.getCriteriaValues();
+  let values = [];
+
+  if (
+    criteriaType ===
+    SpreadsheetApp.DataValidationCriteria.VALUE_IN_RANGE
+  ) {
+    values = criteriaValues[0]
+      .getDisplayValues()
+      .flat();
+  } else if (
+    criteriaType ===
+    SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST
+  ) {
+    values = criteriaValues[0];
+  } else {
+    throw new Error(
+      'The Resource Planner Strand validation is not a supported list or range.'
+    );
+  }
+
+  return [
+    ...new Set(
+      values
+        .map(value => String(value).trim())
+        .filter(Boolean)
+    )
+  ].sort();
+}
+
+
+function rpFocusExtractSubject_(strandLabel) {
+  const label = String(strandLabel || '').trim();
+
+  if (!label) return '';
+
+  const match = label.match(/^[^/]+\/\s*(.*?)\s*—/);
+  return match ? match[1].trim() : '';
+}
+
+
+function rpFocusTruthy_(value) {
+  if (value === true) return true;
+
+  const text = String(value)
+    .trim()
+    .toLowerCase();
+
+  return [
+    'true',
+    'yes',
+    'y',
+    '1',
+    '✓',
+    '✔',
+    '☑',
+    'checked'
+  ].includes(text);
+}
+
+function reorderPlannerTabs() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const originalActiveSheet = ss.getActiveSheet();
+
+  const desiredOrder = [
+    'Start Here',
+    'Setup',
+    'School Calendar',
+    'Family Map',
+    'Strand Placement',
+    'Student Work',
+    'Resource Planner',
+    'Term Grid',
+    'Daily Rhythm',
+    'Assignment View',
+    "What's Next",
+    'Generated Plan',
+    'Custom Views',
+    'Saved Views',
+    'Engine Helper',
+    'Helper Data'
+  ];
+
+  let position = 1;
+  const missingSheets = [];
+
+  desiredOrder.forEach(sheetName => {
+    const sheet = ss.getSheetByName(sheetName);
+
+    if (!sheet) {
+      missingSheets.push(sheetName);
+      return;
+    }
+
+    ss.setActiveSheet(sheet);
+    ss.moveActiveSheet(position);
+    position++;
+  });
+
+  // Restore whichever sheet was open before running.
+  if (originalActiveSheet) {
+    ss.setActiveSheet(originalActiveSheet);
+  }
+
+  SpreadsheetApp.flush();
+
+  const message = missingSheets.length
+    ? `Tabs reordered. Missing and skipped: ${missingSheets.join(', ')}`
+    : 'Planner tabs reordered successfully.';
+
+  ss.toast(message, 'CM Family Rhythm Planner', 7);
+}
+
+/************************************************************
+ * STUDENT WORK: PURPOSE + SECTION LABELS + MATCHING STYLE
+ *
+ * Paste this block at the very bottom of the existing script.
+ * Run polishStudentWorkGuidance() once.
+ ************************************************************/
+
+function polishStudentWorkGuidance() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Student Work');
+
+  if (!sheet) {
+    throw new Error('The Student Work sheet was not found.');
+  }
+
+  /*
+   * UPDATED STEP INSTRUCTION
+   */
+  sheet.getRange('A2').setValue(
+    "Step 5 • Place each child’s fixed individual work below. " +
+    "Shared family or group subjects and work that truly rotates in a loop " +
+    "belong on Strand Placement. Use Table Work with Mom for guided lessons " +
+    "and Independent Work for work the child handles alone. " +
+    "The summary above shows each child’s plan at a glance. " +
+    "Next: Resource Planner."
+  );
+
+  sheet.getRange('A2:G2')
+    .setWrap(true)
+    .setVerticalAlignment('middle');
+
+  sheet.setRowHeight(2, 42);
+
+  /*
+   * SECTION LABELS
+   *
+   * These rows are currently blank in the Student Work layout.
+   */
+  const summaryLabelRange = sheet.getRange('A3:C3');
+  const entryLabelRange = sheet.getRange('A22:G22');
+
+  if (
+    summaryLabelRange.getDisplayValues().flat().some(Boolean) ||
+    entryLabelRange.getDisplayValues().flat().some(Boolean)
+  ) {
+    throw new Error(
+      'Rows 3 or 22 are no longer blank. No section labels were added.'
+    );
+  }
+
+  summaryLabelRange.breakApart();
+  entryLabelRange.breakApart();
+
+  summaryLabelRange.merge();
+  entryLabelRange.merge();
+
+  summaryLabelRange
+    .setValue('Student Work at a Glance')
+    .setBackground('#F2F9FA')
+    .setFontColor('#09454E')
+    .setFontWeight('bold')
+    .setHorizontalAlignment('left')
+    .setVerticalAlignment('middle');
+
+  entryLabelRange
+    .setValue('Place Individual Student Work')
+    .setBackground('#F2F9FA')
+    .setFontColor('#09454E')
+    .setFontWeight('bold')
+    .setHorizontalAlignment('left')
+    .setVerticalAlignment('middle');
+
+  sheet.setRowHeight(3, 24);
+  sheet.setRowHeight(22, 24);
+
+  /*
+   * MATCH THE OTHER PARENT-FACING TABLE HEADERS
+   */
+  const teal = '#2F858C';
+
+  sheet.getRange('A4:C4')
+    .setBackground(teal)
+    .setWrap(true)
+    .setFontColor('#FFFFFF')
+    .setFontWeight('bold')
+    .setVerticalAlignment('middle');
+
+  sheet.getRange('A23:G23')
+    .setBackground(teal)
+    .setWrap(true)
+    .setFontColor('#FFFFFF')
+    .setFontWeight('bold')
+    .setVerticalAlignment('middle');
+
+  sheet.setRowHeight(4, 30);
+  sheet.setRowHeight(23, 30);
+
+  /*
+   * MAKE THE SUMMARY EASIER TO READ
+   */
+  sheet.setColumnWidth(1, 150);
+  sheet.setColumnWidth(2, 340);
+  sheet.setColumnWidth(3, 340);
+
+  sheet.getRange('A5:C19')
+    .setWrap(true)
+    .setVerticalAlignment('top');
+
+  sheet.autoResizeRows(5, 15);
+
+  /*
+   * KEEP THE ENTRY TABLE PRACTICAL
+   */
+  sheet.setColumnWidth(4, 170);
+  sheet.setColumnWidth(5, 150);
+  sheet.setColumnWidth(6, 200);
+  sheet.setColumnWidth(7, 210);
+
+  SpreadsheetApp.flush();
+
+  ss.toast(
+    'Student Work guidance and styling updated.',
+    'Student Work',
+    6
+  );
+}/************************************************************
+ * SCHOOL CALENDAR EXCEPTION CONTROLS
+ *
+ * Paste this block at the very bottom of the existing script.
+ * Run installSchoolCalendarExceptionControls() once.
+ *
+ * Do NOT run schoolCalendarExceptionDefaultsOnEdit() manually.
+ ************************************************************/
+
+function installSchoolCalendarExceptionControls() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('School Calendar');
+
+  if (!sheet) {
+    throw new Error('The School Calendar sheet was not found.');
+  }
+
+  const firstDataRow = 16;
+  const lastDataRow = 35;
+  const rowCount = lastDataRow - firstDataRow + 1;
+
+  const dateRule = SpreadsheetApp.newDataValidation()
+    .requireDate()
+    .setAllowInvalid(false)
+    .setHelpText('Choose a valid calendar date.')
+    .build();
+
+  sheet.getRange(firstDataRow, 1, rowCount, 2)
+    .setDataValidation(dateRule)
+    .setNumberFormat('m/d/yyyy');
+
+  const appliesOnRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(
+      ['All dates', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      true
+    )
+    .setAllowInvalid(false)
+    .setHelpText(
+      'Choose All dates, or choose one weekday for a recurring exception.'
+    )
+    .build();
+
+  sheet.getRange(firstDataRow, 3, rowCount, 1)
+    .setDataValidation(appliesOnRule);
+
+  const dayTypeSource = sheet.getRange('N5:N13');
+
+  const dayTypeRule = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(dayTypeSource, true)
+    .setAllowInvalid(false)
+    .setHelpText('Choose the kind of calendar exception.')
+    .build();
+
+  sheet.getRange(firstDataRow, 4, rowCount, 1)
+    .setDataValidation(dayTypeRule);
+
+  sheet.getRange(firstDataRow, 6, rowCount, 1)
+    .insertCheckboxes();
+
+  const rhythmSource = sheet.getRange('P5:P11');
+
+  const rhythmRule = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(rhythmSource, true)
+    .setAllowInvalid(false)
+    .setHelpText('Choose how the normal school rhythm changes.')
+    .build();
+
+  sheet.getRange(firstDataRow, 7, rowCount, 1)
+    .setDataValidation(rhythmRule);
+
+  sheet.getRange(firstDataRow, 5, rowCount, 1)
+    .setWrap(true)
+    .setVerticalAlignment('top');
+
+  sheet.setColumnWidth(1, 105);
+  sheet.setColumnWidth(2, 105);
+  sheet.setColumnWidth(3, 120);
+  sheet.setColumnWidth(4, 165);
+  sheet.setColumnWidth(5, 235);
+  sheet.setColumnWidth(6, 125);
+  sheet.setColumnWidth(7, 185);
+
+  const handlerName = 'schoolCalendarExceptionDefaultsOnEdit';
+
+  ScriptApp.getProjectTriggers().forEach(trigger => {
+    if (trigger.getHandlerFunction() === handlerName) {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+
+  ScriptApp.newTrigger(handlerName)
+    .forSpreadsheet(ss)
+    .onEdit()
+    .create();
+
+  SpreadsheetApp.flush();
+
+  ss.toast(
+    'Calendar date pickers, dropdowns, and checkboxes are ready.',
+    'School Calendar',
+    7
+  );
+}
+
+function schoolCalendarExceptionDefaultsOnEdit(e) {
+  if (!e || !e.range) return;
+
+  const sheet = e.range.getSheet();
+
+  if (sheet.getName() !== 'School Calendar') return;
+
+  const row = e.range.getRow();
+  const column = e.range.getColumn();
+
+  if (row < 16 || row > 35 || column !== 4) return;
+
+  const dayType = String(e.range.getDisplayValue()).trim();
+  const schoolDayCell = sheet.getRange(row, 6);
+
+  const defaultCountsAsSchoolDay = {
+    'Break': false,
+    'Holiday': false,
+    'Co-op Day': true,
+    'Park Day': true,
+    'Nature Day': true,
+    'Appointment / Short Day': true,
+    'Travel Day': true,
+    'Other': true
+  };
+
+  if (!dayType) {
+    schoolDayCell.clearContent();
+    return;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      defaultCountsAsSchoolDay,
+      dayType
+    )
+  ) {
+    schoolDayCell.setValue(defaultCountsAsSchoolDay[dayType]);
+  }
+}/************************************************************
+ * CM FAMILY RHYTHM PLANNER: DOPAMINE PASS 1
+ * Safe, cosmetic, and navigational only.
+ * Paste at the bottom of the existing script.
+ * Run installPlannerDopaminePassOne() once.
+ ************************************************************/
+
+function installPlannerDopaminePassOne() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  const tabColors = {
+    'Start Here': '#FBD060',
+    'Setup': '#17626D',
+    'School Calendar': '#17626D',
+    'Family Map': '#17626D',
+    'Strand Placement': '#E44349',
+    'Student Work': '#E44349',
+    'Resource Planner': '#E44349',
+    'Term Grid': '#1FB6B6',
+    'Daily Rhythm': '#1FB6B6',
+    'Assignment View': '#1FB6B6',
+    "What's Next": '#1FB6B6',
+    'Generated Plan': '#B8C4CC',
+    'Custom Views': '#B8C4CC',
+    'Saved Views': '#B8C4CC',
+    'Engine Helper': '#B8C4CC',
+    'Helper Data': '#B8C4CC'
+  };
+
+  Object.entries(tabColors).forEach(([sheetName, color]) => {
+    const sheet = ss.getSheetByName(sheetName);
+    if (sheet) sheet.setTabColor(color);
+  });
+
+  const startHere = ss.getSheetByName('Start Here');
+
+  if (startHere) {
+    const workflowRange = startHere.getRange('A4:C15');
+    const values = workflowRange.getDisplayValues();
+
+    const linkableSheets = [
+      'Setup',
+      'School Calendar',
+      'Family Map',
+      'Strand Placement',
+      'Student Work',
+      'Resource Planner',
+      'Term Grid',
+      'Daily Rhythm',
+      'Assignment View',
+      "What's Next"
+    ];
+
+    values.forEach((rowValues, rowOffset) => {
+      rowValues.forEach((displayText, columnOffset) => {
+        const text = String(displayText || '').trim();
+        if (!text) return;
+
+        const matchedName = linkableSheets.find(sheetName =>
+          text.toLowerCase().includes(sheetName.toLowerCase())
+        );
+
+        const looksLikeStep =
+          /^step\s*\d+/i.test(text) ||
+          /^\d+[\.\)]\s*/.test(text) ||
+          text === matchedName;
+
+        if (!matchedName || !looksLikeStep) return;
+
+        const targetSheet = ss.getSheetByName(matchedName);
+        if (!targetSheet) return;
+
+        const targetUrl =
+          ss.getUrl() +
+          '#gid=' +
+          targetSheet.getSheetId() +
+          '&range=A1';
+
+        const richText = SpreadsheetApp.newRichTextValue()
+          .setText(text)
+          .setLinkUrl(targetUrl)
+          .build();
+
+        workflowRange
+          .getCell(rowOffset + 1, columnOffset + 1)
+          .setRichTextValue(richText);
+      });
+    });
+  }
+
+  const schoolCalendar = ss.getSheetByName('School Calendar');
+
+  if (schoolCalendar) {
+    schoolCalendar.getRange('A15').setNote(
+      'Double-click a Start Date cell below to choose a date from the calendar.'
+    );
+
+    schoolCalendar.getRange('B15').setNote(
+      'Double-click an End Date cell below to choose a date from the calendar.'
+    );
+
+    const helperCell = schoolCalendar.getRange('A13');
+    const currentHelper = String(helperCell.getDisplayValue() || '').trim();
+    const dateTip =
+      'Tip: Double-click a Start Date or End Date cell to open the calendar.';
+
+    if (!currentHelper.includes('Double-click')) {
+      helperCell.setValue(
+        currentHelper ? currentHelper + ' ' + dateTip : dateTip
+      );
+    }
+
+    schoolCalendar.getRange('A13:G13')
+      .setWrap(true)
+      .setVerticalAlignment('middle');
+  }
+
+  SpreadsheetApp.flush();
+
+  ss.toast(
+    'Tab colors, Start Here links, and date-picker clues are ready.',
+    'Dopamine Pass 1',
+    7
+  );
+}/************************************************************
+ * REPAIR START HERE LINKS
+ *
+ * Paste this block at the very bottom of the existing script.
+ * Run repairStartHereLinks() once.
+ ************************************************************/
+
+function repairStartHereLinks() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const startHere = ss.getSheetByName('Start Here');
+
+  if (!startHere) {
+    throw new Error('The Start Here sheet was not found.');
+  }
+
+  const workflow = [
+    [4, 'Setup'],
+    [5, 'School Calendar'],
+    [6, 'Family Map'],
+    [7, 'Strand Placement'],
+    [8, 'Student Work'],
+    [9, 'Resource Planner'],
+    [10, 'Term Grid'],
+    [11, 'Daily Rhythm'],
+    [12, 'Assignment View'],
+    [13, "What's Next"]
+  ];
+
+  workflow.forEach(([row, sheetName]) => {
+    const targetSheet = ss.getSheetByName(sheetName);
+
+    if (!targetSheet) {
+      return;
+    }
+
+    const targetUrl =
+      ss.getUrl() +
+      '#gid=' +
+      targetSheet.getSheetId() +
+      '&range=A1';
+
+    const safeUrl = targetUrl.replace(/"/g, '""');
+    const safeLabel = sheetName.replace(/"/g, '""');
+
+    startHere
+      .getRange(row, 2)
+      .setFormula('=HYPERLINK("' + safeUrl + '","' + safeLabel + '")')
+      .setFontColor('#17416B')
+      .setFontWeight('bold')
+      .setFontLine('underline');
+  });
+
+  SpreadsheetApp.flush();
+
+  ss.toast(
+    'Start Here workflow links repaired.',
+    'Start Here',
+    6
+  );
+}
+
+/************************************************************
+ * FAMILY MAP: COMBINE STRANDS
+ *
+ * Run installFamilyMapCombineStrands() once after replacing
+ * the complete script.
+ *
+ * The visible Family Map choice stays friendly in column E.
+ * The stable keeper Slot ID is stored in Helper Data column AK.
+ ************************************************************/
+
+function installFamilyMapCombineStrands() {
+  installFamilyMapCombineStrands_();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  ss.toast(
+    'Family Map combine-strand dropdowns and stable links are ready.',
+    'Family Map',
+    7
+  );
+}
+
+
+function installFamilyMapCombineStrands_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const familyMap = ss.getSheetByName('Family Map');
+  const setup = ss.getSheetByName('Setup');
+  const helper = ss.getSheetByName('Helper Data');
+
+  if (!familyMap || !setup || !helper) {
+    throw new Error(
+      'Family Map, Setup, or Helper Data was not found.'
+    );
+  }
+
+  if (
+    familyMap.getRange('A45').getDisplayValue().trim() !== 'Use?' ||
+    familyMap.getRange('E45').getDisplayValue().trim() !== 'Combine Into'
+  ) {
+    throw new Error(
+      'The expected Family Map strand editor was not found at row 45.'
+    );
+  }
+
+  // Ensure the general-purpose stage exists and stays active.
+  setup.getRange('A44').setValue(true);
+  setup.getRange('B44').setValue('Family Choice');
+
+  const formRule = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(
+      setup.getRange('B38:B44'),
+      true
+    )
+    .setAllowInvalid(false)
+    .setHelpText(
+      'Choose the family stage or Form for this strand.'
+    )
+    .build();
+
+  familyMap
+    .getRange('B46:B147')
+    .setDataValidation(formRule);
+
+  const combineRule = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(
+      helper.getRange('AO5:AO106'),
+      true
+    )
+    .setAllowInvalid(false)
+    .setHelpText(
+      'Leave blank to keep this strand separate. Choose the strand that should remain to combine it.'
+    )
+    .build();
+
+  familyMap
+    .getRange('E46:E147')
+    .setDataValidation(combineRule);
+
+  // Remove the older installed Family Map edit trigger.
+  // The single simple onEdit(e) now handles this workflow.
+  ScriptApp.getProjectTriggers()
+    .filter(trigger =>
+      trigger.getHandlerFunction() ===
+      'familyMapStrandEditorOnEdit'
+    )
+    .forEach(trigger =>
+      ScriptApp.deleteTrigger(trigger)
+    );
+
+  SpreadsheetApp.flush();
+}
+
+
+function handleFamilyMapCombineEdit_(e) {
+  const range = e.range;
+
+  if (
+    range.getLastRow() < 46 ||
+    range.getRow() > 147 ||
+    range.getLastColumn() < 1 ||
+    range.getColumn() > 7
+  ) {
+    return;
+  }
+
+  const lock = LockService.getDocumentLock();
+
+  if (!lock.tryLock(3000)) {
+    return;
+  }
+
+  try {
+    const touchesCombine =
+      range.getColumn() <= 5 &&
+      range.getLastColumn() >= 5;
+
+    const touchesKeeperDefinition =
+      range.getColumn() <= 4 &&
+      range.getLastColumn() >= 1;
+
+    if (touchesCombine) {
+      if (
+        range.getNumRows() > 1 ||
+        range.getNumColumns() > 1
+      ) {
+        rebuildFamilyMapCombineIdsFromFriendlyText_();
+      } else {
+        storeFamilyMapKeeperIdForRow_(range.getRow());
+      }
+    }
+
+    if (touchesKeeperDefinition) {
+      SpreadsheetApp.flush();
+      refreshFamilyMapFriendlyKeeperText_(
+        range.getRow(),
+        range.getLastRow()
+      );
+    }
+
+    SpreadsheetApp.flush();
+    refreshStudentMenusFromFamilyMapIfAvailable_();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+function storeFamilyMapKeeperIdForRow_(familyMapRow) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const familyMap = ss.getSheetByName('Family Map');
+  const helper = ss.getSheetByName('Helper Data');
+
+  const helperRow = familyMapRow - 41;
+  const friendlyCell = familyMap.getRange(familyMapRow, 5);
+  const selectedText = friendlyCell
+    .getDisplayValue()
+    .trim();
+
+  const targetIdCell = helper.getRange(helperRow, 37); // AK
+
+  if (!selectedText) {
+    targetIdCell.clearContent();
+    return;
+  }
+
+  const choices = helper
+    .getRange('AO5:AP106')
+    .getDisplayValues();
+
+  const matchIndex = choices.findIndex(
+    row => row[0].trim() === selectedText
+  );
+
+  if (matchIndex < 0) {
+    rejectFamilyMapCombineChoice_(
+      friendlyCell,
+      targetIdCell,
+      'That keeper is no longer available.'
+    );
+    return;
+  }
+
+  const targetHelperRow = matchIndex + 5;
+  const targetId = helper
+    .getRange(targetHelperRow, 42) // AP
+    .getValue();
+
+  const ownId = helper
+    .getRange(helperRow, 1) // A
+    .getValue();
+
+  if (
+    String(targetId).trim() === '' ||
+    String(ownId).trim() === ''
+  ) {
+    rejectFamilyMapCombineChoice_(
+      friendlyCell,
+      targetIdCell,
+      'The selected strand does not have a valid Slot ID.'
+    );
+    return;
+  }
+
+  if (String(targetId) === String(ownId)) {
+    rejectFamilyMapCombineChoice_(
+      friendlyCell,
+      targetIdCell,
+      'A strand cannot combine into itself.'
+    );
+    return;
+  }
+
+  const targetRowById =
+    findFamilyMapHelperRowBySlotId_(helper, targetId);
+
+  if (!targetRowById) {
+    rejectFamilyMapCombineChoice_(
+      friendlyCell,
+      targetIdCell,
+      'The selected keeper could not be found.'
+    );
+    return;
+  }
+
+  const targetIsActive = helper
+    .getRange(targetRowById, 6) // F
+    .getDisplayValue()
+    .trim() !== '';
+
+  if (!targetIsActive) {
+    rejectFamilyMapCombineChoice_(
+      friendlyCell,
+      targetIdCell,
+      'Choose an active strand as the keeper.'
+    );
+    return;
+  }
+
+  const targetAlreadyCombines = helper
+    .getRange(targetRowById, 37) // AK
+    .getDisplayValue()
+    .trim() !== '';
+
+  if (targetAlreadyCombines) {
+    rejectFamilyMapCombineChoice_(
+      friendlyCell,
+      targetIdCell,
+      'The keeper cannot combine into another strand.'
+    );
+    return;
+  }
+
+  targetIdCell.setValue(targetId);
+}
+
+
+function rebuildFamilyMapCombineIdsFromFriendlyText_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const familyMap = ss.getSheetByName('Family Map');
+
+  for (let row = 46; row <= 147; row++) {
+    const friendly = familyMap
+      .getRange(row, 5)
+      .getDisplayValue()
+      .trim();
+
+    if (friendly) {
+      storeFamilyMapKeeperIdForRow_(row);
+    } else {
+      ss.getSheetByName('Helper Data')
+        .getRange(row - 41, 37)
+        .clearContent();
+    }
+  }
+}
+
+
+function refreshFamilyMapFriendlyKeeperText_(
+  firstFamilyMapRow,
+  lastFamilyMapRow
+) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const familyMap = ss.getSheetByName('Family Map');
+  const helper = ss.getSheetByName('Helper Data');
+
+  const slotIds = helper
+    .getRange('A5:A106')
+    .getValues()
+    .flat();
+
+  const targetIds = helper
+    .getRange('AK5:AK106')
+    .getValues()
+    .flat();
+
+  const choiceRows = helper
+    .getRange('AO5:AP106')
+    .getDisplayValues();
+
+  const friendlyById = new Map();
+
+  choiceRows.forEach(([friendly, id]) => {
+    const key = String(id).trim();
+
+    if (friendly.trim() && key) {
+      friendlyById.set(key, friendly.trim());
+    }
+  });
+
+  for (
+    let familyRow = firstFamilyMapRow;
+    familyRow <= lastFamilyMapRow;
+    familyRow++
+  ) {
+    const helperRowIndex = familyRow - 46;
+    const keeperId = String(
+      slotIds[helperRowIndex] || ''
+    ).trim();
+
+    if (!keeperId) continue;
+
+    const newFriendlyText =
+      friendlyById.get(keeperId);
+
+    if (!newFriendlyText) continue;
+
+    targetIds.forEach((storedTargetId, sourceIndex) => {
+      if (
+        String(storedTargetId).trim() === keeperId
+      ) {
+        familyMap
+          .getRange(sourceIndex + 46, 5)
+          .setValue(newFriendlyText);
+      }
+    });
+  }
+}
+
+
+function findFamilyMapHelperRowBySlotId_(
+  helper,
+  slotId
+) {
+  const ids = helper
+    .getRange('A5:A106')
+    .getValues()
+    .flat();
+
+  const index = ids.findIndex(
+    value =>
+      String(value).trim() ===
+      String(slotId).trim()
+  );
+
+  return index < 0 ? null : index + 5;
+}
+
+
+function rejectFamilyMapCombineChoice_(
+  friendlyCell,
+  targetIdCell,
+  message
+) {
+  friendlyCell.clearContent();
+  targetIdCell.clearContent();
+
+  SpreadsheetApp.getActiveSpreadsheet().toast(
+    message,
+    'Combine Strands',
+    6
+  );
+
+}
