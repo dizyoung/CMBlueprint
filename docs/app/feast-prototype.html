@@ -38,6 +38,12 @@
     display: inline-block; font-size: 10px; border-radius: 9px; padding: 2px 7px; margin-top: 4px;
     background: var(--field-mint); color: var(--wonder-marine); border: 1px solid var(--border);
   }
+  .strand-chip .chip-members { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .strand-chip .chip-consequence { font-size: 11px; color: var(--navy-story); margin-top: 3px; line-height: 1.35; }
+  .setup-warning-banner {
+    border: 1px solid var(--sunshine); border-left: 5px solid var(--sunshine); background: #fbf6e6;
+    border-radius: 10px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px;
+  }
   .strand-chip .chip-warn { font-size: 10px; color: var(--poppy); margin-top: 4px; }
   .strand-chip .chip-controls { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
   .strand-chip .chip-use { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 5px; cursor: pointer; }
@@ -105,6 +111,7 @@
     .strand-chip.state-covered-by-loop .chip-badge { background: #16293a; color: #a8cdec; }
     .strand-chip.state-in-loop-not-placed .chip-badge { background: #332d16; color: #e2cf94; }
     .proto-badge { background: #6a5400; color: #ffe9a8; }
+    .setup-warning-banner { background: #262214; }
   }
 </style>
 </head>
@@ -123,6 +130,8 @@
   </p>
 </div>
 
+<div id="setup-banner"></div>
+
 <div id="save-bar"></div>
 
 <h1 class="page-title">Feast Planning Prototype</h1>
@@ -133,6 +142,7 @@
 </p>
 
 <div class="toolbar">
+  <a href="./setup-prototype.html">← Back to Setup</a>
   <a href="./family-school-map.html">← Back to Family School Map</a>
   <span class="build-label" title="Build identifier">build:feast-prototype</span>
   <button type="button" id="reset-proto-btn" class="danger">Reset prototype choices</button>
@@ -258,31 +268,44 @@ function whoValueForRow(row) {
   return '';
 }
 
+// Options come from ONE place: A.buildAudienceOptions(state) — the same source
+// the Setup page writes against. This page never re-derives audience itself.
 function whoSelectHTML(row) {
   var current = whoValueForRow(row);
+  var options = arr(A.buildAudienceOptions(state));
   var html = '<select data-role="who" data-strand="' + escH(row.strandId) + '" aria-label="Who is this for?">';
   function opt(value, label) {
     html += '<option value="' + escH(value) + '"' + (value === current ? ' selected' : '') + '>' + escH(label) + '</option>';
   }
   opt('', 'Not decided yet');
-  opt('everyone', 'Everyone');
-  (state.groups || []).filter(function (g) { return g.active; }).forEach(function (g) {
-    opt('group:' + g.id, g.label);
+  options.forEach(function (o) {
+    // Membership must be visible in the option itself — never re-entered.
+    var label = o.label;
+    if ((o.kind === 'group' || o.kind === 'everyone') && o.memberNames.length) {
+      label += ' — ' + o.memberNames.join(' + ');
+    }
+    opt(o.value, label);
   });
-  (state.students || []).filter(function (s) { return s.active; }).forEach(function (s) {
-    opt('student:' + s.id, s.name);
-  });
-  (state.loops || []).forEach(function (l) {
-    opt('loop:' + l.id, 'In: ' + (l.title || l.id));
-  });
-  opt('coop', 'Co-op / outside');
-  // A stored value that is no longer offered (e.g. a deleted loop) still needs
-  // to show, or the select would silently lie about what is saved.
+  // A stored value that is no longer offered (e.g. a deleted loop or group)
+  // still needs to show, or the select would silently lie about what is saved.
   if (current && html.indexOf('value="' + escH(current) + '"') === -1) {
     opt(current, row.whoLabel || current);
   }
   html += '</select>';
   return html;
+}
+
+function audienceHelperHTML(row) {
+  var current = whoValueForRow(row);
+  if (!current) return '';
+  var out = '';
+  var opt = arr(A.buildAudienceOptions(state)).find(function (o) { return o.value === current; });
+  if (opt && opt.memberNames.length) {
+    out += '<div class="chip-members">' + escH(opt.memberNames.join(', ')) + '</div>';
+  }
+  var sentence = A.describeAudienceConsequence(state, current, row.label);
+  if (sentence) out += '<div class="chip-consequence">' + escH(sentence) + '</div>';
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -299,6 +322,7 @@ function chipHTML(row) {
   html += '<label class="chip-use"><input type="checkbox" data-role="use" data-strand="' + escH(row.strandId) + '"' +
     (row.activeThisYear ? ' checked' : '') + '> Use this year</label>';
   html += whoSelectHTML(row);
+  html += audienceHelperHTML(row);
   html += '</div></div>';
   return html;
 }
@@ -373,7 +397,19 @@ function renderStillToPlace(rows) {
   document.getElementById('still-panel').innerHTML = html;
 }
 
+// Non-blocking: the grid always still renders underneath this.
+function renderSetupBanner() {
+  var el = document.getElementById('setup-banner');
+  if (!el) return;
+  var ready = false;
+  try { ready = A.getSetupProgress(state).readyForFeast === true; } catch (e) { ready = false; }
+  el.innerHTML = ready ? '' :
+    '<div class="setup-warning-banner">Setup is not finished — Who/Group choices may be incomplete. ' +
+    '<a href="./setup-prototype.html">Finish Setup</a></div>';
+}
+
 function render() {
+  renderSetupBanner();
   // A stale/older lib/familyMap.mjs cannot build the feast. Say so plainly
   // rather than painting an empty grid that looks like "you have no subjects".
   if (moduleIsStale()) {

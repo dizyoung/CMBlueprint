@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Setup Prototype</title>
+<link rel="stylesheet" href="./shared.css">
+<style>
+  .proto-badge {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+    background: var(--sunshine); color: #5a4400; border-radius: 12px; padding: 5px 12px;
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+  .proto-note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  #save-bar #reset-btn { display: none; }
+  .build-label { font-size: 10px; color: var(--muted); font-family: monospace; }
+
+  /* ---- Progress bar ---- */
+  .setup-progress { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 18px; }
+  .setup-step-btn {
+    flex: 1 1 160px; text-align: left; border: 1px solid var(--border); border-left: 5px solid var(--border);
+    background: var(--milk-white); border-radius: 10px; padding: 8px 10px; cursor: pointer; font: inherit;
+    color: var(--ink);
+  }
+  .setup-step-btn .step-name { font-weight: 600; font-size: 13px; }
+  .setup-step-btn .step-detail { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .setup-step-btn.is-complete { border-left-color: #4a9b5e; }
+  .setup-step-btn.is-incomplete { border-left-color: var(--sunshine); }
+  .setup-step-btn.is-current { outline: 2px solid var(--lagoon-light); }
+  .step-mark { font-size: 11px; font-weight: 700; margin-left: 6px; }
+  .step-mark.done { color: #24632f; }
+  .step-mark.todo { color: var(--muted); }
+
+  /* ---- Tables / rows ---- */
+  table.setup { border-collapse: collapse; width: 100%; background: var(--milk-white); border-radius: 10px; overflow: hidden; }
+  table.setup th, table.setup td { border: 1px solid var(--border); padding: 6px 8px; font-size: 12px; vertical-align: top; text-align: left; }
+  table.setup th { background: var(--field-mint); color: var(--navy-story); font-weight: 600; }
+  .setup-scroll { overflow-x: auto; }
+  .day-cell-available { color: #24632f; }
+  .day-cell-blocked { color: var(--poppy); }
+  .day-cell-off { color: var(--muted); font-style: italic; }
+  .day-cell-partial { color: #6a5400; }
+
+  .suggest-tag { font-size: 11px; color: #6a5400; background: #f7f4ea; border: 1px solid var(--border); border-radius: 8px; padding: 1px 6px; }
+  .unconfirmed-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.3px; color: var(--poppy); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+  .member-line { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .group-card, .commit-card, .loop-card {
+    border: 1px solid var(--border); border-left: 4px solid var(--lagoon-light); border-radius: 10px;
+    background: var(--milk-white); padding: 10px 12px; margin-bottom: 10px;
+  }
+  .group-card.fixed-card { border-left-color: var(--navy-story); }
+  .daybox { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; margin-right: 8px; }
+  .row-actions { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .hint { font-size: 11px; color: var(--muted); font-weight: 400; }
+  .guide ol { margin: 6px 0 0; padding-left: 20px; font-size: 13px; }
+  .guide li { margin-bottom: 3px; }
+  input[type="text"] { font: inherit; font-size: 12px; padding: 3px 5px; }
+  select { font: inherit; font-size: 12px; padding: 3px 5px; }
+
+  /* ---- Stale-module banner ---- */
+  .stale-module-banner {
+    border: 1px solid var(--poppy); border-left: 5px solid var(--poppy); background: var(--blush);
+    border-radius: 10px; padding: 14px 16px; font-size: 13px; color: var(--ink);
+  }
+  .stale-module-banner p { margin: 8px 0 0; line-height: 1.5; }
+  .stale-module-banner code { font-family: monospace; font-size: 12px; }
+  .stale-module-banner kbd {
+    font-family: monospace; font-size: 11px; border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 5px; background: var(--milk-white);
+  }
+  .stale-module-banner .stale-detail { font-size: 11px; color: var(--muted); font-family: monospace; }
+
+  /* ---- Dark mode ---- */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --border: #2b4247;
+      --field-mint: #10262a;
+      --milk-white: #0d1c20;
+      --ink: #e6f1f2;
+      --inkwell: #e6f1f2;
+      --muted: #93b0b4;
+      --navy-story: #9fc7ea;
+      --wonder-marine: #6fd3d3;
+      --blush: #3a2124;
+    }
+    body { background: #08171a; }
+    .proto-badge { background: #6a5400; color: #ffe9a8; }
+    .suggest-tag { background: #332d16; color: #e2cf94; }
+    .day-cell-available { color: #a5dcae; }
+    .day-cell-partial { color: #e2cf94; }
+  }
+</style>
+</head>
+<body>
+<div id="app-header"></div>
+
+<div class="page-wrap">
+
+<div class="banner">
+  <span class="proto-badge">PROTOTYPE — Setup only. Does not create cards or change your Weekly Rhythm.</span>
+  <p class="proto-note">
+    This page records the few facts every other page should be able to read instead of re-asking:
+    who is in your family, which Forms they are in, which groups exist, which days they actually work,
+    and the broad shape of your loops. Everyone, availability, and group availability are always
+    <em>derived</em> — they are never stored twice.
+  </p>
+</div>
+
+<div id="save-bar"></div>
+
+<h1 class="page-title">Setup Prototype</h1>
+<p class="sub">Five steps. Nothing here creates teaching cards — it only records the decisions the rest of the app keeps asking for.</p>
+
+<div class="toolbar">
+  <a href="./feast-prototype.html">Feast Planning →</a>
+  <span class="build-label" title="Build identifier">build:setup-prototype</span>
+</div>
+
+<div id="setup-progress" class="setup-progress"></div>
+<div id="step-body"></div>
+
+<div class="panel guide">
+  <h2 class="section-title">Testing guide</h2>
+  <ol>
+    <li>Enter two or more children.</li>
+    <li>Confirm their Forms.</li>
+    <li>Create a custom group.</li>
+    <li>Add children to it.</li>
+    <li>Set different regular workdays.</li>
+    <li>Create or confirm one loop.</li>
+    <li>Continue to Feast Planning.</li>
+    <li>Assign a strand to the custom group.</li>
+    <li>Confirm the group members and consequence text are visible.</li>
+  </ol>
+</div>
+
+</div>
+
+<script type="module">
+import * as A from '../../lib/familyMapAdapter.mjs';
+import * as M from '../../lib/familyMap.mjs';
+import { createSaveBar, loadInitialState } from './saveBar.mjs';
+import { appHeaderHTML } from './nav.mjs';
+
+document.getElementById('app-header').outerHTML = appHeaderHTML('setup');
+
+function escH(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function arr(value) { return Array.isArray(value) ? value : []; }
+
+// ---------------------------------------------------------------------------
+// Module-shape guards — same pattern as the feast prototype. A cached/older
+// lib/familyMap.mjs must explain itself, not paint an empty page.
+// ---------------------------------------------------------------------------
+var WEEKDAYS = arr(M.WEEKDAYS);
+var GRADE_BANDS = arr(M.GRADE_BANDS);
+var SETUP_STEPS = arr(M.SETUP_STEPS);
+
+var REQUIRED_EXPORTS = [
+  { name: 'WEEKDAYS', ok: WEEKDAYS.length > 0 },
+  { name: 'GRADE_BANDS', ok: GRADE_BANDS.length > 0 },
+  { name: 'SETUP_STEPS', ok: SETUP_STEPS.length > 0 },
+  { name: 'suggestGradeBandFromGrade', ok: typeof M.suggestGradeBandFromGrade === 'function' },
+  { name: 'makeOutsideCommitment', ok: typeof M.makeOutsideCommitment === 'function' },
+  { name: 'getSetupProgress', ok: typeof A.getSetupProgress === 'function' },
+  { name: 'buildSetupSummary', ok: typeof A.buildSetupSummary === 'function' },
+  { name: 'buildAudienceOptions', ok: typeof A.buildAudienceOptions === 'function' }
+];
+function missingExports() {
+  return REQUIRED_EXPORTS.filter(function (e) { return !e.ok; }).map(function (e) { return e.name; });
+}
+function moduleIsStale() { return missingExports().length > 0; }
+function staleModuleBannerHTML() {
+  return '<div class="stale-module-banner" role="alert">' +
+    '<strong>This page needs a newer copy of the planner library than your browser has.</strong>' +
+    '<p>Your browser is using a cached or older <code>lib/familyMap.mjs</code>, so Setup cannot be built. ' +
+    'Nothing in your saved plan has been changed or lost.</p>' +
+    '<p><strong>To fix:</strong> hard-refresh this page — <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> ' +
+    '(Windows/Linux) or <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> (Mac).</p>' +
+    '<p class="stale-detail">Not found: ' + escH(missingExports().join(', ')) + '</p>' +
+    '</div>';
+}
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+var initial = loadInitialState();
+var state = initial.state;
+
+function ensureShape(s) {
+  if (!s || typeof s !== 'object') return s;
+  if (!Array.isArray(s.students)) s.students = [];
+  if (!Array.isArray(s.groups)) s.groups = [];
+  if (!Array.isArray(s.loops)) s.loops = [];
+  if (!Array.isArray(s.strandAssignments)) s.strandAssignments = [];
+  if (!Array.isArray(s.outsideCommitments)) s.outsideCommitments = [];
+  if (!s.setupPrototype || typeof s.setupPrototype !== 'object') {
+    s.setupPrototype = { groupsReviewed: false, rhythmReviewed: false };
+  }
+  return s;
+}
+ensureShape(state);
+
+var saveBar = createSaveBar({
+  onStateReplaced: function (newState, source) {
+    state = ensureShape(newState);
+    currentStep = firstIncompleteStep();
+    render();
+    saveBar.setStatus(source === 'sample' ? 'Using sample plan' : 'Saved in this browser', source === 'sample' ? 'sample' : 'saved');
+  }
+});
+saveBar.mountControls(document.getElementById('save-bar'));
+saveBar.wire(function () { return state; });
+saveBar.setStatus(initial.source === 'saved' ? 'Saved in this browser' : 'Using sample plan', initial.source === 'saved' ? 'saved' : 'sample');
+if (initial.source === 'reset-after-invalid') {
+  saveBar.saveNow(state);
+  window.alert('Your saved plan could not be opened, so the sample plan was loaded instead.');
+}
+function markDirtyAndSave() { saveBar.scheduleSave(state); }
+
+// ---------------------------------------------------------------------------
+// Step routing
+// ---------------------------------------------------------------------------
+function progress() { return A.getSetupProgress(state); }
+
+function firstIncompleteStep() {
+  if (moduleIsStale()) return 'family';
+  var p = progress();
+  var order = ['family', 'groups', 'availability', 'rhythm'];
+  for (var i = 0; i < order.length; i++) {
+    if (!p[order[i]].complete) return order[i];
+  }
+  return 'review';
+}
+var currentStep = firstIncompleteStep();
+
+function renderProgress() {
+  var p = progress();
+  var html = '';
+  SETUP_STEPS.slice().sort(function (a, b) { return a.order - b.order; }).forEach(function (step) {
+    var info = p[step.id];
+    var complete = step.id === 'review' ? p.readyForFeast : (info ? info.complete : false);
+    var detail = step.id === 'review'
+      ? (p.readyForFeast ? 'Ready to plan the feast.' : 'Finish the earlier steps first.')
+      : (info ? info.detail : '');
+    html += '<button type="button" class="setup-step-btn ' + (complete ? 'is-complete' : 'is-incomplete') +
+      (step.id === currentStep ? ' is-current' : '') + '" data-action="goto-step" data-step="' + escH(step.id) + '">' +
+      '<div class="step-name">' + escH(step.label) +
+      '<span class="step-mark ' + (complete ? 'done' : 'todo') + '">' + (complete ? '✓' : '•') + '</span></div>' +
+      '<div class="step-detail">' + escH(detail) + '</div></button>';
+  });
+  document.getElementById('setup-progress').innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// Step 1 — Your Family
+// ---------------------------------------------------------------------------
+function weekdayChecksHTML(role, id, checkedIds) {
+  return WEEKDAYS.map(function (d) {
+    var on = checkedIds.indexOf(d.id) > -1;
+    return '<label class="daybox"><input type="checkbox" data-action="' + escH(role) + '" data-id="' + escH(id) +
+      '" data-day="' + escH(d.id) + '"' + (on ? ' checked' : '') + '> ' + escH(d.short) + '</label>';
+  }).join('');
+}
+
+function studentWorkdayIds(s) {
+  var wd = (s && s.workdays && typeof s.workdays === 'object') ? s.workdays : null;
+  return WEEKDAYS.filter(function (d) { return wd ? wd[d.id] === true : true; }).map(function (d) { return d.id; });
+}
+
+function renderFamilyStep() {
+  var html = '<div class="panel"><h2 class="section-title">Your Family <span class="hint">who is learning at home this year</span></h2>';
+  html += '<p class="sub" style="margin:0 0 10px;">Forms are only ever <em>suggested</em> from a grade. Nothing is confirmed until you say so.</p>';
+  html += '<div class="setup-scroll"><table class="setup"><thead><tr>' +
+    '<th>Name</th><th>Grade / age</th><th>Form</th><th>Color</th><th>Active</th><th>Regular workdays</th><th></th>' +
+    '</tr></thead><tbody>';
+
+  var students = arr(state.students);
+  if (!students.length) {
+    html += '<tr><td colspan="7" class="hint">No children yet — add one below.</td></tr>';
+  }
+  students.forEach(function (s) {
+    var suggestion = typeof M.suggestGradeBandFromGrade === 'function' ? M.suggestGradeBandFromGrade(s.grade) : null;
+    html += '<tr>';
+    html += '<td><input type="text" data-action="student-name" data-id="' + escH(s.id) + '" value="' + escH(s.name || '') + '" placeholder="Name"></td>';
+    html += '<td><input type="text" size="8" data-action="student-grade" data-id="' + escH(s.id) + '" value="' + escH(s.grade || '') + '" placeholder="e.g. 3rd"></td>';
+    html += '<td><select data-action="student-band" data-id="' + escH(s.id) + '">' +
+      GRADE_BANDS.map(function (b) {
+        return '<option value="' + escH(b.id) + '"' + (b.id === s.gradeBand ? ' selected' : '') + '>' + escH(b.label) + '</option>';
+      }).join('') + '</select>';
+    if (s.gradeBandConfirmed !== true) {
+      html += ' <span class="unconfirmed-tag">UNCONFIRMED</span>';
+      if (suggestion) {
+        html += '<div class="member-line"><span class="suggest-tag">Suggested: ' + escH(A.gradeBandLabel(suggestion)) + '</span> ' +
+          '<button type="button" data-action="confirm-band" data-id="' + escH(s.id) + '" data-band="' + escH(suggestion) + '">Confirm</button></div>';
+      } else {
+        html += '<div class="member-line"><button type="button" data-action="confirm-band" data-id="' + escH(s.id) + '" data-band="' + escH(s.gradeBand || 'form1') + '">Confirm this Form</button></div>';
+      }
+    }
+    html += '</td>';
+    html += '<td><input type="color" data-action="student-color" data-id="' + escH(s.id) + '" value="' + escH(s.color || '#888888') + '"></td>';
+    html += '<td><input type="checkbox" data-action="student-active" data-id="' + escH(s.id) + '"' + (s.active !== false ? ' checked' : '') + '></td>';
+    html += '<td>' + weekdayChecksHTML('student-workday', s.id, studentWorkdayIds(s)) + '</td>';
+    html += '<td><button type="button" class="danger" data-action="remove-student" data-id="' + escH(s.id) + '">Remove</button></td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '<div class="row-actions"><button type="button" class="accent" data-action="add-student">Add a child</button></div>';
+  html += '</div>';
+  return html;
+}
+
+// ---------------------------------------------------------------------------
+// Step 2 — Your Groups
+// ---------------------------------------------------------------------------
+function renderGroupsStep() {
+  var summary = A.buildSetupSummary(state);
+  var html = '<div class="panel"><h2 class="section-title">Your Groups <span class="hint">who usually works together</span></h2>';
+
+  html += '<div class="group-card fixed-card"><div><strong>Everyone</strong></div>' +
+    '<div class="member-line">' + escH(summary.everyone.memberNames.join(', ') || 'No active children yet') + '</div>' +
+    '<div class="member-line">Always everyone who is active — nothing to maintain.</div></div>';
+
+  var groups = arr(state.groups).filter(function (g) { return g.active !== false; });
+  if (!groups.length) {
+    html += '<div class="group-card"><div><strong>No groups yet</strong></div>' +
+      '<div class="member-line">Many families keep one group of older students and one of younger students. ' +
+      'Nothing is created until you ask for it.</div>' +
+      '<div class="row-actions"><button type="button" class="accent" data-action="add-suggested-groups">Add suggested groups</button>' +
+      '<button type="button" data-action="add-group">Create custom group</button></div></div>';
+  }
+
+  groups.forEach(function (g) {
+    var av = A.getGroupAvailability(state, g.id);
+    var names = av.memberIds.map(function (id) {
+      var s = arr(state.students).find(function (x) { return x.id === id; });
+      return s ? s.name : id;
+    });
+    html += '<div class="group-card">';
+    html += '<div><input type="text" data-action="group-label" data-id="' + escH(g.id) + '" value="' + escH(g.label || '') + '" placeholder="Group name"></div>';
+    html += '<div class="member-line">Members: ' + escH(names.join(', ') || 'no members yet') + '</div>';
+    html += '<div style="margin-top:6px;">' + arr(state.students).filter(function (s) { return s.active !== false; }).map(function (s) {
+      var on = arr(g.studentIds).indexOf(s.id) > -1;
+      return '<label class="daybox"><input type="checkbox" data-action="group-member" data-id="' + escH(g.id) +
+        '" data-student="' + escH(s.id) + '"' + (on ? ' checked' : '') + '> ' + escH(s.name || s.id) + '</label>';
+    }).join('') + '</div>';
+    html += '<div class="row-actions"><button type="button" class="danger" data-action="delete-group" data-id="' + escH(g.id) + '">Delete group</button></div>';
+    html += '</div>';
+  });
+
+  if (groups.length) {
+    html += '<div class="row-actions"><button type="button" data-action="add-group">Create custom group</button></div>';
+  }
+
+  var reviewed = !!(state.setupPrototype && state.setupPrototype.groupsReviewed);
+  html += '<p class="sub" style="margin-top:12px;">Renaming a group never changes who it means — the group keeps its identity, so nothing already assigned to it breaks.</p>';
+  html += '<div class="row-actions"><button type="button" class="accent" data-action="groups-reviewed">These look right</button>' +
+    '<span class="hint">' + (reviewed ? 'Confirmed.' : 'Not confirmed yet.') + '</span></div>';
+  html += '</div>';
+  return html;
+}
+
+// ---------------------------------------------------------------------------
+// Step 3 — Outside commitments + derived availability
+// ---------------------------------------------------------------------------
+function renderAvailabilityStep() {
+  var html = '<div class="panel"><h2 class="section-title">Outside Commitments <span class="hint">what already owns a day</span></h2>';
+
+  var commitments = arr(state.outsideCommitments);
+  if (!commitments.length) html += '<p class="hint">No outside commitments recorded.</p>';
+  commitments.forEach(function (c) {
+    html += '<div class="commit-card">';
+    html += '<div><input type="text" data-action="commit-label" data-id="' + escH(c.id) + '" value="' + escH(c.label || '') + '" placeholder="What is it called?"></div>';
+    html += '<div style="margin-top:6px;">Who: <select data-action="commit-who" data-id="' + escH(c.id) + '">';
+    var whoVal = c.participantMode === 'everyone' ? 'everyone'
+      : (c.participantMode === 'group' ? 'group:' + (c.groupId || '') : 'individual');
+    html += '<option value="everyone"' + (whoVal === 'everyone' ? ' selected' : '') + '>Everyone</option>';
+    arr(state.groups).filter(function (g) { return g.active !== false; }).forEach(function (g) {
+      html += '<option value="group:' + escH(g.id) + '"' + (whoVal === 'group:' + g.id ? ' selected' : '') + '>' + escH(g.label || 'Group') + '</option>';
+    });
+    html += '<option value="individual"' + (whoVal === 'individual' ? ' selected' : '') + '>Specific children</option>';
+    html += '</select></div>';
+    if (c.participantMode === 'individual') {
+      html += '<div style="margin-top:4px;">' + arr(state.students).filter(function (s) { return s.active !== false; }).map(function (s) {
+        var on = arr(c.studentIds).indexOf(s.id) > -1;
+        return '<label class="daybox"><input type="checkbox" data-action="commit-student" data-id="' + escH(c.id) +
+          '" data-student="' + escH(s.id) + '"' + (on ? ' checked' : '') + '> ' + escH(s.name || s.id) + '</label>';
+      }).join('') + '</div>';
+    }
+    html += '<div style="margin-top:6px;">Days: ' + weekdayChecksHTML('commit-day', c.id, arr(c.weekdays)) + '</div>';
+    html += '<div style="margin-top:6px;">' +
+      '<label class="daybox"><input type="checkbox" data-action="commit-blocks" data-id="' + escH(c.id) + '"' + (c.blocksRegularWork !== false ? ' checked' : '') + '> Regular home lessons do not happen that day</label>' +
+      '<label class="daybox"><input type="checkbox" data-action="commit-coop" data-id="' + escH(c.id) + '"' + (c.allowsCoopWork !== false ? ' checked' : '') + '> Co-op / outside work may still happen</label></div>';
+    html += '<div class="row-actions"><button type="button" class="danger" data-action="remove-commit" data-id="' + escH(c.id) + '">Remove</button></div>';
+    html += '</div>';
+  });
+  html += '<div class="row-actions"><button type="button" class="accent" data-action="add-commit">Add a commitment</button></div>';
+  html += '</div>';
+
+  // Derived student availability
+  html += '<div class="panel"><h2 class="section-title">Availability <span class="hint">derived — not editable here</span></h2>';
+  html += '<p class="sub" style="margin:0 0 10px;">Computed from each child\'s regular workdays minus any commitment that blocks the day.</p>';
+  html += '<div class="setup-scroll"><table class="setup" id="student-availability"><thead><tr><th>Child</th>' +
+    WEEKDAYS.map(function (d) { return '<th>' + escH(d.short) + '</th>'; }).join('') + '</tr></thead><tbody>';
+  var actives = arr(state.students).filter(function (s) { return s.active !== false; });
+  if (!actives.length) html += '<tr><td colspan="' + (WEEKDAYS.length + 1) + '" class="hint">No active children yet.</td></tr>';
+  actives.forEach(function (s) {
+    var av = A.getStudentAvailability(state, s.id);
+    html += '<tr><td>' + escH(s.name || s.id) + '</td>';
+    WEEKDAYS.forEach(function (d) {
+      var cell;
+      if (!av.workdays[d.id]) cell = '<span class="day-cell-off">not a workday</span>';
+      else if (av.blockedBy[d.id].length) cell = '<span class="day-cell-blocked">blocked by ' + escH(av.blockedBy[d.id].join(', ')) + '</span>';
+      else cell = '<span class="day-cell-available">available</span>';
+      html += '<td>' + cell + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+
+  // Derived group availability
+  html += '<h2 class="section-title" style="margin-top:16px;">Group availability <span class="hint">computed from members</span></h2>';
+  html += '<p class="sub" style="margin:0 0 10px;">A group can only work on a day every one of its members is free. This cannot be edited directly — change the children\'s workdays or commitments instead.</p>';
+  html += '<div class="setup-scroll"><table class="setup" id="group-availability"><thead><tr><th>Group</th>' +
+    WEEKDAYS.map(function (d) { return '<th>' + escH(d.short) + '</th>'; }).join('') + '</tr></thead><tbody>';
+  var groups = arr(state.groups).filter(function (g) { return g.active !== false; });
+  if (!groups.length) html += '<tr><td colspan="' + (WEEKDAYS.length + 1) + '" class="hint">No groups yet.</td></tr>';
+  groups.forEach(function (g) {
+    var av = A.getGroupAvailability(state, g.id);
+    html += '<tr><td>' + escH(g.label || g.id) + '</td>';
+    WEEKDAYS.forEach(function (d) {
+      var cell;
+      if (av.availableDayIds.indexOf(d.id) > -1) cell = '<span class="day-cell-available">all members</span>';
+      else if (av.partialDayIds.indexOf(d.id) > -1) cell = '<span class="day-cell-partial">some members</span>';
+      else cell = '<span class="day-cell-off">no one</span>';
+      html += '<td>' + cell + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div></div>';
+  return html;
+}
+
+// ---------------------------------------------------------------------------
+// Step 4 — Broad rhythm & loops
+// ---------------------------------------------------------------------------
+function renderRhythmStep() {
+  var html = '<div class="panel"><h2 class="section-title">Broad Rhythm and Loops <span class="hint">shape only — no times, no ordering</span></h2>';
+  html += '<p class="sub" style="margin:0 0 10px;">Just the broad days a loop may happen on. Where exactly it lands in the day is not a Setup decision.</p>';
+  var loops = arr(state.loops);
+  if (!loops.length) html += '<p class="hint">No loops yet.</p>';
+  loops.forEach(function (l) {
+    html += '<div class="loop-card">';
+    html += '<div><input type="text" data-action="loop-title" data-id="' + escH(l.id) + '" value="' + escH(l.title || '') + '" placeholder="Loop name"></div>';
+    html += '<div style="margin-top:6px;">May happen on: ' + weekdayChecksHTML('loop-day', l.id, arr(l.rhythmDayIds)) + '</div>';
+    html += '</div>';
+  });
+  html += '<div class="row-actions"><button type="button" class="accent" data-action="add-loop">Create a loop</button></div>';
+  var reviewed = !!(state.setupPrototype && state.setupPrototype.rhythmReviewed);
+  html += '<div class="row-actions"><button type="button" class="accent" data-action="rhythm-reviewed">These look right</button>' +
+    '<span class="hint">' + (reviewed ? 'Confirmed.' : 'Not confirmed yet.') + '</span></div>';
+  html += '</div>';
+  return html;
+}
+
+// ---------------------------------------------------------------------------
+// Step 5 — Review
+// ---------------------------------------------------------------------------
+function dayLabels(ids) {
+  return WEEKDAYS.filter(function (d) { return arr(ids).indexOf(d.id) > -1; }).map(function (d) { return d.short; }).join(', ');
+}
+
+function renderReviewStep() {
+  var s = A.buildSetupSummary(state);
+  var p = progress();
+  var html = '<div class="panel"><h2 class="section-title">Review</h2>';
+
+  html += '<h3 class="section-title">Family</h3>';
+  html += s.family.length
+    ? '<ul>' + s.family.map(function (f) {
+        return '<li>' + escH(f.name || '(unnamed)') + ' — ' + escH(f.gradeBandLabel) +
+          (f.gradeBandConfirmed ? '' : ' <span class="unconfirmed-tag">UNCONFIRMED</span>') +
+          ' <span class="hint">(' + escH(dayLabels(f.availableDayIds) || 'no available days') + ')</span></li>';
+      }).join('') + '</ul>'
+    : '<p class="hint">No children yet.</p>';
+
+  html += '<h3 class="section-title">Groups</h3>';
+  html += '<p class="hint">Everyone: ' + escH(s.everyone.memberNames.join(', ') || 'nobody active yet') + '</p>';
+  html += s.groups.length
+    ? '<ul>' + s.groups.map(function (g) {
+        return '<li>' + escH(g.label) + ' — ' + escH(g.memberNames.join(', ') || 'no members') + '</li>';
+      }).join('') + '</ul>'
+    : '<p class="hint">No groups.</p>';
+
+  html += '<h3 class="section-title">Availability</h3>';
+  html += s.family.length
+    ? '<ul>' + s.family.map(function (f) {
+        return '<li>' + escH(f.name || '(unnamed)') + ': ' + escH(dayLabels(f.availableDayIds) || 'no days available') + '</li>';
+      }).join('') + '</ul>'
+    : '<p class="hint">Nothing to show yet.</p>';
+
+  html += '<h3 class="section-title">Loops</h3>';
+  html += s.loops.length
+    ? '<ul>' + s.loops.map(function (l) {
+        return '<li>' + escH(l.title || '(untitled loop)') + ' <span class="hint">(' + escH(l.participantSummary) + ')</span></li>';
+      }).join('') + '</ul>'
+    : '<p class="hint">No loops.</p>';
+
+  var incomplete = [];
+  ['family', 'groups', 'availability', 'rhythm'].forEach(function (k) {
+    if (!p[k].complete) {
+      var step = SETUP_STEPS.find(function (x) { return x.id === k; });
+      incomplete.push((step ? step.label : k) + ' — ' + p[k].detail);
+    }
+  });
+
+  html += '<div class="row-actions" style="margin-top:14px;">';
+  if (p.readyForFeast) {
+    html += '<a class="accent" id="continue-to-feast" href="./feast-prototype.html" ' +
+      'style="display:inline-block;padding:8px 14px;border-radius:8px;background:var(--wonder-marine);color:#fff;text-decoration:none;font-weight:600;">Continue to Feast Planning</a>';
+  } else {
+    html += '<button type="button" id="continue-to-feast" disabled>Continue to Feast Planning</button>';
+  }
+  html += '</div>';
+  if (!p.readyForFeast) {
+    html += '<div class="notice" style="margin-top:10px;"><strong>Setup is not finished yet.</strong><ul>' +
+      incomplete.map(function (t) { return '<li>' + escH(t) + '</li>'; }).join('') + '</ul></div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
+function render() {
+  if (moduleIsStale()) {
+    document.getElementById('setup-progress').innerHTML = '';
+    document.getElementById('step-body').innerHTML = staleModuleBannerHTML();
+    return;
+  }
+  renderProgress();
+  var html = '';
+  if (currentStep === 'family') html = renderFamilyStep();
+  else if (currentStep === 'groups') html = renderGroupsStep();
+  else if (currentStep === 'availability') html = renderAvailabilityStep();
+  else if (currentStep === 'rhythm') html = renderRhythmStep();
+  else html = renderReviewStep();
+  document.getElementById('step-body').innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// Editing
+// ---------------------------------------------------------------------------
+function findStudentLocal(id) { return arr(state.students).find(function (s) { return s.id === id; }); }
+function findGroupLocal(id) { return arr(state.groups).find(function (g) { return g.id === id; }); }
+function findCommitLocal(id) { return arr(state.outsideCommitments).find(function (c) { return c.id === id; }); }
+function findLoopLocal(id) { return arr(state.loops).find(function (l) { return l.id === id; }); }
+
+function toggleInList(list, value, on) {
+  var i = list.indexOf(value);
+  if (on && i === -1) list.push(value);
+  if (!on && i > -1) list.splice(i, 1);
+  return list;
+}
+
+function commit() { markDirtyAndSave(); render(); }
+
+document.addEventListener('click', function (ev) {
+  var el = ev.target.closest('[data-action]');
+  if (!el) return;
+  var action = el.getAttribute('data-action');
+  var id = el.getAttribute('data-id');
+
+  if (action === 'goto-step') {
+    currentStep = el.getAttribute('data-step');
+    render();
+    return;
+  }
+
+  if (action === 'add-student') {
+    state.students.push(M.makeStudent({ sortOrder: arr(state.students).length }));
+    commit();
+    return;
+  }
+
+  if (action === 'remove-student') {
+    var impact = A.describeAudienceImpact(state, { kind: 'student-deactivate', studentId: id });
+    var stu = findStudentLocal(id);
+    if (!window.confirm('Remove ' + ((stu && stu.name) || 'this child') + '?\n\n' + impact.message)) return;
+    state.students = arr(state.students).filter(function (s) { return s.id !== id; });
+    arr(state.groups).forEach(function (g) {
+      g.studentIds = arr(g.studentIds).filter(function (sid) { return sid !== id; });
+    });
+    arr(state.outsideCommitments).forEach(function (c) {
+      c.studentIds = arr(c.studentIds).filter(function (sid) { return sid !== id; });
+    });
+    commit();
+    return;
+  }
+
+  if (action === 'confirm-band') {
+    var s2 = findStudentLocal(id);
+    if (s2) { s2.gradeBand = el.getAttribute('data-band') || s2.gradeBand; s2.gradeBandConfirmed = true; }
+    commit();
+    return;
+  }
+
+  if (action === 'add-suggested-groups') {
+    // Suggested only, and only on an explicit click. IDs are always generated.
+    state.groups.push(M.makeGroup({ label: 'Older Students', sortOrder: arr(state.groups).length }));
+    state.groups.push(M.makeGroup({ label: 'Younger Students', sortOrder: arr(state.groups).length }));
+    commit();
+    return;
+  }
+
+  if (action === 'add-group') {
+    state.groups.push(M.makeGroup({ label: 'New group', sortOrder: arr(state.groups).length }));
+    commit();
+    return;
+  }
+
+  if (action === 'delete-group') {
+    var impactG = A.describeAudienceImpact(state, { kind: 'group-delete', groupId: id });
+    var grp = findGroupLocal(id);
+    if (!window.confirm('Delete ' + ((grp && grp.label) || 'this group') + '?\n\n' + impactG.message)) return;
+    state.groups = arr(state.groups).filter(function (g) { return g.id !== id; });
+    commit();
+    return;
+  }
+
+  if (action === 'groups-reviewed') {
+    state.setupPrototype.groupsReviewed = true;
+    commit();
+    return;
+  }
+
+  if (action === 'rhythm-reviewed') {
+    state.setupPrototype.rhythmReviewed = true;
+    commit();
+    return;
+  }
+
+  if (action === 'add-commit') {
+    state.outsideCommitments.push(M.makeOutsideCommitment({ label: 'Outside commitment', participantMode: 'everyone' }));
+    commit();
+    return;
+  }
+
+  if (action === 'remove-commit') {
+    state.outsideCommitments = arr(state.outsideCommitments).filter(function (c) { return c.id !== id; });
+    commit();
+    return;
+  }
+
+  if (action === 'add-loop') {
+    state.loops.push(M.makeLoop({ title: 'New loop', sortOrder: arr(state.loops).length, rhythmDayIds: [] }));
+    commit();
+    return;
+  }
+});
+
+document.addEventListener('change', function (ev) {
+  var el = ev.target.closest('[data-action]');
+  if (!el) return;
+  var action = el.getAttribute('data-action');
+  var id = el.getAttribute('data-id');
+  var stu, grp, c, loop;
+
+  switch (action) {
+    case 'student-name':
+      stu = findStudentLocal(id);
+      if (stu) { stu.name = el.value; stu.initials = M.autoInitials(el.value); }
+      break;
+    case 'student-grade':
+      stu = findStudentLocal(id);
+      if (stu) {
+        stu.grade = el.value;
+        // Suggestion only — a typed grade never confirms a Form.
+        if (stu.gradeBandConfirmed !== true) {
+          var sug = M.suggestGradeBandFromGrade(el.value);
+          if (sug) stu.gradeBand = sug;
+        }
+      }
+      break;
+    case 'student-band':
+      stu = findStudentLocal(id);
+      // Picking a Form by hand IS a confirmation.
+      if (stu) { stu.gradeBand = el.value; stu.gradeBandConfirmed = true; }
+      break;
+    case 'student-color':
+      stu = findStudentLocal(id);
+      if (stu) stu.color = el.value;
+      break;
+    case 'student-active':
+      stu = findStudentLocal(id);
+      if (stu) {
+        if (!el.checked) {
+          var impact = A.describeAudienceImpact(state, { kind: 'student-deactivate', studentId: id });
+          if (impact.affectedStrandCount > 0 && !window.confirm(impact.message + '\n\nMake this child inactive anyway?')) {
+            el.checked = true;
+            return;
+          }
+        }
+        stu.active = el.checked;
+      }
+      break;
+    case 'student-workday':
+      stu = findStudentLocal(id);
+      if (stu) {
+        if (!stu.workdays || typeof stu.workdays !== 'object') stu.workdays = {};
+        stu.workdays[el.getAttribute('data-day')] = el.checked;
+        WEEKDAYS.forEach(function (d) {
+          if (typeof stu.workdays[d.id] !== 'boolean') stu.workdays[d.id] = true;
+        });
+      }
+      break;
+    case 'group-label':
+      grp = findGroupLocal(id);
+      // Label only — the group's ID never changes, so assignments never break.
+      if (grp) grp.label = el.value;
+      break;
+    case 'group-member':
+      grp = findGroupLocal(id);
+      if (grp) {
+        var impactM = A.describeAudienceImpact(state, { kind: 'group-members', groupId: id });
+        if (impactM.affectedStrandCount > 0 && !window.confirm(impactM.message + '\n\nChange who is in this group?')) {
+          el.checked = !el.checked;
+          return;
+        }
+        grp.studentIds = toggleInList(arr(grp.studentIds).slice(), el.getAttribute('data-student'), el.checked);
+      }
+      break;
+    case 'commit-label':
+      c = findCommitLocal(id);
+      if (c) c.label = el.value;
+      break;
+    case 'commit-who':
+      c = findCommitLocal(id);
+      if (c) {
+        var v = el.value;
+        if (v === 'everyone') { c.participantMode = 'everyone'; c.groupId = null; }
+        else if (v === 'individual') { c.participantMode = 'individual'; c.groupId = null; }
+        else { c.participantMode = 'group'; c.groupId = v.slice('group:'.length); }
+      }
+      break;
+    case 'commit-student':
+      c = findCommitLocal(id);
+      if (c) c.studentIds = toggleInList(arr(c.studentIds).slice(), el.getAttribute('data-student'), el.checked);
+      break;
+    case 'commit-day':
+      c = findCommitLocal(id);
+      if (c) c.weekdays = toggleInList(arr(c.weekdays).slice(), el.getAttribute('data-day'), el.checked);
+      break;
+    case 'commit-blocks':
+      c = findCommitLocal(id);
+      if (c) c.blocksRegularWork = el.checked;
+      break;
+    case 'commit-coop':
+      c = findCommitLocal(id);
+      if (c) c.allowsCoopWork = el.checked;
+      break;
+    case 'loop-title':
+      loop = findLoopLocal(id);
+      if (loop) loop.title = el.value;
+      break;
+    case 'loop-day':
+      loop = findLoopLocal(id);
+      // Additive optional field — existing loop fields are left untouched.
+      if (loop) loop.rhythmDayIds = toggleInList(arr(loop.rhythmDayIds).slice(), el.getAttribute('data-day'), el.checked);
+      break;
+    default:
+      return;
+  }
+  commit();
+});
+
+render();
+</script>
+</body>
+</html>

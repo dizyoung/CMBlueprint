@@ -288,6 +288,161 @@ for (const [label, seed] of degenerateStates) {
   await dpage.close();
 }
 
+
+// ===========================================================================
+// SETUP PROTOTYPE — separate pages, one concern each.
+// ===========================================================================
+const SETUP_URL = BASE + '/docs/app/setup-prototype.html';
+const FEAST_URL = BASE + '/docs/app/feast-prototype.html';
+const SKEY = 'cmblueprint.familySchoolMap.v1';
+
+// --- setup page loads cleanly and shows five steps ---
+{
+  const sp = await browser.newPage();
+  const errs = [];
+  sp.on('pageerror', e => errs.push(e.message));
+  await sp.goto(SETUP_URL);
+  await sp.waitForLoadState('networkidle');
+  await sp.waitForTimeout(400);
+  const steps = await sp.$$eval('.setup-step-btn', els => els.length);
+  ok('Setup prototype renders five step indicators', steps === 5);
+  const buildLabel = await sp.$eval('span[title="Build identifier"]', el => el.textContent).catch(() => '');
+  ok('Setup build label visible', buildLabel.includes('build:setup-prototype'));
+  ok('No JavaScript errors on setup prototype page', errs.length === 0);
+  if (errs.length) errs.forEach(e => console.log('  JS error:', e));
+  await sp.close();
+}
+
+// --- adding a student persists across a reload ---
+{
+  const sp = await browser.newPage();
+  const errs = [];
+  sp.on('pageerror', e => errs.push(e.message));
+  await sp.goto(SETUP_URL);
+  await sp.evaluate(k => localStorage.removeItem(k), SKEY);
+  await sp.evaluate(([k, v]) => localStorage.setItem(k, v), [SKEY, JSON.stringify({
+    appStateVersion: 1, students: [], groups: [], subjectColumns: [], cards: []
+  })]);
+  await sp.goto(SETUP_URL);
+  await sp.waitForLoadState('networkidle');
+  await sp.waitForTimeout(300);
+  await sp.click('[data-action="add-student"]');
+  await sp.waitForTimeout(200);
+  await sp.fill('[data-action="student-name"]', 'Wren');
+  await sp.press('[data-action="student-name"]', 'Tab');
+  await sp.waitForTimeout(1400); // autosave debounce
+  await sp.goto(SETUP_URL);
+  await sp.waitForLoadState('networkidle');
+  await sp.waitForTimeout(400);
+  const nameAfter = await sp.$eval('[data-action="student-name"]', el => el.value).catch(() => '');
+  ok('Adding a student on the setup page persists across a reload', nameAfter === 'Wren');
+  ok('No JS errors while adding a student', errs.length === 0);
+  if (errs.length) errs.forEach(e => console.log('  JS error:', e));
+  await sp.evaluate(k => localStorage.removeItem(k), SKEY);
+  await sp.close();
+}
+
+// --- a custom group made in Setup shows its members + consequence in the Feast ---
+{
+  const sp = await browser.newPage();
+  const errs = [];
+  sp.on('pageerror', e => errs.push(e.message));
+  const seed = {
+    appStateVersion: 1, subjectColumns: [], cards: [], loops: [], loopItems: [],
+    resources: [], resourceUses: [], strandAssignments: [],
+    students: [
+      { id: 'stu_a', name: 'Wren', active: true, gradeBand: 'form2', gradeBandConfirmed: true, workdays: { mon: true, tue: true, wed: true, thu: true, fri: true } },
+      { id: 'stu_b', name: 'Ash', active: true, gradeBand: 'form1', gradeBandConfirmed: true, workdays: { mon: true, tue: true, wed: true, thu: true, fri: true } }
+    ],
+    groups: []
+  };
+  await sp.goto(SETUP_URL);
+  await sp.evaluate(([k, v]) => localStorage.setItem(k, v), [SKEY, JSON.stringify(seed)]);
+  await sp.goto(SETUP_URL);
+  await sp.waitForLoadState('networkidle');
+  await sp.waitForTimeout(300);
+  // Go to the Groups step and create a custom group with both children.
+  await sp.click('[data-action="goto-step"][data-step="groups"]');
+  await sp.waitForTimeout(200);
+  await sp.click('[data-action="add-group"]');
+  await sp.waitForTimeout(200);
+  const memberBoxes = await sp.$$('[data-action="group-member"]');
+  ok('Custom group offers a member checkbox per active child', memberBoxes.length === 2);
+  // The page re-renders after each change, so re-query by index every time.
+  for (let i = 0; i < memberBoxes.length; i++) {
+    await sp.locator('[data-action="group-member"]').nth(i).click();
+    await sp.waitForTimeout(300);
+  }
+  const memberLine = await sp.$eval('.group-card:not(.fixed-card) .member-line', el => el.textContent).catch(() => '');
+  ok('Group members are visible directly under the label', memberLine.includes('Wren') && memberLine.includes('Ash'));
+  await sp.waitForTimeout(1400);
+  ok('No JS errors while creating a group', errs.length === 0);
+  if (errs.length) errs.forEach(e => console.log('  JS error:', e));
+
+  // Now assign a strand to that group on the feast page. Same page (and so the
+  // same browser context / localStorage) — a new page would get a fresh, empty
+  // storage and silently fall back to the sample plan.
+  const fp = sp;
+  const fErrs2 = errs;
+  await fp.goto(FEAST_URL);
+  await fp.waitForLoadState('networkidle');
+  await fp.waitForTimeout(400);
+  const backLink = await fp.$eval('.toolbar', el => el.innerHTML);
+  ok('Feast page links back to Setup', backLink.includes('setup-prototype.html'));
+  const setupBanner = await fp.$eval('#setup-banner', el => el.textContent).catch(() => '');
+  ok('Feast shows a non-blocking unfinished-setup banner', setupBanner.includes('Setup is not finished'));
+  const chipCount = await fp.$$eval('.strand-chip', els => els.length);
+  ok('Feast grid still renders under the setup banner (non-blocking)', chipCount > 40);
+
+  const optionTexts = await fp.$$eval('select[data-role="who"] option', els => els.map(e => e.textContent));
+  ok('Feast Who select offers an option showing group member names',
+     optionTexts.some(t => t.includes('Wren') && t.includes('Ash') && t.includes('—')));
+
+  const groupValue = await fp.$$eval('select[data-role="who"] option',
+    els => (els.find(e => e.value.startsWith('group:')) || {}).value);
+  ok('A Setup-created group is offered in the feast Who select', !!groupValue);
+  if (groupValue) {
+    const sel = await fp.$('.strand-chip select[data-role="who"]');
+    await sel.selectOption(groupValue);
+    await fp.waitForTimeout(400);
+    const chipHTML = await fp.$eval('.strand-chip', el => el.textContent);
+    ok('Chip shows the chosen group members', chipHTML.includes('Wren') && chipHTML.includes('Ash'));
+    ok('Chip shows the consequence sentence', chipHTML.includes('This creates one shared strand for'));
+  }
+  ok('No JS errors on feast page after a Setup-created group assignment', fErrs2.length === 0);
+  if (fErrs2.length) fErrs2.forEach(e => console.log('  JS error:', e));
+  await fp.evaluate(k => localStorage.removeItem(k), SKEY);
+  await fp.close();
+}
+
+// --- setup page survives degenerate saved state ---
+{
+  const setupDegenerate = [
+    ['empty object state', {}],
+    ['legacy state with no strandAssignments', {
+      students: [{ id: 's1', name: 'Solo', active: true }],
+      cards: [], loops: [], loopItems: [], resources: [], resourceUses: [], weeklyRhythm: null
+    }]
+  ];
+  for (const [label, seed] of setupDegenerate) {
+    const dp = await browser.newPage();
+    const dErrs = [];
+    dp.on('pageerror', e => dErrs.push(e.message));
+    await dp.goto(SETUP_URL);
+    await dp.evaluate(([k, v]) => localStorage.setItem(k, v), [SKEY, JSON.stringify(seed)]);
+    await dp.goto(SETUP_URL);
+    await dp.waitForLoadState('networkidle');
+    await dp.waitForTimeout(300);
+    const steps = await dp.$$eval('.setup-step-btn', els => els.length).catch(() => 0);
+    ok('Setup page renders steps with ' + label, steps === 5);
+    ok('No JS errors on setup page with ' + label, dErrs.length === 0);
+    if (dErrs.length) dErrs.forEach(e => console.log('  JS error:', e));
+    await dp.evaluate(k => localStorage.removeItem(k), SKEY);
+    await dp.close();
+  }
+}
+
+
 await browser.close();
 console.log('\n' + passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total');
 if (failed > 0) process.exit(1);

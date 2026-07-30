@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import * as A from '../lib/familyMapAdapter.mjs';
 import * as M from '../lib/familyMap.mjs';
 import * as R from '../lib/weeklyRhythm.mjs';
@@ -1665,6 +1666,328 @@ test('FEAST_LIBRARY and FEAST_FORMS are non-empty arrays (guards the stale-modul
   assert.ok(Array.isArray(M.FEAST_FORMS) && M.FEAST_FORMS.length > 0);
   for (const col of M.FEAST_LIBRARY.map((s) => s.column)) {
     assert.ok(typeof col === 'string' && col.length > 0, 'every feast entry needs a column');
+  }
+});
+
+
+
+// ---------------------------------------------------------------------------
+// Setup prototype — model + derivation helpers
+// ---------------------------------------------------------------------------
+function setupState(overrides) {
+  return Object.assign({
+    appStateVersion: 1,
+    students: [], groups: [], subjectColumns: [], cards: [], loops: [], loopItems: [],
+    sequences: [], sequenceItems: [], resources: [], resourceUses: [],
+    outsideCommitments: [], strandAssignments: []
+  }, overrides || {});
+}
+
+test('adding and removing students changes getEveryoneStudentIds', () => {
+  const state = setupState();
+  assert.deepEqual(A.getEveryoneStudentIds(state), []);
+  const a = M.makeStudent({ name: 'A' });
+  const b = M.makeStudent({ name: 'B' });
+  state.students.push(a, b);
+  assert.deepEqual(A.getEveryoneStudentIds(state), [a.id, b.id]);
+  state.students = state.students.filter((s) => s.id !== a.id);
+  assert.deepEqual(A.getEveryoneStudentIds(state), [b.id]);
+});
+
+test('suggestGradeBandFromGrade maps grades to forms and returns null on garbage', () => {
+  assert.equal(M.suggestGradeBandFromGrade('1st'), 'form1');
+  assert.equal(M.suggestGradeBandFromGrade('5'), 'form2');
+  assert.equal(M.suggestGradeBandFromGrade('7th'), 'form3');
+  assert.equal(M.suggestGradeBandFromGrade('10th'), 'form4');
+  assert.equal(M.suggestGradeBandFromGrade('K'), 'form1');
+  assert.equal(M.suggestGradeBandFromGrade('k'), 'form1');
+  assert.equal(M.suggestGradeBandFromGrade('kindergarten'), 'form1');
+  assert.equal(M.suggestGradeBandFromGrade('banana'), null);
+  assert.equal(M.suggestGradeBandFromGrade(''), null);
+  assert.equal(M.suggestGradeBandFromGrade(null), null);
+  assert.equal(M.suggestGradeBandFromGrade('99'), null);
+});
+
+test('a new student is unconfirmed; suggestion never auto-confirms; confirming sets it true', () => {
+  const s = M.makeStudent({ name: 'A', grade: '5' });
+  assert.equal(s.gradeBandConfirmed, false);
+  const suggested = M.suggestGradeBandFromGrade(s.grade);
+  assert.equal(suggested, 'form2');
+  s.gradeBand = suggested;              // applying a suggestion...
+  assert.equal(s.gradeBandConfirmed, false); // ...must not confirm it
+  s.gradeBandConfirmed = true;
+  assert.equal(s.gradeBandConfirmed, true);
+});
+
+test('Everyone is automatic — deactivating a student removes them with no group edit', () => {
+  const a = M.makeStudent({ name: 'A' });
+  const b = M.makeStudent({ name: 'B' });
+  const state = setupState({ students: [a, b] });
+  assert.equal(A.getEveryoneStudentIds(state).length, 2);
+  b.active = false;
+  assert.deepEqual(A.getEveryoneStudentIds(state), [a.id]);
+  const everyone = A.buildAudienceOptions(state).find((o) => o.kind === 'everyone');
+  assert.deepEqual(everyone.memberNames, ['A']);
+});
+
+test('custom group creation yields a generated stable id, not a label-derived one', () => {
+  const g = M.makeGroup({ label: 'Older Students' });
+  assert.ok(/^grp_/.test(g.id), 'group id must be generated');
+  assert.notEqual(g.id, 'older');
+  assert.equal(g.id.indexOf('older'), -1);
+  const g2 = M.makeGroup({ label: 'Older Students' });
+  assert.notEqual(g.id, g2.id, 'two groups with the same label must not collide');
+});
+
+test('renaming a group does not break strand assignments', () => {
+  const a = M.makeStudent({ name: 'A' });
+  const b = M.makeStudent({ name: 'B' });
+  const g = M.makeGroup({ label: 'First name', studentIds: [a.id, b.id] });
+  const sa = M.makeStrandAssignment({ strandId: 'x', strandLabel: 'X', assignmentMode: 'custom-group', groupId: g.id });
+  const state = setupState({ students: [a, b], groups: [g], strandAssignments: [sa] });
+  const membersBefore = A.getGroupAvailability(state, g.id).memberIds.slice();
+  g.label = 'A completely different name';
+  assert.equal(state.strandAssignments[0].groupId, g.id, 'assignment still points at the same group id');
+  assert.deepEqual(A.getGroupAvailability(state, g.id).memberIds, membersBefore);
+  const opt = A.buildAudienceOptions(state).find((o) => o.value === 'group:' + g.id);
+  assert.equal(opt.label, 'A completely different name');
+  assert.deepEqual(opt.memberIds, membersBefore);
+});
+
+test('changing group members changes getGroupAvailability and the resolved member list', () => {
+  const a = M.makeStudent({ name: 'A', workdays: { mon: true, tue: true, wed: true, thu: true, fri: true } });
+  const b = M.makeStudent({ name: 'B', workdays: { mon: true, tue: false, wed: true, thu: true, fri: true } });
+  const g = M.makeGroup({ label: 'G', studentIds: [a.id] });
+  const state = setupState({ students: [a, b], groups: [g] });
+  assert.deepEqual(A.getGroupAvailability(state, g.id).availableDayIds, ['mon', 'tue', 'wed', 'thu', 'fri']);
+  g.studentIds = [a.id, b.id];
+  const av = A.getGroupAvailability(state, g.id);
+  assert.deepEqual(av.memberIds, [a.id, b.id]);
+  assert.deepEqual(av.availableDayIds, ['mon', 'wed', 'thu', 'fri']);
+  assert.deepEqual(av.partialDayIds, ['tue']);
+});
+
+test('getStudentAvailability respects workdays and commitment blocking', () => {
+  const a = M.makeStudent({ name: 'A', workdays: { mon: false, tue: true, wed: true, thu: true, fri: true } });
+  const blocking = M.makeOutsideCommitment({
+    label: 'Co-op day', participantMode: 'everyone', weekdays: ['tue'], blocksRegularWork: true, allowsCoopWork: true
+  });
+  const nonBlocking = M.makeOutsideCommitment({
+    label: 'Piano', participantMode: 'everyone', weekdays: ['wed'], blocksRegularWork: false
+  });
+  const state = setupState({ students: [a], outsideCommitments: [blocking, nonBlocking] });
+  const av = A.getStudentAvailability(state, a.id);
+  assert.equal(av.workdays.mon, false);
+  assert.deepEqual(av.availableDayIds, ['wed', 'thu', 'fri'], 'mon off, tue blocked, wed not blocked');
+  assert.deepEqual(av.blockedBy.tue, ['Co-op day']);
+  assert.deepEqual(av.blockedBy.wed, [], 'blocksRegularWork:false must not block the day');
+  assert.deepEqual(av.coopOnlyDayIds, ['tue']);
+});
+
+test('getGroupAvailability is the member intersection and reports partial days', () => {
+  const a = M.makeStudent({ name: 'A', workdays: { mon: true, tue: true, wed: false, thu: true, fri: true } });
+  const b = M.makeStudent({ name: 'B', workdays: { mon: true, tue: false, wed: true, thu: true, fri: true } });
+  const g = M.makeGroup({ label: 'G', studentIds: [a.id, b.id] });
+  const empty = M.makeGroup({ label: 'Empty' });
+  const state = setupState({ students: [a, b], groups: [g, empty] });
+  const av = A.getGroupAvailability(state, g.id);
+  assert.deepEqual(av.availableDayIds, ['mon', 'thu', 'fri']);
+  assert.deepEqual(av.partialDayIds, ['tue', 'wed']);
+  const emptyAv = A.getGroupAvailability(state, empty.id);
+  assert.deepEqual(emptyAv.availableDayIds, []);
+  assert.deepEqual(emptyAv.partialDayIds, []);
+  assert.deepEqual(emptyAv.memberIds, []);
+});
+
+test('buildAudienceOptions contains only active students/groups and every group carries memberNames', () => {
+  const a = M.makeStudent({ name: 'A' });
+  const b = M.makeStudent({ name: 'B', active: false });
+  const g = M.makeGroup({ label: 'G', studentIds: [a.id, b.id] });
+  const gOff = M.makeGroup({ label: 'Retired group', active: false });
+  const state = setupState({ students: [a, b], groups: [g, gOff] });
+  const opts = A.buildAudienceOptions(state);
+  assert.equal(opts.filter((o) => o.kind === 'student').length, 1);
+  assert.equal(opts.find((o) => o.kind === 'student').label, 'A');
+  const groupOpts = opts.filter((o) => o.kind === 'group');
+  assert.equal(groupOpts.length, 1, 'inactive groups are not offered');
+  for (const go of groupOpts) assert.ok(Array.isArray(go.memberNames), 'group options carry memberNames');
+  assert.deepEqual(groupOpts[0].memberNames, ['A'], 'inactive members are not listed');
+  assert.equal(opts[0].kind, 'everyone');
+  assert.equal(opts[opts.length - 1].kind, 'coop');
+});
+
+test('loop choices appear in buildAudienceOptions as loop:<id>', () => {
+  const a = M.makeStudent({ name: 'A' });
+  const loop = M.makeLoop({ title: 'Beauty Loop' });
+  const state = setupState({ students: [a], loops: [loop] });
+  const opt = A.buildAudienceOptions(state).find((o) => o.value === 'loop:' + loop.id);
+  assert.ok(opt, 'loop option must exist');
+  assert.equal(opt.kind, 'loop');
+  assert.equal(opt.loopId, loop.id);
+  assert.equal(opt.label, 'In: Beauty Loop');
+});
+
+test('describeAudienceConsequence names actual members and hardcodes no family names', () => {
+  const a = M.makeStudent({ name: 'Wren' });
+  const b = M.makeStudent({ name: 'Ash' });
+  const c = M.makeStudent({ name: 'Juno' });
+  const g = M.makeGroup({ label: 'G', studentIds: [a.id, b.id] });
+  const solo = M.makeGroup({ label: 'Solo', studentIds: [c.id] });
+  const empty = M.makeGroup({ label: 'Empty' });
+  const loop = M.makeLoop({ title: 'Morning Loop' });
+  const state = setupState({ students: [a, b, c], groups: [g, solo, empty], loops: [loop] });
+
+  const groupSentence = A.describeAudienceConsequence(state, 'group:' + g.id, 'History');
+  assert.equal(groupSentence, 'This creates one shared strand for Wren and Ash.');
+  assert.equal(A.describeAudienceConsequence(state, 'group:' + solo.id, 'History'),
+    'This creates one strand for Juno.');
+  assert.equal(A.describeAudienceConsequence(state, 'group:' + empty.id, 'History'),
+    'This group has no members yet.');
+  assert.equal(A.describeAudienceConsequence(state, 'everyone', 'History'),
+    'This creates one family strand for everyone: Wren, Ash and Juno.');
+  assert.equal(A.describeAudienceConsequence(state, 'student:' + c.id, 'History'),
+    'This creates one strand just for Juno.');
+  assert.equal(A.describeAudienceConsequence(state, 'loop:' + loop.id, 'History'),
+    'This strand is covered inside Morning Loop. No separate weekly card.');
+  assert.equal(A.describeAudienceConsequence(state, 'coop', 'History'),
+    'Handled outside the home. No weekly card.');
+
+  const src = fs.readFileSync(new URL('../lib/familyMapAdapter.mjs', import.meta.url), 'utf8');
+  const setupSection = src.slice(src.indexOf('Setup prototype — derivation helpers'));
+  for (const banned of ['Kayla', 'Charis', 'Lucy', 'Jeremiah', "'older'", "'littles'"]) {
+    assert.equal(setupSection.indexOf(banned), -1, 'setup helpers must not hardcode ' + banned);
+  }
+});
+
+test('describeAudienceImpact counts strand assignments referencing a group or student', () => {
+  const a = M.makeStudent({ name: 'A' });
+  const g = M.makeGroup({ label: 'G', studentIds: [a.id] });
+  const state = setupState({
+    students: [a], groups: [g],
+    strandAssignments: [
+      M.makeStrandAssignment({ strandId: 's1', strandLabel: 'History', assignmentMode: 'custom-group', groupId: g.id }),
+      M.makeStrandAssignment({ strandId: 's2', strandLabel: 'Math', assignmentMode: 'individual', studentIds: [a.id] })
+    ]
+  });
+  const groupImpact = A.describeAudienceImpact(state, { kind: 'group-members', groupId: g.id });
+  assert.equal(groupImpact.affectedStrandCount, 1);
+  assert.deepEqual(groupImpact.affectedStrandLabels, ['History']);
+  assert.ok(groupImpact.message.includes('History'));
+  const studentImpact = A.describeAudienceImpact(state, { kind: 'student-deactivate', studentId: a.id });
+  assert.equal(studentImpact.affectedStrandCount, 2);
+  // read-only
+  assert.equal(state.strandAssignments.length, 2);
+  const none = A.describeAudienceImpact(state, { kind: 'group-delete', groupId: 'nope' });
+  assert.equal(none.affectedStrandCount, 0);
+});
+
+test('getSetupProgress derives family/availability and reads the two acknowledgements', () => {
+  const a = M.makeStudent({ name: 'A' });
+  const state = setupState({ students: [a] });
+  let p = A.getSetupProgress(state);
+  assert.equal(p.family.complete, false, 'unconfirmed Form blocks the family step');
+  assert.equal(p.availability.complete, true);
+  assert.equal(p.groups.complete, false);
+  assert.equal(p.rhythm.complete, false);
+  assert.equal(p.readyForFeast, false);
+
+  a.gradeBandConfirmed = true;
+  state.setupPrototype = { groupsReviewed: true, rhythmReviewed: true };
+  p = A.getSetupProgress(state);
+  assert.equal(p.family.complete, true);
+  assert.equal(p.groups.complete, true);
+  assert.equal(p.rhythm.complete, true);
+  assert.equal(p.readyForFeast, true);
+
+  // Availability is derived, not acknowledged: block every day.
+  state.outsideCommitments = [M.makeOutsideCommitment({
+    label: 'Away', participantMode: 'everyone', weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'], blocksRegularWork: true
+  })];
+  p = A.getSetupProgress(state);
+  assert.equal(p.availability.complete, false);
+  assert.equal(p.readyForFeast, false);
+});
+
+test('buildSetupSummary reports family, groups, everyone, commitments, and loops', () => {
+  const a = M.makeStudent({ name: 'A', grade: '5', gradeBand: 'form2', gradeBandConfirmed: true });
+  const b = M.makeStudent({ name: 'B' });
+  const g = M.makeGroup({ label: 'G', studentIds: [a.id, b.id] });
+  const loop = M.makeLoop({ title: 'L' });
+  const commit = M.makeOutsideCommitment({ label: 'Co-op', participantMode: 'everyone', weekdays: ['tue'] });
+  const state = setupState({ students: [a, b], groups: [g], loops: [loop], outsideCommitments: [commit] });
+  const s = A.buildSetupSummary(state);
+  assert.equal(s.family.length, 2);
+  assert.equal(s.family[0].gradeBandLabel, M.GRADE_BANDS.find((x) => x.id === 'form2').label);
+  assert.equal(s.family[0].gradeBandConfirmed, true);
+  assert.equal(s.family[1].gradeBandConfirmed, false);
+  assert.deepEqual(s.groups[0].memberNames, ['A', 'B']);
+  assert.deepEqual(s.everyone.memberNames, ['A', 'B']);
+  assert.deepEqual(s.commitments[0].participantNames, ['A', 'B']);
+  assert.deepEqual(s.commitments[0].weekdays, ['tue']);
+  assert.equal(s.loops[0].title, 'L');
+  assert.ok(typeof s.loops[0].participantSummary === 'string');
+});
+
+test('every new setup helper leaves existing production collections untouched', () => {
+  const state = A.buildSampleAppState();
+  const KEYS = ['cards', 'loops', 'loopItems', 'resources', 'resourceUses'];
+  const before = {};
+  for (const k of KEYS) before[k] = { len: state[k].length, ids: state[k].map((x) => x.id).join('|') };
+  const rhythmBefore = {
+    days: state.weeklyRhythm.days.map((d) => d.id).join('|'),
+    blocks: state.weeklyRhythm.blocks.map((b) => b.id).join('|'),
+    assignments: state.weeklyRhythm.assignments.map((a) => a.id).join('|')
+  };
+  const loopFieldsBefore = JSON.stringify(state.loops);
+
+  A.getEveryoneStudentIds(state);
+  A.getStudentAvailability(state, state.students[0].id);
+  A.getGroupAvailability(state, state.groups[0].id);
+  A.getCommitmentParticipantIds(state, M.makeOutsideCommitment({ participantMode: 'everyone' }));
+  A.buildSetupSummary(state);
+  A.getSetupProgress(state);
+  A.buildAudienceOptions(state);
+  A.describeAudienceConsequence(state, 'everyone', 'X');
+  A.describeAudienceImpact(state, { kind: 'group-members', groupId: state.groups[0].id });
+  A.joinNames(['A', 'B']);
+  A.gradeBandLabel('form1');
+
+  for (const k of KEYS) {
+    assert.equal(state[k].length, before[k].len, k + ' length must be unchanged');
+    assert.equal(state[k].map((x) => x.id).join('|'), before[k].ids, k + ' ids must be unchanged');
+  }
+  assert.equal(state.weeklyRhythm.days.map((d) => d.id).join('|'), rhythmBefore.days);
+  assert.equal(state.weeklyRhythm.blocks.map((b) => b.id).join('|'), rhythmBefore.blocks);
+  assert.equal(state.weeklyRhythm.assignments.map((a) => a.id).join('|'), rhythmBefore.assignments);
+  assert.equal(JSON.stringify(state.loops), loopFieldsBefore, 'loops must not be rewritten');
+});
+
+test('all new setup helpers tolerate {} and states missing optional arrays', () => {
+  const degenerate = [
+    {},
+    { students: null, groups: undefined },
+    { students: [{ id: 's1', name: 'Solo', active: true }] },
+    { students: [{ id: 's1', name: 'Solo', active: true }], groups: [{ id: 'g1', label: 'G' }] },
+    { students: [{ id: 's1', name: 'Solo', active: true }], outsideCommitments: [{ id: 'c1', label: 'X' }] }
+  ];
+  for (const st of degenerate) {
+    assert.ok(Array.isArray(A.getEveryoneStudentIds(st)));
+    const av = A.getStudentAvailability(st, 's1');
+    assert.ok(Array.isArray(av.availableDayIds));
+    assert.ok(Array.isArray(av.coopOnlyDayIds));
+    const gav = A.getGroupAvailability(st, 'g1');
+    assert.ok(Array.isArray(gav.availableDayIds) && Array.isArray(gav.partialDayIds));
+    assert.ok(Array.isArray(A.getCommitmentParticipantIds(st, {})));
+    const summary = A.buildSetupSummary(st);
+    for (const key of ['family', 'groups', 'commitments', 'loops']) assert.ok(Array.isArray(summary[key]), key);
+    assert.ok(Array.isArray(summary.everyone.memberIds));
+    const p = A.getSetupProgress(st);
+    assert.equal(typeof p.readyForFeast, 'boolean');
+    const opts = A.buildAudienceOptions(st);
+    assert.ok(Array.isArray(opts) && opts.length >= 2);
+    assert.equal(typeof A.describeAudienceConsequence(st, 'everyone', 'X'), 'string');
+    assert.equal(typeof A.describeAudienceConsequence(st, '', 'X'), 'string');
+    assert.equal(typeof A.describeAudienceImpact(st, {}).affectedStrandCount, 'number');
   }
 });
 
