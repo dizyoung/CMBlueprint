@@ -1900,7 +1900,8 @@ test('getSetupProgress derives family/availability and reads the two acknowledge
   a.gradeBandConfirmed = true;
   // The rhythm step is loop BUCKETS only: a bucket must exist AND be reviewed.
   state.loops = [M.makeLoop({ title: 'Beauty loop' })];
-  state.setupPrototype = { groupsReviewed: true, loopBucketsReviewed: true };
+  state.setupPrototype = { groupsReviewed: true };
+  A.markLoopBucketsReviewed(state);
   p = A.getSetupProgress(state);
   assert.equal(p.family.complete, true);
   assert.equal(p.groups.complete, true);
@@ -2075,15 +2076,26 @@ test('6. independent-flexible needs the light-day opt-in', () => {
   assert.ok(/opts in/.test(optedIn.byDay.tue.reason));
 });
 
-test('6b. the light-day opt-in also grants shared/group work, and says it is an override', () => {
+test('6b. the light-day opt-in does NOT grant group-lesson work, and says why', () => {
   const a = capacityStudent('A', LIGHT_WEEK);
   const state = setupState({ students: [a] });
   const group = A.getStudentWorkEligibility(state, a.id, 'group-lesson', { mayOccurOnLightDays: true });
-  assert.equal(group.byDay.tue.allowed, true);
-  assert.ok(/normally group lessons are not/.test(group.byDay.tue.reason));
-  const shared = M.workTypeAllowedOnCapacity('shared-with-mom', 'light-independent', { mayOccurOnLightDays: true });
-  assert.equal(shared.allowed, true);
-  assert.ok(/opts in/.test(shared.reason));
+  assert.equal(group.byDay.tue.allowed, false);
+  assert.deepEqual(group.eligibleDayIds, ['mon', 'wed', 'fri']);
+  assert.ok(/only covers flexible independent work/.test(group.byDay.tue.reason));
+  assert.ok(/not group lessons/.test(group.byDay.tue.reason));
+});
+
+test('6c. the light-day opt-in does NOT grant shared-with-mom work, and says why', () => {
+  const a = capacityStudent('A', LIGHT_WEEK);
+  const state = setupState({ students: [a] });
+  const shared = A.getStudentWorkEligibility(state, a.id, 'shared-with-mom', { mayOccurOnLightDays: true });
+  assert.equal(shared.byDay.tue.allowed, false);
+  assert.deepEqual(shared.eligibleDayIds, ['mon', 'wed', 'fri']);
+  const verdict = M.workTypeAllowedOnCapacity('shared-with-mom', 'light-independent', { mayOccurOnLightDays: true });
+  assert.equal(verdict.allowed, false);
+  assert.ok(/only covers flexible independent work/.test(verdict.reason));
+  assert.ok(/not work shared with Mom/.test(verdict.reason));
 });
 
 test('7. a second student with different capacities on the same weekday is unaffected', () => {
@@ -2206,16 +2218,17 @@ test('17. setupStepComplete is false when buckets exist but are not reviewed', (
   assert.equal(A.getSetupProgress(state).rhythm.complete, false);
   assert.ok(A.getSetupProgress(state).rhythm.detail.indexOf('Feast Planning') === -1 ||
     A.getSetupProgress(state).rhythm.detail.length > 0);
-  state.setupPrototype = { loopBucketsReviewed: true };
+  A.markLoopBucketsReviewed(state);
   assert.equal(A.getLoopSortingProgress(state).setupStepComplete, true);
   assert.equal(A.getSetupProgress(state).rhythm.complete, true);
   assert.ok(A.getSetupProgress(state).rhythm.detail.indexOf('Feast Planning') > -1,
     'the detail must say sorting happens in Feast Planning');
 });
 
-test('18. sortingComplete requires zero unsorted AND loopContentsReviewed', () => {
+test('18. sortingComplete requires zero unsorted AND loopSortingReviewed', () => {
   const state = setupState({ loops: [M.makeLoop({ title: 'Bucket' })] });
-  state.setupPrototype = { loopBucketsReviewed: true, loopContentsReviewed: true };
+  state.setupPrototype = { loopSortingReviewed: true };
+  A.markLoopBucketsReviewed(state);
   assert.equal(A.getLoopSortingProgress(state).sortingComplete, false, 'unsorted strands remain');
   // Give every strand a decision.
   for (const s of M.FEAST_LIBRARY) {
@@ -2223,7 +2236,7 @@ test('18. sortingComplete requires zero unsorted AND loopContentsReviewed', () =
   }
   assert.equal(A.getLoopSortingProgress(state).unsortedStrandCount, 0);
   assert.equal(A.getLoopSortingProgress(state).sortingComplete, true);
-  state.setupPrototype.loopContentsReviewed = false;
+  state.setupPrototype.loopSortingReviewed = false;
   assert.equal(A.getLoopSortingProgress(state).sortingComplete, false, 'review is explicit, never inferred');
 });
 
@@ -2303,6 +2316,434 @@ test('21. every new helper tolerates {} and states missing optional arrays', () 
     assert.equal(typeof A.getSetupProgress(st).rhythm.detail, 'string');
     assert.equal(typeof M.resolveDayCapacity(st.students ? st.students[0] : undefined, 'mon'), 'string');
     assert.equal(typeof M.workTypeAllowedOnCapacity(undefined, undefined).allowed, 'boolean');
+  }
+});
+
+
+// ===========================================================================
+// CORRECTION 1 — the light-day opt-in applies ONLY to independent-flexible.
+// Every state is built inline; nothing depends on the sample family.
+// ===========================================================================
+
+test('C1.1 independent-essential is eligible on a light day without any opt-in', () => {
+  const a = capacityStudent('A', LIGHT_WEEK);
+  const state = setupState({ students: [a] });
+  const el = A.getStudentAvailableDaysForWorkType(state, a.id, 'independent-essential');
+  assert.deepEqual(el.eligibleDayIds, ['mon', 'tue', 'wed', 'thu', 'fri']);
+  assert.equal(el.byDay.tue.allowed, true);
+});
+
+test('C1.2 independent-flexible is ineligible on a light day without the opt-in, eligible with it', () => {
+  const a = capacityStudent('A', LIGHT_WEEK);
+  const state = setupState({ students: [a] });
+  assert.deepEqual(
+    A.getStudentAvailableDaysForWorkType(state, a.id, 'independent-flexible').eligibleDayIds,
+    ['mon', 'wed', 'fri']
+  );
+  assert.deepEqual(
+    A.getStudentAvailableDaysForWorkType(state, a.id, 'independent-flexible', { mayOccurOnLightDays: true }).eligibleDayIds,
+    ['mon', 'tue', 'wed', 'thu', 'fri']
+  );
+});
+
+test('C1.3 shared-with-mom stays ineligible on a light day even when the item opts in', () => {
+  const a = capacityStudent('A', LIGHT_WEEK);
+  const state = setupState({ students: [a] });
+  const el = A.getStudentAvailableDaysForWorkType(state, a.id, 'shared-with-mom', { mayOccurOnLightDays: true });
+  assert.deepEqual(el.eligibleDayIds, ['mon', 'wed', 'fri']);
+  assert.equal(el.byDay.tue.allowed, false);
+  assert.equal(el.byDay.thu.allowed, false);
+  assert.equal(M.workTypeAllowedOnCapacity('shared-with-mom', 'light-independent', { mayOccurOnLightDays: true }).allowed, false);
+});
+
+test('C1.4 group-lesson stays ineligible on a light day even when the item opts in', () => {
+  const a = capacityStudent('A', LIGHT_WEEK);
+  const state = setupState({ students: [a] });
+  const el = A.getStudentAvailableDaysForWorkType(state, a.id, 'group-lesson', { mayOccurOnLightDays: true });
+  assert.deepEqual(el.eligibleDayIds, ['mon', 'wed', 'fri']);
+  assert.equal(el.byDay.tue.allowed, false);
+  assert.equal(M.workTypeAllowedOnCapacity('group-lesson', 'light-independent', { mayOccurOnLightDays: true }).allowed, false);
+});
+
+test('C1.5 both blocked reasons explain that the opt-in does not cover that kind of work', () => {
+  for (const wt of ['shared-with-mom', 'group-lesson']) {
+    const v = M.workTypeAllowedOnCapacity(wt, 'light-independent', { mayOccurOnLightDays: true });
+    assert.equal(v.allowed, false, wt);
+    assert.ok(/A light day is for independent work\./.test(v.reason), wt);
+    assert.ok(/Opting in only covers flexible independent work/.test(v.reason), wt);
+  }
+  assert.ok(/not group lessons/.test(
+    M.workTypeAllowedOnCapacity('group-lesson', 'light-independent', { mayOccurOnLightDays: true }).reason));
+  assert.ok(/not work shared with Mom/.test(
+    M.workTypeAllowedOnCapacity('shared-with-mom', 'light-independent', { mayOccurOnLightDays: true }).reason));
+});
+
+test('C1.6 outside-coop is eligible on a light day; off allows nothing even with the opt-in', () => {
+  assert.equal(M.workTypeAllowedOnCapacity('outside-coop', 'light-independent').allowed, true);
+  assert.equal(M.workTypeAllowedOnCapacity('outside-coop', 'light-independent', { mayOccurOnLightDays: true }).allowed, true);
+  for (const wt of M.WORK_TYPE_IDS) {
+    assert.equal(M.workTypeAllowedOnCapacity(wt, 'off', { mayOccurOnLightDays: true }).allowed, false, wt);
+  }
+});
+
+test('C1.7 the opt-in changes nothing on full, outside-only, or off', () => {
+  for (const cap of ['full', 'outside-only', 'off']) {
+    for (const wt of M.WORK_TYPE_IDS) {
+      const plain = M.workTypeAllowedOnCapacity(wt, cap);
+      const opted = M.workTypeAllowedOnCapacity(wt, cap, { mayOccurOnLightDays: true });
+      assert.equal(opted.allowed, plain.allowed, cap + '/' + wt);
+      assert.equal(opted.reason, plain.reason, cap + '/' + wt);
+    }
+  }
+});
+
+test('C1.8 group shared work still excludes a member\'s light day even when the strand opts in', () => {
+  const a = capacityStudent('A', LIGHT_WEEK);
+  const b = capacityStudent('B', { mon: 'full', tue: 'full', wed: 'full', thu: 'full', fri: 'full' });
+  const g = M.makeGroup({ label: 'G', studentIds: [a.id, b.id] });
+  const state = setupState({ students: [a, b], groups: [g] });
+  const av = A.getGroupWorkAvailability(state, g.id, 'shared-with-mom', { mayOccurOnLightDays: true });
+  assert.equal(av.mode, 'all-must-allow');
+  assert.deepEqual(av.eligibleDayIds, ['mon', 'wed', 'fri']);
+  assert.equal(av.blockedBy.tue[0].studentId, a.id);
+  const grp = A.getGroupWorkAvailability(state, g.id, 'group-lesson', { mayOccurOnLightDays: true });
+  assert.deepEqual(grp.eligibleDayIds, ['mon', 'wed', 'fri']);
+});
+
+// ===========================================================================
+// CORRECTION 2 — Setup reviews buckets; Feast reviews sorting.
+// ===========================================================================
+
+test('C2.9 noLoopsChosen satisfies the bucket requirement with zero loops', () => {
+  const state = setupState({ loops: [] });
+  state.setupPrototype = { noLoopsChosen: true };
+  A.markLoopBucketsReviewed(state);
+  const p = A.getLoopSortingProgress(state);
+  assert.equal(p.bucketsDefined, false);
+  assert.equal(p.noLoopsChosen, true);
+  assert.equal(p.bucketsReviewed, true);
+  assert.equal(p.setupStepComplete, true);
+  // Without the explicit answer, zero loops does not complete the step.
+  const other = setupState({ loops: [] });
+  A.markLoopBucketsReviewed(other);
+  assert.equal(A.getLoopSortingProgress(other).setupStepComplete, false);
+});
+
+test('C2.10 renaming a loop invalidates bucket review via the fingerprint', () => {
+  const loop = M.makeLoop({ id: 'l1', title: 'Morning' });
+  const state = setupState({ loops: [loop] });
+  A.markLoopBucketsReviewed(state);
+  assert.equal(A.getLoopSortingProgress(state).bucketsReviewed, true);
+  state.loops[0].title = 'Morning basket';
+  assert.equal(A.getLoopSortingProgress(state).bucketsReviewed, false);
+  assert.equal(A.getLoopSortingProgress(state).setupStepComplete, false);
+  A.markLoopBucketsReviewed(state);
+  assert.equal(A.getLoopSortingProgress(state).bucketsReviewed, true);
+});
+
+test('C2.11 changing a loop\'s rhythmDayIds invalidates bucket review', () => {
+  const loop = M.makeLoop({ id: 'l1', title: 'Morning', rhythmDayIds: ['mon'] });
+  const state = setupState({ loops: [loop] });
+  A.markLoopBucketsReviewed(state);
+  state.loops[0].rhythmDayIds = ['mon', 'wed'];
+  assert.equal(A.getLoopSortingProgress(state).bucketsReviewed, false);
+  // Order must not matter — the fingerprint sorts day ids.
+  A.markLoopBucketsReviewed(state);
+  state.loops[0].rhythmDayIds = ['wed', 'mon'];
+  assert.equal(A.getLoopSortingProgress(state).bucketsReviewed, true);
+});
+
+test('C2.12 moving a strand between buckets does NOT invalidate bucket review', () => {
+  const l1 = M.makeLoop({ id: 'l1', title: 'One' });
+  const l2 = M.makeLoop({ id: 'l2', title: 'Two' });
+  const state = setupState({ loops: [l1, l2] });
+  A.markLoopBucketsReviewed(state);
+  state.setupPrototype.loopSortingReviewed = true;
+
+  A.setStrandAssignmentForStrand(state, STRAND_A.id, STRAND_A.label, { assignmentMode: 'loop', loopId: 'l1' });
+  A.setStrandAssignmentForStrand(state, STRAND_A.id, STRAND_A.label, { assignmentMode: 'loop', loopId: 'l2' });
+  assert.equal(A.getLoopSortingProgress(state).bucketsReviewed, true, 'membership is not part of the fingerprint');
+
+  // The Feast-level acknowledgement is what a membership change resets.
+  state.setupPrototype.loopSortingReviewed = false;
+  const p = A.getLoopSortingProgress(state);
+  assert.equal(p.sortingReviewed, false);
+  assert.equal(p.bucketsReviewed, true, 'loopBucketsReviewed is untouched');
+  assert.equal(state.setupPrototype.loopBucketsReviewed, true);
+});
+
+test('C2.13 creating or deleting a loop invalidates bucket review', () => {
+  const state = setupState({ loops: [M.makeLoop({ id: 'l1', title: 'One' })] });
+  A.markLoopBucketsReviewed(state);
+  state.loops.push(M.makeLoop({ id: 'l2', title: 'Two' }));
+  assert.equal(A.getLoopSortingProgress(state).bucketsReviewed, false, 'creating a loop changes the structure');
+  A.markLoopBucketsReviewed(state);
+  state.loops = state.loops.filter((l) => l.id !== 'l2');
+  assert.equal(A.getLoopSortingProgress(state).bucketsReviewed, false, 'deleting a loop changes the structure');
+});
+
+test('C2.14 unsorted strands never affect setupStepComplete', () => {
+  const state = setupState({ loops: [M.makeLoop({ title: 'Bucket' })] });
+  A.markLoopBucketsReviewed(state);
+  const p = A.getLoopSortingProgress(state);
+  assert.ok(p.unsortedStrandCount > 0, 'nothing is sorted yet');
+  assert.equal(p.setupStepComplete, true);
+  assert.equal(A.getSetupProgress(state).rhythm.complete, true);
+  // And sorting everything does not change the Setup step either.
+  for (const s of M.FEAST_LIBRARY) {
+    A.setStrandAssignmentForStrand(state, s.id, s.label, { assignmentMode: 'not-this-year' });
+  }
+  assert.equal(A.getLoopSortingProgress(state).unsortedStrandCount, 0);
+  assert.equal(A.getLoopSortingProgress(state).setupStepComplete, true);
+});
+
+test('C2.15 sortingComplete requires zero unsorted AND sortingReviewed', () => {
+  const state = setupState({ loops: [M.makeLoop({ title: 'Bucket' })] });
+  A.markLoopBucketsReviewed(state);
+  state.setupPrototype.loopSortingReviewed = true;
+  assert.equal(A.getLoopSortingProgress(state).sortingComplete, false, 'unsorted strands remain');
+  for (const s of M.FEAST_LIBRARY) {
+    A.setStrandAssignmentForStrand(state, s.id, s.label, { assignmentMode: 'not-this-year' });
+  }
+  assert.equal(A.getLoopSortingProgress(state).sortingComplete, true);
+  state.setupPrototype.loopSortingReviewed = false;
+  assert.equal(A.getLoopSortingProgress(state).sortingComplete, false);
+});
+
+test('C2.16 the next-step sentence is singular for 1 and plural otherwise', () => {
+  assert.equal(A.describeUnsortedStrandsNextStep(1),
+    '1 active strand still needs a handling decision in Feast Planning.');
+  assert.equal(A.describeUnsortedStrandsNextStep(2),
+    '2 active strands still need a handling decision in Feast Planning.');
+  assert.equal(A.describeUnsortedStrandsNextStep(7),
+    '7 active strands still need a handling decision in Feast Planning.');
+  assert.equal(A.describeUnsortedStrandsNextStep(0), 'Every active strand already has a handling decision.');
+  // And the progress object carries it.
+  const state = setupState({ loops: [M.makeLoop({ title: 'B' })] });
+  for (const s of M.FEAST_LIBRARY.slice(1)) {
+    A.setStrandAssignmentForStrand(state, s.id, s.label, { assignmentMode: 'not-this-year' });
+  }
+  const p = A.getLoopSortingProgress(state);
+  assert.equal(p.unsortedStrandCount, 1);
+  assert.equal(p.unsortedNextStep, '1 active strand still needs a handling decision in Feast Planning.');
+});
+
+// ===========================================================================
+// CORRECTION 3 — the four availability APIs.
+// ===========================================================================
+
+test('C3.17 getStudentBaselineCapacity reports source for explicit / legacy-workdays / default', () => {
+  const explicitStu = {
+    id: 'e1', name: 'E', active: true,
+    dayCapacity: { mon: 'light-independent' },
+    dayCapacityExplicit: { mon: true }
+  };
+  const legacyStu = { id: 'g1', name: 'L', active: true, workdays: { tue: false } };
+  const bareStu = { id: 'b1', name: 'B', active: true };
+  const state = setupState({ students: [explicitStu, legacyStu, bareStu] });
+
+  const e = A.getStudentBaselineCapacity(state, 'e1');
+  assert.equal(e.source.mon, 'explicit');
+  assert.equal(e.dayCapacity.mon, 'light-independent');
+  assert.equal(e.explicit.mon, true);
+  assert.equal(e.source.tue, 'default');
+  assert.equal(e.explicit.tue, false);
+
+  const l = A.getStudentBaselineCapacity(state, 'g1');
+  assert.equal(l.source.tue, 'legacy-workdays');
+  assert.equal(l.dayCapacity.tue, 'off');
+  assert.equal(l.source.mon, 'default');
+
+  const b = A.getStudentBaselineCapacity(state, 'b1');
+  for (const d of ['mon', 'tue', 'wed', 'thu', 'fri']) {
+    assert.equal(b.source[d], 'default', d);
+    assert.equal(b.dayCapacity[d], 'full', d);
+  }
+});
+
+test('C3.18 getCommitmentCapacitySuggestions suggests for a non-explicit day and never for an explicit one', () => {
+  const a = capacityStudent('A', LIGHT_WEEK, { tue: true });
+  const commit = M.makeOutsideCommitment({
+    id: 'c1', label: 'Field study', participantMode: 'everyone',
+    weekdays: ['tue', 'thu'], suggestedCapacity: 'outside-only'
+  });
+  const state = setupState({ students: [a], outsideCommitments: [commit] });
+  const s = A.getCommitmentCapacitySuggestions(state, a.id);
+  assert.equal(s.suggestions.tue, undefined, 'a hand-set day is never second-guessed');
+  assert.deepEqual(s.suggestions.thu, { capacity: 'outside-only', fromCommitmentId: 'c1', fromCommitmentLabel: 'Field study' });
+  assert.deepEqual(s.suggestedDayIds, ['thu']);
+});
+
+test('C3.19 getStudentEffectiveCapacity ignores unapplied suggestions entirely', () => {
+  const a = capacityStudent('A', LIGHT_WEEK);
+  const commit = M.makeOutsideCommitment({
+    id: 'c1', label: 'Co-op', participantMode: 'everyone', weekdays: ['mon'], suggestedCapacity: 'outside-only'
+  });
+  const state = setupState({ students: [a], outsideCommitments: [commit] });
+  const eff = A.getStudentEffectiveCapacity(state, a.id);
+  assert.equal(eff.dayCapacity.mon, 'full', 'a suggestion is not a capacity');
+  assert.equal(eff.hasUnappliedSuggestions, true);
+  assert.deepEqual(eff.dayCapacity, A.getStudentBaselineCapacity(state, a.id).dayCapacity);
+  assert.equal(a.dayCapacity.mon, 'full', 'nothing was written back to the student');
+
+  const quiet = setupState({ students: [capacityStudent('B', LIGHT_WEEK)] });
+  assert.equal(A.getStudentEffectiveCapacity(quiet, quiet.students[0].id).hasUnappliedSuggestions, false);
+});
+
+test('C3.20 applying a suggestion changes effective capacity and clears it from suggestions', () => {
+  const a = capacityStudent('A', LIGHT_WEEK);
+  const commit = M.makeOutsideCommitment({
+    id: 'c1', label: 'Co-op', participantMode: 'everyone', weekdays: ['mon'], suggestedCapacity: 'outside-only'
+  });
+  const state = setupState({ students: [a], outsideCommitments: [commit] });
+  assert.deepEqual(A.getCommitmentCapacitySuggestions(state, a.id).suggestedDayIds, ['mon']);
+
+  // Applying = writing baseline + marking the day explicit (what the UI does).
+  a.dayCapacity.mon = 'outside-only';
+  a.dayCapacityExplicit.mon = true;
+
+  assert.equal(A.getStudentEffectiveCapacity(state, a.id).dayCapacity.mon, 'outside-only');
+  assert.equal(A.getStudentEffectiveCapacity(state, a.id).hasUnappliedSuggestions, false);
+  assert.deepEqual(A.getCommitmentCapacitySuggestions(state, a.id).suggestedDayIds, []);
+  assert.equal(A.getStudentBaselineCapacity(state, a.id).source.mon, 'explicit');
+});
+
+test('C3.21 getStudentAvailableDaysForWorkType matches the matrix for every capacity x work type', () => {
+  const MATRIX = {
+    'full': { 'shared-with-mom': true, 'group-lesson': true, 'independent-essential': true, 'independent-flexible': true, 'outside-coop': true },
+    'light-independent': { 'shared-with-mom': false, 'group-lesson': false, 'independent-essential': true, 'independent-flexible': false, 'outside-coop': true },
+    'outside-only': { 'shared-with-mom': false, 'group-lesson': false, 'independent-essential': false, 'independent-flexible': false, 'outside-coop': true },
+    'off': { 'shared-with-mom': false, 'group-lesson': false, 'independent-essential': false, 'independent-flexible': false, 'outside-coop': false }
+  };
+  const OPTED = { 'light-independent': { 'independent-flexible': true } };
+  for (const cap of M.DAY_CAPACITY_IDS) {
+    const stu = capacityStudent('A', { mon: cap, tue: cap, wed: cap, thu: cap, fri: cap });
+    const state = setupState({ students: [stu] });
+    for (const wt of M.WORK_TYPE_IDS) {
+      const plain = A.getStudentAvailableDaysForWorkType(state, stu.id, wt);
+      assert.equal(plain.byDay.mon.allowed, MATRIX[cap][wt], cap + '/' + wt);
+      assert.equal(plain.eligibleDayIds.length, MATRIX[cap][wt] ? 5 : 0, cap + '/' + wt);
+      assert.equal(typeof plain.byDay.mon.reason, 'string');
+      assert.equal(plain.byDay.mon.capacity, cap);
+      const opted = A.getStudentAvailableDaysForWorkType(state, stu.id, wt, { mayOccurOnLightDays: true });
+      const expectOpted = (OPTED[cap] && OPTED[cap][wt] === true) ? true : MATRIX[cap][wt];
+      assert.equal(opted.byDay.mon.allowed, expectOpted, 'opt-in ' + cap + '/' + wt);
+    }
+  }
+});
+
+test('C3.22 getStudentAvailability still returns its documented shape and is marked deprecated', () => {
+  const a = capacityStudent('A', LIGHT_WEEK);
+  const commit = M.makeOutsideCommitment({
+    label: 'Co-op', participantMode: 'everyone', weekdays: ['mon'], suggestedCapacity: 'outside-only'
+  });
+  const state = setupState({ students: [a], outsideCommitments: [commit] });
+  const av = A.getStudentAvailability(state, a.id);
+  assert.equal(av.deprecated, true);
+  assert.equal(typeof av.deprecationNote, 'string');
+  assert.ok(av.deprecationNote.indexOf('effective capacity is Full') > -1);
+  assert.deepEqual(av.availableDayIds, ['mon', 'wed', 'fri']);
+  assert.deepEqual(av.lightDayIds, ['tue', 'thu']);
+  assert.deepEqual(av.coopOnlyDayIds, []);
+  assert.deepEqual(av.offDayIds, []);
+  assert.deepEqual(av.blockedBy.mon, ['Co-op']);
+  assert.equal(av.suggestedCapacity.mon.capacity, 'outside-only');
+  assert.equal(av.suggestedCapacity.mon.fromCommitment, 'Co-op');
+  assert.equal(av.capacityLabels.tue, M.dayCapacityLabel('light-independent'));
+  assert.equal(typeof av.workdays.mon, 'boolean');
+  // It is a delegate: capacity agrees with the effective capacity exactly.
+  assert.deepEqual(av.dayCapacity, A.getStudentEffectiveCapacity(state, a.id).dayCapacity);
+});
+
+test('C3.23 all four availability functions tolerate {} and missing optional arrays', () => {
+  const degenerate = [
+    {},
+    { students: null, outsideCommitments: undefined },
+    { students: [{ id: 's1', name: 'Solo', active: true }] },
+    { students: [{ id: 's1', name: 'Solo', active: true }], outsideCommitments: [{ id: 'c1', label: 'X' }] },
+    { students: [{ id: 's1' }], groups: [{ id: 'g1' }] }
+  ];
+  for (const st of degenerate) {
+    const b = A.getStudentBaselineCapacity(st, 's1');
+    assert.equal(typeof b.dayCapacity.mon, 'string');
+    assert.equal(typeof b.explicit.mon, 'boolean');
+    assert.equal(typeof b.source.mon, 'string');
+    const s = A.getCommitmentCapacitySuggestions(st, 's1');
+    assert.equal(typeof s.suggestions, 'object');
+    assert.ok(Array.isArray(s.suggestedDayIds));
+    const e = A.getStudentEffectiveCapacity(st, 's1');
+    assert.equal(typeof e.hasUnappliedSuggestions, 'boolean');
+    const w = A.getStudentAvailableDaysForWorkType(st, 's1', 'group-lesson');
+    assert.ok(Array.isArray(w.eligibleDayIds));
+    assert.equal(typeof w.byDay.mon.allowed, 'boolean');
+    assert.equal(typeof A.loopBucketFingerprint(st), 'string');
+  }
+});
+
+// ===========================================================================
+// MIGRATION — one normalizer, pure and idempotent.
+// ===========================================================================
+
+test('C4.24 loopContentsReviewed seeds loopSortingReviewed and is preserved', () => {
+  const state = setupState({ setupPrototype: { loopContentsReviewed: true } });
+  const out = A.migrateSetupPrototypeState(state);
+  assert.equal(out.setupPrototype.loopSortingReviewed, true);
+  assert.equal(out.setupPrototype.loopContentsReviewed, true, 'the legacy field is preserved');
+  assert.equal(state.setupPrototype.loopSortingReviewed, undefined, 'the input state is not mutated');
+  // A false legacy value migrates as false, not as "absent".
+  const off = A.migrateSetupPrototypeState(setupState({ setupPrototype: { loopContentsReviewed: false } }));
+  assert.equal(off.setupPrototype.loopSortingReviewed, false);
+  // An existing loopSortingReviewed always wins.
+  const both = A.migrateSetupPrototypeState(setupState({
+    setupPrototype: { loopContentsReviewed: true, loopSortingReviewed: false }
+  }));
+  assert.equal(both.setupPrototype.loopSortingReviewed, false);
+});
+
+test('C4.25 rhythmReviewed seeds loopBucketsReviewed + fingerprint and is preserved', () => {
+  const state = setupState({
+    loops: [M.makeLoop({ id: 'l1', title: 'Morning', rhythmDayIds: ['mon'] })],
+    setupPrototype: { rhythmReviewed: true }
+  });
+  const out = A.migrateSetupPrototypeState(state);
+  assert.equal(out.setupPrototype.rhythmReviewed, true, 'the legacy field is preserved');
+  assert.equal(out.setupPrototype.loopBucketsReviewed, true);
+  assert.equal(out.setupPrototype.loopBucketsFingerprint, A.loopBucketFingerprint(state));
+  assert.equal(A.getLoopSortingProgress(out).bucketsReviewed, true);
+  assert.equal(out.setupPrototype.noLoopsChosen, undefined, 'noLoopsChosen is never invented');
+  assert.equal(A.getLoopSortingProgress(out).noLoopsChosen, false);
+});
+
+test('C4.26 a legacy user whose buckets have not changed is not forced to re-confirm', () => {
+  const legacy = setupState({
+    loops: [M.makeLoop({ id: 'l1', title: 'Morning' })],
+    setupPrototype: { loopBucketsReviewed: true }   // reviewed, but no fingerprint stored
+  });
+  assert.equal(A.getLoopSortingProgress(legacy).bucketsReviewed, false, 'before migration, nothing matches');
+  const out = A.migrateSetupPrototypeState(legacy);
+  const p = A.getLoopSortingProgress(out);
+  assert.equal(p.bucketsReviewed, true);
+  assert.equal(p.setupStepComplete, true);
+  // ...but a real structure change after migration still re-opens the review.
+  out.loops[0].title = 'Morning basket';
+  assert.equal(A.getLoopSortingProgress(out).bucketsReviewed, false);
+});
+
+test('C4.27 migrateSetupPrototypeState is idempotent and tolerates {}', () => {
+  const seeds = [
+    {},
+    setupState(),
+    setupState({ setupPrototype: { loopContentsReviewed: true } }),
+    setupState({ loops: [M.makeLoop({ id: 'l1', title: 'X' })], setupPrototype: { rhythmReviewed: true } }),
+    setupState({ loops: [M.makeLoop({ id: 'l1', title: 'X' })], setupPrototype: { loopBucketsReviewed: true } }),
+    setupState({ setupPrototype: { groupsReviewed: true, noLoopsChosen: true, loopSortingReviewed: true } })
+  ];
+  for (const seed of seeds) {
+    const once = A.migrateSetupPrototypeState(seed);
+    const twice = A.migrateSetupPrototypeState(once);
+    assert.deepEqual(twice.setupPrototype, once.setupPrototype, 'running it twice changes nothing');
+    assert.equal(JSON.stringify(twice), JSON.stringify(once));
+    assert.equal(typeof once.setupPrototype, 'object');
   }
 });
 

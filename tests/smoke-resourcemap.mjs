@@ -568,6 +568,177 @@ const SKEY = 'cmblueprint.familySchoolMap.v1';
   }
 }
 
+// ===========================================================================
+// CORRECTIONS 1-3 — prototype layer only.
+// ===========================================================================
+
+// --- the light-day opt-in does not make a group-lesson strand eligible ---
+{
+  const op = await browser.newPage();
+  const errs = [];
+  op.on('pageerror', e => errs.push(e.message));
+  await op.goto(FEAST_URL);
+  await op.evaluate(([k, v]) => localStorage.setItem(k, v), [SKEY, JSON.stringify({
+    appStateVersion: 1, subjectColumns: [], cards: [], loopItems: [], resources: [], resourceUses: [],
+    groups: [{ id: 'g_all', label: 'Everyone group', studentIds: ['stu_o'], active: true }],
+    students: [{
+      id: 'stu_o', name: 'Alder', active: true, gradeBand: 'form2', gradeBandConfirmed: true,
+      dayCapacity: { mon: 'full', tue: 'light-independent', wed: 'full', thu: 'full', fri: 'full' },
+      dayCapacityExplicit: { mon: true, tue: true, wed: true, thu: true, fri: true }
+    }],
+    loops: [], strandAssignments: []
+  })]);
+  await op.goto(FEAST_URL);
+  await op.waitForLoadState('networkidle');
+  await op.waitForTimeout(500);
+
+  // Assign one strand to everyone (a group lesson), then tick the opt-in.
+  const strandId = await op.$eval('.strand-chip[data-strand-id]', el => el.getAttribute('data-strand-id'));
+  await op.selectOption('.strand-chip[data-strand-id="' + strandId + '"] select[data-role="who"]', 'everyone');
+  await op.waitForTimeout(400);
+  // The work-type line is progressive disclosure — open it first.
+  await op.$eval('.strand-chip[data-strand-id="' + strandId + '"] details.chip-worktype', el => { el.open = true; });
+  await op.waitForTimeout(200);
+  await op.check('.strand-chip[data-strand-id="' + strandId + '"] input[data-role="light-days"]');
+  await op.waitForTimeout(1500); // autosave debounce
+
+  const verdict = await op.evaluate(async (sid) => {
+    const A = await import('../../lib/familyMapAdapter.mjs');
+    const M = await import('../../lib/familyMap.mjs');
+    const st = JSON.parse(localStorage.getItem('cmblueprint.familySchoolMap.v1'));
+    const sa = (st.strandAssignments || []).find(x => x.strandId === sid);
+    const wt = M.resolveWorkTypeForAssignment(sa);
+    const el = A.getStudentAvailableDaysForWorkType(st, 'stu_o', wt, { mayOccurOnLightDays: true });
+    return { optIn: sa.mayOccurOnLightDays === true, workType: wt, tue: el.byDay.tue.allowed, reason: el.byDay.tue.reason };
+  }, strandId);
+  ok('Light-day opt-in is recorded on the strand', verdict.optIn === true);
+  ok('Opted-in strand resolves to group-lesson work', verdict.workType === 'group-lesson');
+  ok('The opt-in does NOT make group-lesson work eligible on a light day', verdict.tue === false);
+  ok('The reason explains the opt-in does not cover group lessons',
+    /only covers flexible independent work/.test(verdict.reason || ''));
+  ok('No JS errors while ticking the light-day opt-in', errs.length === 0);
+  if (errs.length) errs.forEach(e => console.log('  JS error:', e));
+  await op.evaluate(k => localStorage.removeItem(k), SKEY);
+  await op.close();
+}
+
+// --- Setup: unsorted next step is informational; "no loops" completes buckets;
+//     renaming a loop re-opens bucket review ---
+{
+  const bp = await browser.newPage();
+  const errs = [];
+  bp.on('pageerror', e => errs.push(e.message));
+  await bp.goto(SETUP_URL);
+  await bp.evaluate(([k, v]) => localStorage.setItem(k, v), [SKEY, JSON.stringify({
+    appStateVersion: 1, subjectColumns: [], cards: [], loops: [], groups: [], strandAssignments: [],
+    outsideCommitments: [],
+    students: [{ id: 'stu_b', name: 'Juniper', active: true, gradeBand: 'form2', gradeBandConfirmed: true }],
+    setupPrototype: { groupsReviewed: true }
+  })]);
+  await bp.goto(SETUP_URL);
+  await bp.waitForLoadState('networkidle');
+  await bp.waitForTimeout(400);
+  await bp.click('[data-action="goto-step"][data-step="rhythm"]');
+  await bp.waitForTimeout(300);
+
+  const stepText = await bp.$eval('#step-body', el => el.textContent);
+  ok('Setup shows the unsorted next-step sentence',
+    /active strands? still needs? a handling decision in Feast Planning\./.test(stepText));
+  const errorish = await bp.$$eval('#step-body .notice, #step-body [role="alert"]', els => els.length);
+  ok('The unsorted next step is not rendered as an error', errorish === 0);
+
+  // "We will not use loops this year" + confirm completes the bucket step.
+  await bp.check('input[data-action="no-loops-chosen"]');
+  await bp.waitForTimeout(300);
+  await bp.click('[data-action="loop-buckets-reviewed"]');
+  await bp.waitForTimeout(300);
+  const rhythmDone = await bp.$eval('[data-action="goto-step"][data-step="rhythm"]',
+    el => el.className.includes('is-complete'));
+  ok('"We will not use loops this year" completes the bucket step with zero loops', rhythmDone);
+
+  await bp.click('[data-action="goto-step"][data-step="review"]');
+  await bp.waitForTimeout(300);
+  const continueEnabled = await bp.$eval('#continue-to-feast', el => el.tagName === 'A' || !el.disabled);
+  ok('Unsorted strands never block the Continue button', continueEnabled);
+
+  // Renaming a loop re-opens bucket review, with no explicit reset anywhere.
+  await bp.click('[data-action="goto-step"][data-step="rhythm"]');
+  await bp.waitForTimeout(300);
+  await bp.click('[data-action="add-loop"]');
+  await bp.waitForTimeout(300);
+  await bp.click('[data-action="loop-buckets-reviewed"]');
+  await bp.waitForTimeout(300);
+  const confirmedText = await bp.$eval('#step-body', el => el.textContent);
+  ok('Buckets can be confirmed as they are now', confirmedText.includes('Confirmed as they are now.'));
+  await bp.fill('input[data-action="loop-title"]', 'Renamed loop bucket');
+  await bp.keyboard.press('Tab'); // commit the rename (change fires on blur)
+  await bp.waitForTimeout(600);
+  const afterRename = await bp.$eval('#step-body', el => el.textContent);
+  ok('Renaming a loop re-opens bucket review',
+    afterRename.includes('The buckets changed since you confirmed them'));
+  const rhythmIncomplete = await bp.$eval('[data-action="goto-step"][data-step="rhythm"]',
+    el => el.className.includes('is-incomplete'));
+  ok('Bucket review invalidation shows on the step marker', rhythmIncomplete);
+  ok('No JS errors while reviewing loop buckets', errs.length === 0);
+  if (errs.length) errs.forEach(e => console.log('  JS error:', e));
+  await bp.evaluate(k => localStorage.removeItem(k), SKEY);
+  await bp.close();
+}
+
+// --- both prototype pages survive {} and legacy setupPrototype state ---
+{
+  const seeds = [
+    ['empty object state (post-corrections)', {}],
+    ['legacy setupPrototype with loopContentsReviewed + rhythmReviewed', {
+      appStateVersion: 1, subjectColumns: [], cards: [], loopItems: [], resources: [], resourceUses: [],
+      groups: [], strandAssignments: [], outsideCommitments: [],
+      students: [{ id: 'legacy_p', name: 'Legacy', active: true, workdays: { mon: true, tue: false, wed: true, thu: true, fri: true } }],
+      loops: [{ id: 'loop_legacy', title: 'Legacy loop', itemIds: [] }],
+      setupPrototype: { groupsReviewed: true, rhythmReviewed: true, loopContentsReviewed: true }
+    }]
+  ];
+  for (const [label, seed] of seeds) {
+    for (const [pageName, url, probe] of [['setup', SETUP_URL, '.setup-step-btn'], ['feast', FEAST_URL, '#unsorted-panel']]) {
+      const gp = await browser.newPage();
+      const gErrs = [];
+      gp.on('pageerror', e => gErrs.push(e.message));
+      await gp.goto(url);
+      await gp.evaluate(([k, v]) => localStorage.setItem(k, v), [SKEY, JSON.stringify(seed)]);
+      await gp.goto(url);
+      await gp.waitForLoadState('networkidle');
+      await gp.waitForTimeout(400);
+      const rendered = await gp.$$eval(probe, els => els.length).catch(() => 0);
+      ok(pageName + ' page renders with ' + label, rendered > 0);
+      ok('No JS errors on ' + pageName + ' page with ' + label, gErrs.length === 0);
+      if (gErrs.length) gErrs.forEach(e => console.log('  JS error:', e));
+      await gp.evaluate(k => localStorage.removeItem(k), SKEY);
+      await gp.close();
+    }
+  }
+
+  // The legacy plan migrates rather than losing its acknowledgements.
+  const mp = await browser.newPage();
+  await mp.goto(SETUP_URL);
+  const migrated = await mp.evaluate(async () => {
+    const A = await import('../../lib/familyMapAdapter.mjs');
+    const out = A.migrateSetupPrototypeState({
+      loops: [{ id: 'loop_legacy', title: 'Legacy loop' }],
+      setupPrototype: { rhythmReviewed: true, loopContentsReviewed: true }
+    });
+    return {
+      sorting: out.setupPrototype.loopSortingReviewed,
+      contents: out.setupPrototype.loopContentsReviewed,
+      rhythm: out.setupPrototype.rhythmReviewed,
+      buckets: A.getLoopSortingProgress(out).bucketsReviewed
+    };
+  });
+  ok('Legacy loopContentsReviewed migrates to loopSortingReviewed', migrated.sorting === true);
+  ok('Legacy loopContentsReviewed is preserved', migrated.contents === true);
+  ok('Legacy rhythmReviewed is preserved', migrated.rhythm === true);
+  ok('A legacy user is not forced to re-confirm unchanged buckets', migrated.buckets === true);
+  await mp.close();
+}
+
 await browser.close();
 console.log('\n' + passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total');
 if (failed > 0) process.exit(1);

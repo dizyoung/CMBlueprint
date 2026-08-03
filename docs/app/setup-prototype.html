@@ -175,7 +175,10 @@ var REQUIRED_EXPORTS = [
   { name: 'WORK_TYPES', ok: arr(M.WORK_TYPES).length > 0 },
   { name: 'resolveDayCapacity', ok: typeof M.resolveDayCapacity === 'function' },
   { name: 'getGroupWorkAvailability', ok: typeof A.getGroupWorkAvailability === 'function' },
-  { name: 'getLoopSortingProgress', ok: typeof A.getLoopSortingProgress === 'function' }
+  { name: 'getLoopSortingProgress', ok: typeof A.getLoopSortingProgress === 'function' },
+  { name: 'getStudentEffectiveCapacity', ok: typeof A.getStudentEffectiveCapacity === 'function' },
+  { name: 'loopBucketFingerprint', ok: typeof A.loopBucketFingerprint === 'function' },
+  { name: 'migrateSetupPrototypeState', ok: typeof A.migrateSetupPrototypeState === 'function' }
 ];
 function missingExports() {
   return REQUIRED_EXPORTS.filter(function (e) { return !e.ok; }).map(function (e) { return e.name; });
@@ -206,7 +209,15 @@ function ensureShape(s) {
   if (!Array.isArray(s.strandAssignments)) s.strandAssignments = [];
   if (!Array.isArray(s.outsideCommitments)) s.outsideCommitments = [];
   if (!s.setupPrototype || typeof s.setupPrototype !== 'object') {
-    s.setupPrototype = { groupsReviewed: false, loopBucketsReviewed: false, loopContentsReviewed: false };
+    s.setupPrototype = {
+      groupsReviewed: false, loopBucketsReviewed: false,
+      loopSortingReviewed: false, noLoopsChosen: false
+    };
+  }
+  // Old saved state must keep loading: one normalizer, run on every load.
+  if (typeof A.migrateSetupPrototypeState === 'function') {
+    var migrated = A.migrateSetupPrototypeState(s);
+    if (migrated && typeof migrated === 'object') s.setupPrototype = migrated.setupPrototype;
   }
   return s;
 }
@@ -296,15 +307,15 @@ function capacitySelectsHTML(student) {
 
 // Commitments never change a day on their own. They offer.
 function capacitySuggestionsHTML(student) {
-  var av;
-  try { av = A.getStudentAvailability(state, student.id); } catch (e) { return ''; }
-  var sug = av.suggestedCapacity || {};
+  var res;
+  try { res = A.getCommitmentCapacitySuggestions(state, student.id); } catch (e) { return ''; }
+  var sug = (res && res.suggestions) || {};
   var rows = WEEKDAYS.filter(function (d) { return sug[d.id]; });
   if (!rows.length) return '';
   return rows.map(function (d) {
     var s = sug[d.id];
     return '<div class="capacity-suggestion">' +
-      escH(s.fromCommitment) + ' suggests ' + escH(d.label) + ' → ' +
+      escH(s.fromCommitmentLabel) + ' suggests ' + escH(d.label) + ' → ' +
       escH(M.dayCapacityLabel(s.capacity)) +
       ' <button type="button" data-action="apply-capacity" data-id="' + escH(student.id) +
       '" data-day="' + escH(d.id) + '" data-capacity="' + escH(s.capacity) + '">Apply</button></div>';
@@ -374,7 +385,7 @@ function renderGroupsStep() {
   }
 
   groups.forEach(function (g) {
-    var av = A.getGroupAvailability(state, g.id);
+    var av = A.getGroupWorkAvailability(state, g.id, 'group-lesson');
     var names = av.memberIds.map(function (id) {
       var s = arr(state.students).find(function (x) { return x.id === id; });
       return s ? s.name : id;
@@ -406,6 +417,18 @@ function renderGroupsStep() {
 // ---------------------------------------------------------------------------
 // Step 3 — Outside commitments + derived availability
 // ---------------------------------------------------------------------------
+// Which commitments say regular home lessons do not happen that day. Display
+// only — commitments never change capacity on their own.
+function commitmentLabelsOnDay(studentId, dayId) {
+  return arr(state.outsideCommitments).filter(function (c) {
+    if (!c || c.blocksRegularWork === false) return false;
+    if (arr(c.weekdays).indexOf(dayId) === -1) return false;
+    var ids = [];
+    try { ids = arr(A.getCommitmentParticipantIds(state, c)); } catch (e) { ids = []; }
+    return ids.indexOf(studentId) > -1;
+  }).map(function (c) { return c.label || 'Outside commitment'; });
+}
+
 function renderAvailabilityStep() {
   var html = '<div class="panel"><h2 class="section-title">Outside Commitments <span class="hint">what already owns a day</span></h2>';
 
@@ -448,15 +471,15 @@ function renderAvailabilityStep() {
   var actives = arr(state.students).filter(function (s) { return s.active !== false; });
   if (!actives.length) html += '<tr><td colspan="' + (WEEKDAYS.length + 1) + '" class="hint">No active children yet.</td></tr>';
   actives.forEach(function (s) {
-    var av = A.getStudentAvailability(state, s.id);
+    // Effective capacity is the ONLY capacity this page plans against.
+    var eff = A.getStudentEffectiveCapacity(state, s.id);
     html += '<tr><td>' + escH(s.name || s.id) + '</td>';
     WEEKDAYS.forEach(function (d) {
-      var cap = av.dayCapacity[d.id];
+      var cap = eff.dayCapacity[d.id];
       var cls = cap === 'full' ? 'day-cell-available' : (cap === 'off' ? 'day-cell-off' : 'day-cell-partial');
-      var cell = '<span class="' + cls + '">' + escH(av.capacityLabels[d.id]) + '</span>';
-      if (arr(av.blockedBy[d.id]).length) {
-        cell += '<div class="hint">' + escH(av.blockedBy[d.id].join(', ')) + '</div>';
-      }
+      var cell = '<span class="' + cls + '">' + escH(M.dayCapacityLabel(cap)) + '</span>';
+      var blockers = commitmentLabelsOnDay(s.id, d.id);
+      if (blockers.length) cell += '<div class="hint">' + escH(blockers.join(', ')) + '</div>';
       html += '<td>' + cell + '</td>';
     });
     html += '</tr>';
@@ -530,13 +553,18 @@ function renderRhythmStep() {
     html += '</div>';
   });
   html += '<div class="row-actions"><button type="button" class="accent" data-action="add-loop">Create a loop bucket</button></div>';
+  // "No loops this year" is a valid, explicit answer — not an empty state.
+  html += '<div class="row-actions"><label class="daybox">' +
+    '<input type="checkbox" data-action="no-loops-chosen"' + (sorting.noLoopsChosen ? ' checked' : '') + '> ' +
+    'We will not use loops this year.</label></div>';
   html += '<div class="row-actions"><button type="button" class="accent" data-action="loop-buckets-reviewed">These buckets look right</button>' +
-    '<span class="hint">' + (sorting.bucketsReviewed ? 'Confirmed.' : 'Not confirmed yet.') + '</span></div>';
-  html += '<p class="sub" style="margin-top:10px;">' +
-    (sorting.unsortedStrandCount > 0
-      ? escH(sorting.unsortedStrandCount + ' strand' + (sorting.unsortedStrandCount === 1 ? '' : 's') +
-        ' still have no home. Sorting them happens in Feast Planning, not here.')
-      : 'Every strand already has a home. You can still add or rename buckets here.') +
+    '<span class="hint">' + (sorting.bucketsReviewed
+      ? 'Confirmed as they are now.'
+      : (state.setupPrototype && state.setupPrototype.loopBucketsReviewed
+        ? 'The buckets changed since you confirmed them — please confirm again.'
+        : 'Not confirmed yet.')) + '</span></div>';
+  // Informational next step only. This never blocks the step or Continue.
+  html += '<p class="sub" style="margin-top:10px;">' + escH(sorting.unsortedNextStep) +
     ' <a href="./feast-prototype.html">Go to Feast Planning →</a></p>';
   html += '</div>';
   return html;
@@ -715,9 +743,11 @@ document.addEventListener('click', function (ev) {
   }
 
   if (action === 'loop-buckets-reviewed') {
-    // Buckets reviewed. This says nothing about what is inside them — loop
-    // CONTENTS are acknowledged separately, in Feast Planning.
-    state.setupPrototype.loopBucketsReviewed = true;
+    // Buckets reviewed, and the STRUCTURE reviewed is stamped alongside it, so
+    // renaming a bucket or changing its days re-opens the review by itself.
+    // This says nothing about what is inside them — loop SORTING is
+    // acknowledged separately, in Feast Planning.
+    A.markLoopBucketsReviewed(state);
     commit();
     return;
   }
@@ -810,6 +840,10 @@ document.addEventListener('change', function (ev) {
         stu.dayCapacity[el.getAttribute('data-day')] = el.value;
         stu.dayCapacityExplicit[el.getAttribute('data-day')] = true;
       }
+      break;
+    case 'no-loops-chosen':
+      // An explicit answer, stored explicitly. It never creates or deletes loops.
+      state.setupPrototype.noLoopsChosen = el.checked;
       break;
     case 'group-work-type':
       groupWorkType = el.value;

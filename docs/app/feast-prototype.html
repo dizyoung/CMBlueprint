@@ -215,14 +215,23 @@ import { appHeaderHTML } from './nav.mjs';
 
 document.getElementById('app-header').outerHTML = appHeaderHTML('feast');
 
+function normalize(s) {
+  if (!s || typeof s !== 'object') return s;
+  if (!s.strandAssignments) s.strandAssignments = [];
+  // Old saved state must keep loading: the same normalizer Setup runs.
+  if (typeof A.migrateSetupPrototypeState === 'function') {
+    var migrated = A.migrateSetupPrototypeState(s);
+    if (migrated && typeof migrated === 'object') s.setupPrototype = migrated.setupPrototype;
+  }
+  return s;
+}
+
 var initial = loadInitialState();
-var state = initial.state;
-if (state && !state.strandAssignments) state.strandAssignments = [];
+var state = normalize(initial.state);
 
 var saveBar = createSaveBar({
   onStateReplaced: function (newState, source) {
-    state = newState;
-    if (state && !state.strandAssignments) state.strandAssignments = [];
+    state = normalize(newState);
     render();
     saveBar.setStatus(source === 'sample' ? 'Using sample plan' : 'Saved in this browser', source === 'sample' ? 'sample' : 'saved');
   }
@@ -266,7 +275,8 @@ var REQUIRED_EXPORTS = [
   { name: 'buildDerivedCardPreview', ok: typeof A.buildDerivedCardPreview === 'function' },
   { name: 'WORK_TYPES', ok: arr(M.WORK_TYPES).length > 0 },
   { name: 'getLoopSortingProgress', ok: typeof A.getLoopSortingProgress === 'function' },
-  { name: 'getLoopBucketContents', ok: typeof A.getLoopBucketContents === 'function' }
+  { name: 'getLoopBucketContents', ok: typeof A.getLoopBucketContents === 'function' },
+  { name: 'migrateSetupPrototypeState', ok: typeof A.migrateSetupPrototypeState === 'function' }
 ];
 function missingExports() {
   return REQUIRED_EXPORTS.filter(function (e) { return !e.ok; }).map(function (e) { return e.name; });
@@ -434,7 +444,7 @@ function renderUnsorted(rows) {
     }).join('') + '</div>';
   }
   html += '<p class="sub" style="margin-top:8px;">' +
-    (sorting.contentsReviewed ? 'Loop contents confirmed as they are now.' : 'Loop contents not confirmed yet.') + '</p>';
+    (sorting.sortingReviewed ? 'Strand sorting confirmed as it is now.' : 'Strand sorting not confirmed yet.') + '</p>';
   document.getElementById('unsorted-panel').innerHTML = html;
 }
 
@@ -478,8 +488,8 @@ function renderBuckets() {
     '<button type="button" class="accent" id="new-loop-btn">+ New loop</button>' +
     '<span class="hint">Creating a bucket here makes it available in every loop picker straight away.</span></div>';
   html += '<div class="new-loop-row">' +
-    '<button type="button" class="accent" id="contents-reviewed-btn">Loop contents look right</button>' +
-    '<span class="hint">' + (sorting.contentsReviewed
+    '<button type="button" class="accent" id="sorting-reviewed-btn">Strand sorting looks right</button>' +
+    '<span class="hint">' + (sorting.sortingReviewed
       ? 'Confirmed as they are now — any change to loop membership asks again.'
       : 'Not confirmed yet.') + '</span></div>';
   document.getElementById('buckets-panel').innerHTML = html;
@@ -618,7 +628,9 @@ function moveStrandToLoop(strandId, loopId) {
     A.setStrandAssignmentForStrand(state, strandId, strandLabelFor(strandId), { assignmentMode: null });
   }
   // Reviewed means reviewed-as-it-is-now: any membership change asks again.
-  setupPrototypeObj().loopContentsReviewed = false;
+  // This is SORTING only — loopBucketsReviewed (a Setup decision about bucket
+  // structure) is deliberately left untouched.
+  setupPrototypeObj().loopSortingReviewed = false;
   markDirtyAndSave();
   render();
 }
@@ -663,8 +675,8 @@ document.getElementById('buckets-panel').addEventListener('click', function (ev)
     render();
     return;
   }
-  if (el.id === 'contents-reviewed-btn') {
-    setupPrototypeObj().loopContentsReviewed = true;
+  if (el.id === 'sorting-reviewed-btn') {
+    setupPrototypeObj().loopSortingReviewed = true;
     markDirtyAndSave();
     render();
   }
