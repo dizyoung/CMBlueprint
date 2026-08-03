@@ -443,6 +443,131 @@ const SKEY = 'cmblueprint.familySchoolMap.v1';
 }
 
 
+// ===========================================================================
+// CAPACITY + LOOP SORTING — prototype pages only.
+// ===========================================================================
+
+// --- Setup shows a capacity SELECT per weekday, and it persists ---
+{
+  const cp = await browser.newPage();
+  const errs = [];
+  cp.on('pageerror', e => errs.push(e.message));
+  await cp.goto(SETUP_URL);
+  await cp.evaluate(([k, v]) => localStorage.setItem(k, v), [SKEY, JSON.stringify({
+    appStateVersion: 1, subjectColumns: [], cards: [], loops: [], groups: [],
+    students: [{ id: 'stu_c', name: 'Rowan', active: true, gradeBand: 'form2', gradeBandConfirmed: true }]
+  })]);
+  await cp.goto(SETUP_URL);
+  await cp.waitForLoadState('networkidle');
+  await cp.waitForTimeout(400);
+  await cp.click('[data-action="goto-step"][data-step="family"]');
+  await cp.waitForTimeout(300);
+
+  const capSelects = await cp.$$eval('select[data-action="student-capacity"]', els => els.length);
+  ok('Setup shows a capacity select per weekday', capSelects === 5);
+  const oldCheckboxes = await cp.$$eval('[data-action="student-workday"]', els => els.length).catch(() => 0);
+  ok('Setup no longer shows a workday checkbox row', oldCheckboxes === 0);
+  const capOptions = await cp.$$eval('select[data-action="student-capacity"] option', els => els.map(e => e.value));
+  ok('Capacity select offers the light-independent option', capOptions.includes('light-independent'));
+
+  await cp.selectOption('select[data-action="student-capacity"][data-day="tue"]', 'light-independent');
+  await cp.waitForTimeout(1400); // autosave debounce
+  await cp.goto(SETUP_URL);
+  await cp.waitForLoadState('networkidle');
+  await cp.waitForTimeout(400);
+  await cp.click('[data-action="goto-step"][data-step="family"]');
+  await cp.waitForTimeout(300);
+  const tueAfter = await cp.$eval('select[data-action="student-capacity"][data-day="tue"]', el => el.value);
+  ok('A changed day capacity persists across a reload', tueAfter === 'light-independent');
+  ok('No JS errors while setting a day capacity', errs.length === 0);
+  if (errs.length) errs.forEach(e => console.log('  JS error:', e));
+  await cp.evaluate(k => localStorage.removeItem(k), SKEY);
+  await cp.close();
+}
+
+// --- Feast: unsorted panel, put-in-loop, and inline loop creation ---
+{
+  const lp = await browser.newPage();
+  const errs = [];
+  lp.on('pageerror', e => errs.push(e.message));
+  await lp.goto(FEAST_URL);
+  await lp.evaluate(([k, v]) => localStorage.setItem(k, v), [SKEY, JSON.stringify({
+    appStateVersion: 1, subjectColumns: [], cards: [], loopItems: [], resources: [], resourceUses: [],
+    strandAssignments: [], groups: [],
+    students: [{ id: 'stu_d', name: 'Wren', active: true, gradeBand: 'form2', gradeBandConfirmed: true }],
+    loops: [{ id: 'loop_seed', title: 'Morning basket', itemIds: [], rhythmDayIds: [] }]
+  })]);
+  await lp.goto(FEAST_URL);
+  await lp.waitForLoadState('networkidle');
+  await lp.waitForTimeout(500);
+
+  const unsortedHeading = await lp.$eval('#unsorted-panel .section-title', el => el.textContent).catch(() => '');
+  ok('Feast shows an "Unsorted / Still to Sort" panel', unsortedHeading.includes('Unsorted / Still to Sort'));
+  const countBefore = Number(await lp.$eval('#unsorted-count', el => el.textContent).catch(() => '0'));
+  ok('Unsorted panel shows a count in its heading', countBefore > 0);
+  const bucketEmpty = await lp.$eval('.loop-bucket', el => el.textContent).catch(() => '');
+  ok('An empty loop bucket stays visible and says so', bucketEmpty.includes('No strands sorted in here yet'));
+
+  // "Put in loop" from the Unsorted panel.
+  const firstStrand = await lp.$eval('.unsorted-item', el => el.getAttribute('data-strand-id'));
+  await lp.selectOption('.unsorted-item select[data-role="unsorted-loop"]', 'loop_seed');
+  await lp.waitForTimeout(500);
+  const countAfter = Number(await lp.$eval('#unsorted-count', el => el.textContent).catch(() => '0'));
+  ok('Putting a strand in a loop removes it from Unsorted', countAfter === countBefore - 1);
+  const stillListed = await lp.$$eval('.unsorted-item', els => els.map(e => e.getAttribute('data-strand-id')));
+  ok('That strand is no longer in the Unsorted list', !stillListed.includes(firstStrand));
+  const bucketNow = await lp.$eval('.loop-bucket[data-loop-id="loop_seed"]', el => el.innerHTML);
+  ok('The strand now appears in that bucket\'s list', bucketNow.includes('data-strand-id="' + firstStrand + '"'));
+  ok('The bucket no longer reads as empty', !bucketNow.includes('No strands sorted in here yet'));
+
+  // "+ New loop" from Feast Planning, immediately usable everywhere.
+  await lp.fill('#new-loop-title', 'Afternoon loop');
+  await lp.click('#new-loop-btn');
+  await lp.waitForTimeout(500);
+  const bucketCount = await lp.$$eval('.loop-bucket', els => els.length);
+  ok('"+ New loop" creates a bucket from within Feast Planning', bucketCount === 2);
+  const loopOptionTexts = await lp.$$eval('.unsorted-item select[data-role="unsorted-loop"] option', els => els.map(e => e.textContent));
+  ok('The new bucket is immediately usable in every loop select', loopOptionTexts.includes('Afternoon loop'));
+  const chipLoopSelect = await lp.$$eval('.strand-chip select[data-role="chip-loop"]', els => els.length);
+  ok('Every strand chip carries a "Put in loop" select', chipLoopSelect > 40);
+  const chipHandles = await lp.$$eval('.strand-chip[data-strand-id]', els => els.length);
+  ok('Strand chips carry stable data-strand-id handles', chipHandles > 40);
+  ok('No JS errors while sorting strands into loops', errs.length === 0);
+  if (errs.length) errs.forEach(e => console.log('  JS error:', e));
+  await lp.evaluate(k => localStorage.removeItem(k), SKEY);
+  await lp.close();
+}
+
+// --- both prototype pages survive {} and legacy state with no dayCapacity ---
+{
+  const seeds = [
+    ['empty object state', {}],
+    ['legacy state with no dayCapacity', {
+      appStateVersion: 1, subjectColumns: [], cards: [], loops: [], loopItems: [],
+      resources: [], resourceUses: [], groups: [], strandAssignments: [],
+      students: [{ id: 'legacy_s', name: 'Legacy', active: true, workdays: { mon: true, tue: false, wed: true, thu: true, fri: true } }]
+    }]
+  ];
+  for (const [label, seed] of seeds) {
+    for (const [pageName, url, probe] of [['setup', SETUP_URL, '.setup-step-btn'], ['feast', FEAST_URL, '#unsorted-panel']]) {
+      const gp = await browser.newPage();
+      const gErrs = [];
+      gp.on('pageerror', e => gErrs.push(e.message));
+      await gp.goto(url);
+      await gp.evaluate(([k, v]) => localStorage.setItem(k, v), [SKEY, JSON.stringify(seed)]);
+      await gp.goto(url);
+      await gp.waitForLoadState('networkidle');
+      await gp.waitForTimeout(400);
+      const rendered = await gp.$$eval(probe, els => els.length).catch(() => 0);
+      ok(pageName + ' page renders with ' + label, rendered > 0);
+      ok('No JS errors on ' + pageName + ' page with ' + label, gErrs.length === 0);
+      if (gErrs.length) gErrs.forEach(e => console.log('  JS error:', e));
+      await gp.evaluate(k => localStorage.removeItem(k), SKEY);
+      await gp.close();
+    }
+  }
+}
+
 await browser.close();
 console.log('\n' + passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total');
 if (failed > 0) process.exit(1);

@@ -65,6 +65,38 @@
   .strand-chip.state-still-to-place .chip-badge { background: var(--blush); color: var(--poppy); }
   .strand-chip.state-unassigned { border-left-color: var(--border); }
 
+  /* ---- Sorting panels ---- */
+  .sort-panel { margin-bottom: 18px; }
+  .sort-panel .section-title .count-pill {
+    display: inline-block; font-size: 12px; font-weight: 700; border-radius: 10px; padding: 1px 9px;
+    background: var(--blush); color: var(--poppy); border: 1px solid var(--border); margin-left: 6px;
+  }
+  .sort-panel .count-pill.is-zero { background: var(--field-mint); color: var(--wonder-marine); }
+  .unsorted-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .unsorted-item {
+    border: 1px solid var(--border); border-left: 4px solid var(--poppy); border-radius: 8px;
+    padding: 7px 9px; background: var(--milk-white); min-width: 240px; max-width: 320px; flex: 1 1 240px;
+  }
+  .unsorted-item .u-label { font-weight: 600; font-size: 13px; }
+  .unsorted-item .u-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .unsorted-item .u-actions { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .calm-empty { font-size: 13px; color: var(--wonder-marine); margin-top: 6px; }
+  .loop-bucket {
+    border: 1px solid var(--border); border-left: 4px solid var(--navy-story); border-radius: 10px;
+    background: var(--milk-white); padding: 10px 12px; margin-bottom: 10px;
+  }
+  .loop-bucket h3 { margin: 0 0 4px; font-size: 13px; }
+  .bucket-empty { font-size: 12px; color: var(--muted); font-style: italic; }
+  .bucket-member { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12px; padding: 3px 0; }
+  .bucket-member .bm-label { font-weight: 600; }
+  .bucket-member .bm-meta { color: var(--muted); font-size: 11px; }
+  .new-loop-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  .chip-worktype summary { font-size: 11px; color: var(--muted); cursor: pointer; }
+  .chip-worktype { margin-top: 4px; }
+  .chip-worktype .wt-body { margin-top: 4px; display: flex; flex-direction: column; gap: 4px; }
+  .chip-loop-row { display: flex; gap: 4px; align-items: center; }
+  .chip-loop-row label { font-size: 11px; color: var(--muted); }
+
   /* ---- Side panels ---- */
   .panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
   @media (max-width: 900px) { .panel-grid { grid-template-columns: 1fr; } }
@@ -149,6 +181,9 @@
   <span style="font-size:11px;color:var(--muted);">Only clears choices made in this prototype. Assignments made elsewhere in the app are left alone.</span>
 </div>
 
+<div class="panel sort-panel" id="unsorted-panel"></div>
+<div class="panel sort-panel" id="buckets-panel"></div>
+
 <div id="feast-grid"></div>
 
 <div class="panel-grid">
@@ -228,7 +263,10 @@ var REQUIRED_EXPORTS = [
   { name: 'FEAST_FORMS', ok: FEAST_FORMS.length > 0 },
   { name: 'DEFAULT_VISIBLE_SUBJECT_COLUMNS', ok: SUBJECT_COLUMNS.length > 0 },
   { name: 'buildFeastRows', ok: typeof A.buildFeastRows === 'function' },
-  { name: 'buildDerivedCardPreview', ok: typeof A.buildDerivedCardPreview === 'function' }
+  { name: 'buildDerivedCardPreview', ok: typeof A.buildDerivedCardPreview === 'function' },
+  { name: 'WORK_TYPES', ok: arr(M.WORK_TYPES).length > 0 },
+  { name: 'getLoopSortingProgress', ok: typeof A.getLoopSortingProgress === 'function' },
+  { name: 'getLoopBucketContents', ok: typeof A.getLoopBucketContents === 'function' }
 ];
 function missingExports() {
   return REQUIRED_EXPORTS.filter(function (e) { return !e.ok; }).map(function (e) { return e.name; });
@@ -311,8 +349,48 @@ function audienceHelperHTML(row) {
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
+var WORK_TYPES = arr(M.WORK_TYPES);
+
+function loops() { return arr(state.loops); }
+
+// One select shape everywhere a loop is chosen, so a new bucket is instantly
+// usable in every one of them.
+function loopSelectHTML(role, strandId, currentLoopId) {
+  var html = '<select data-role="' + escH(role) + '" data-strand="' + escH(strandId) + '" aria-label="Put in loop">';
+  html += '<option value=""' + (currentLoopId ? '' : ' selected') + '>Not in a loop</option>';
+  loops().forEach(function (l) {
+    html += '<option value="' + escH(l.id) + '"' + (l.id === currentLoopId ? ' selected' : '') + '>' +
+      escH(l.title || 'Untitled loop') + '</option>';
+  });
+  html += '</select>';
+  return html;
+}
+
+// Progressive disclosure — the work-type line is closed until asked for.
+function workTypeHTML(row) {
+  if (!row.assignment) return '';
+  var suggested = M.suggestWorkTypeForAssignment(row.assignment);
+  var current = row.assignment.workType || '';
+  var effective = current || suggested;
+  var html = '<details class="chip-worktype"><summary>Work type: ' +
+    escH(effective ? M.workTypeLabel(effective) : 'not set') + (current ? '' : ' (suggested)') + '</summary>';
+  html += '<div class="wt-body">';
+  html += '<select data-role="work-type" data-strand="' + escH(row.strandId) + '" aria-label="Kind of work">';
+  html += '<option value=""' + (current ? '' : ' selected') + '>Suggested — ' +
+    escH(suggested ? M.workTypeLabel(suggested) : 'not enough decided yet') + '</option>';
+  WORK_TYPES.forEach(function (w) {
+    html += '<option value="' + escH(w.id) + '"' + (w.id === current ? ' selected' : '') + '>' + escH(w.label) + '</option>';
+  });
+  html += '</select>';
+  html += '<label class="chip-use"><input type="checkbox" data-role="light-days" data-strand="' + escH(row.strandId) + '"' +
+    (row.assignment.mayOccurOnLightDays === true ? ' checked' : '') + '> May occur on light independent days</label>';
+  html += '</div></details>';
+  return html;
+}
+
 function chipHTML(row) {
-  var html = '<div class="strand-chip state-' + escH(row.placementState) + '" data-strand="' + escH(row.strandId) + '">';
+  var html = '<div class="strand-chip state-' + escH(row.placementState) + '" data-strand="' + escH(row.strandId) +
+    '" data-strand-id="' + escH(row.strandId) + '">';
   html += '<div class="chip-label">' + escH(row.label) +
     (row.activeThisYear ? '' : '<span class="chip-off-tag">OFF</span>') + '</div>';
   if (row.whoLabel) html += '<div class="chip-who">Who: ' + escH(row.whoLabel) + '</div>';
@@ -322,9 +400,89 @@ function chipHTML(row) {
   html += '<label class="chip-use"><input type="checkbox" data-role="use" data-strand="' + escH(row.strandId) + '"' +
     (row.activeThisYear ? ' checked' : '') + '> Use this year</label>';
   html += whoSelectHTML(row);
+  html += '<div class="chip-loop-row"><label>Put in loop</label>' +
+    loopSelectHTML('chip-loop', row.strandId, row.loopId) + '</div>';
   html += audienceHelperHTML(row);
+  html += workTypeHTML(row);
   html += '</div></div>';
   return html;
+}
+
+// ---------------------------------------------------------------------------
+// Unsorted / Still to Sort — every active strand with no decision at all.
+// ---------------------------------------------------------------------------
+function renderUnsorted(rows) {
+  var sorting = A.getLoopSortingProgress(state);
+  var unsorted = rows.filter(function (r) {
+    return r.activeThisYear === true && r.placementState === 'unassigned';
+  });
+  var html = '<h2 class="section-title">Unsorted / Still to Sort' +
+    '<span class="count-pill' + (unsorted.length ? '' : ' is-zero') + '" id="unsorted-count">' + unsorted.length + '</span></h2>';
+  if (!unsorted.length) {
+    html += '<p class="calm-empty">Everything has a home.</p>';
+  } else {
+    html += '<p class="sub" style="margin:0;">' + unsorted.length + ' strand' + (unsorted.length === 1 ? '' : 's') +
+      ' still need somewhere to go. Put one in a loop, or decide it another way on its chip below.</p>';
+    html += '<div class="unsorted-list">' + unsorted.map(function (r) {
+      return '<div class="unsorted-item" data-strand-id="' + escH(r.strandId) + '">' +
+        '<div class="u-label">' + escH(r.label) + '</div>' +
+        '<div class="u-meta">' + escH(r.formLabel) + ' · ' + escH(r.columnLabel) + '</div>' +
+        '<div class="u-actions"><span class="u-meta">Put in loop</span>' +
+        loopSelectHTML('unsorted-loop', r.strandId) +
+        '<button type="button" data-role="unsorted-off" data-strand="' + escH(r.strandId) + '">Not this year</button>' +
+        '</div></div>';
+    }).join('') + '</div>';
+  }
+  html += '<p class="sub" style="margin-top:8px;">' +
+    (sorting.contentsReviewed ? 'Loop contents confirmed as they are now.' : 'Loop contents not confirmed yet.') + '</p>';
+  document.getElementById('unsorted-panel').innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// Loop buckets — an empty bucket is legitimate and stays visible.
+// ---------------------------------------------------------------------------
+function renderBuckets() {
+  var sorting = A.getLoopSortingProgress(state);
+  var html = '<h2 class="section-title">Loop buckets <span class="hint">buckets come from Setup; what goes in them is decided here</span></h2>';
+  var list = loops();
+  if (!list.length) {
+    html += '<p class="sub" style="margin:0;">No loop buckets yet. Create one below — an empty bucket is fine.</p>';
+  }
+  list.forEach(function (l) {
+    var members = arr(A.getLoopBucketContents(state, l.id));
+    html += '<div class="loop-bucket" data-loop-id="' + escH(l.id) + '">';
+    html += '<h3>' + escH(l.title || 'Untitled loop') + ' <span class="hint">' + members.length + ' strand' +
+      (members.length === 1 ? '' : 's') + '</span></h3>';
+    if (!members.length) {
+      html += '<div class="bucket-empty">No strands sorted in here yet</div>';
+    } else {
+      members.forEach(function (r) {
+        html += '<div class="bucket-member" data-strand-id="' + escH(r.strandId) + '">' +
+          '<span class="bm-label">' + escH(r.label) + '</span>' +
+          '<span class="bm-meta">' + escH(r.formLabel) + ' · ' + escH(r.columnLabel) + '</span>' +
+          '<label class="bm-meta">Move to…</label>' +
+          '<select data-role="move-loop" data-strand="' + escH(r.strandId) + '" aria-label="Move to another loop">' +
+          '<option value="" selected>Move to…</option>' +
+          list.filter(function (o) { return o.id !== l.id; }).map(function (o) {
+            return '<option value="' + escH(o.id) + '">' + escH(o.title || 'Untitled loop') + '</option>';
+          }).join('') +
+          '<option value="__none__">Take out of loop</option></select>' +
+          '<button type="button" data-role="remove-from-loop" data-strand="' + escH(r.strandId) + '">Remove</button>' +
+          '</div>';
+      });
+    }
+    html += '</div>';
+  });
+  html += '<div class="new-loop-row">' +
+    '<input type="text" id="new-loop-title" placeholder="New loop name" aria-label="New loop name">' +
+    '<button type="button" class="accent" id="new-loop-btn">+ New loop</button>' +
+    '<span class="hint">Creating a bucket here makes it available in every loop picker straight away.</span></div>';
+  html += '<div class="new-loop-row">' +
+    '<button type="button" class="accent" id="contents-reviewed-btn">Loop contents look right</button>' +
+    '<span class="hint">' + (sorting.contentsReviewed
+      ? 'Confirmed as they are now — any change to loop membership asks again.'
+      : 'Not confirmed yet.') + '</span></div>';
+  document.getElementById('buckets-panel').innerHTML = html;
 }
 
 function renderGrid(rows) {
@@ -414,11 +572,15 @@ function render() {
   // rather than painting an empty grid that looks like "you have no subjects".
   if (moduleIsStale()) {
     document.getElementById('feast-grid').innerHTML = staleModuleBannerHTML();
+    document.getElementById('unsorted-panel').innerHTML = '';
+    document.getElementById('buckets-panel').innerHTML = '';
     document.getElementById('preview-panel').innerHTML = '';
     document.getElementById('still-panel').innerHTML = '';
     return;
   }
   var rows = arr(A.buildFeastRows(state));
+  renderUnsorted(rows);
+  renderBuckets();
   renderGrid(rows);
   renderPreview();
   renderStillToPlace(rows);
@@ -438,6 +600,76 @@ function applyDecision(strandId, fields) {
   render();
 }
 
+function setupPrototypeObj() {
+  if (!state.setupPrototype || typeof state.setupPrototype !== 'object') state.setupPrototype = {};
+  return state.setupPrototype;
+}
+
+// THE single entry point for changing loop membership. Every click handler on
+// this page goes through it, and a future drag-and-drop layer must call it too
+// (chips carry data-strand-id and buckets carry data-loop-id for exactly that).
+// Drag-and-drop itself is deliberately NOT implemented here.
+function moveStrandToLoop(strandId, loopId) {
+  if (!strandId) return;
+  if (loopId) {
+    A.setStrandAssignmentForStrand(state, strandId, strandLabelFor(strandId), { assignmentMode: 'loop', loopId: loopId });
+  } else {
+    // null = take out of loop. Back to undecided, so it shows as unsorted again.
+    A.setStrandAssignmentForStrand(state, strandId, strandLabelFor(strandId), { assignmentMode: null });
+  }
+  // Reviewed means reviewed-as-it-is-now: any membership change asks again.
+  setupPrototypeObj().loopContentsReviewed = false;
+  markDirtyAndSave();
+  render();
+}
+
+// Panels are re-rendered wholesale, so listen on the containers, not the nodes.
+['unsorted-panel', 'buckets-panel'].forEach(function (panelId) {
+  var panel = document.getElementById(panelId);
+  if (!panel) return;
+
+  panel.addEventListener('change', function (ev) {
+    var el = ev.target;
+    var role = el.getAttribute && el.getAttribute('data-role');
+    var strandId = el.getAttribute && el.getAttribute('data-strand');
+    if (!role || !strandId) return;
+    if (role === 'unsorted-loop') { moveStrandToLoop(strandId, el.value || null); return; }
+    if (role === 'move-loop') {
+      if (!el.value) return;
+      moveStrandToLoop(strandId, el.value === '__none__' ? null : el.value);
+      return;
+    }
+  });
+
+  panel.addEventListener('click', function (ev) {
+    var el = ev.target.closest('[data-role]');
+    if (!el || !panel.contains(el)) return;
+    var role = el.getAttribute('data-role');
+    var strandId = el.getAttribute('data-strand');
+    if (role === 'remove-from-loop') { moveStrandToLoop(strandId, null); return; }
+    if (role === 'unsorted-off') { applyDecision(strandId, { assignmentMode: 'not-this-year' }); return; }
+  });
+});
+
+document.getElementById('buckets-panel').addEventListener('click', function (ev) {
+  var el = ev.target;
+  if (el.id === 'new-loop-btn') {
+    var input = document.getElementById('new-loop-title');
+    var title = input && input.value.trim() ? input.value.trim() : 'New loop';
+    if (!Array.isArray(state.loops)) state.loops = [];
+    // Title only — everything else about a loop stays a Setup decision.
+    state.loops.push(M.makeLoop({ title: title, sortOrder: state.loops.length, rhythmDayIds: [] }));
+    markDirtyAndSave();
+    render();
+    return;
+  }
+  if (el.id === 'contents-reviewed-btn') {
+    setupPrototypeObj().loopContentsReviewed = true;
+    markDirtyAndSave();
+    render();
+  }
+});
+
 document.getElementById('feast-grid').addEventListener('change', function (ev) {
   var el = ev.target;
   var strandId = el.getAttribute('data-strand');
@@ -447,6 +679,25 @@ document.getElementById('feast-grid').addEventListener('change', function (ev) {
   if (role === 'use') {
     // Unchecked -> not this year. Rechecked -> back to undecided.
     applyDecision(strandId, el.checked ? { assignmentMode: null } : { assignmentMode: 'not-this-year' });
+    return;
+  }
+
+  if (role === 'chip-loop') {
+    moveStrandToLoop(strandId, el.value || null);
+    return;
+  }
+
+  if (role === 'work-type') {
+    A.setStrandAssignmentForStrand(state, strandId, strandLabelFor(strandId), { workType: el.value || null });
+    markDirtyAndSave();
+    render();
+    return;
+  }
+
+  if (role === 'light-days') {
+    A.setStrandAssignmentForStrand(state, strandId, strandLabelFor(strandId), { mayOccurOnLightDays: el.checked });
+    markDirtyAndSave();
+    render();
     return;
   }
 
