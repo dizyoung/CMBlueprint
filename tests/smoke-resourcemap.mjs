@@ -832,6 +832,102 @@ const SKEY = 'cmblueprint.familySchoolMap.v1';
 }
 
 
+// --- Set Aside Loops: absent when empty, lists archived buckets, restores ---
+{
+  const rp = await browser.newPage();
+  const errs = [];
+  rp.on('pageerror', e => errs.push(e.message));
+  rp.on('dialog', async d => { await d.accept(); });
+
+  const baseSeed = () => ({
+    appStateVersion: 1, subjectColumns: [], cards: [], loopItems: [],
+    resources: [], resourceUses: [], groups: [], outsideCommitments: [],
+    students: [{
+      id: 'stu_r', name: 'Rowan', active: true, gradeBand: 'form2', gradeBandConfirmed: true,
+      dayCapacity: { mon: 'full', tue: 'full', wed: 'full', thu: 'full', fri: 'full' },
+      dayCapacityExplicit: { mon: true, tue: true, wed: true, thu: true, fri: true }
+    }],
+    loops: [], strandAssignments: [],
+    setupPrototype: { groupsReviewed: true, availabilityReviewed: true }
+  });
+
+  async function loadSetup(seed) {
+    await rp.goto(SETUP_URL);
+    await rp.evaluate(([k, v]) => localStorage.setItem(k, v), [SKEY, JSON.stringify(seed)]);
+    await rp.goto(SETUP_URL);
+    await rp.waitForLoadState('networkidle');
+    await rp.waitForTimeout(400);
+    await rp.click('[data-action="goto-step"][data-step="rhythm"]');
+    await rp.waitForTimeout(300);
+  }
+
+  // 1. No archived loops at all — the section must not exist.
+  const noneSeed = baseSeed();
+  noneSeed.loops = [{ id: 'lp_live', title: 'A bucket in use', active: true, rhythmDayIds: [] }];
+  await loadSetup(noneSeed);
+  ok('Set Aside Loops is absent when nothing has been set aside',
+    (await rp.$$eval('.set-aside-loops', els => els.length)) === 0);
+
+  // 2. An archived, unreferenced bucket: section shows, delete is offered.
+  const freeSeed = baseSeed();
+  freeSeed.loops = [{ id: 'lp_free', title: 'A set-aside bucket', active: false, rhythmDayIds: ['mon', 'wed'] }];
+  freeSeed.setupPrototype.noLoopsChosen = true;
+  await loadSetup(freeSeed);
+  ok('Set Aside Loops appears when an archived bucket exists',
+    (await rp.$$eval('.set-aside-loops', els => els.length)) === 1);
+  const asideText2 = await rp.$eval('.set-aside-loops', el => el.textContent);
+  ok('Set Aside Loops names the archived bucket', asideText2.includes('A set-aside bucket'));
+  ok('Set Aside Loops explains it was set aside, not deleted', /set aside, not deleted/.test(asideText2));
+  ok('Set Aside Loops shows the strand count', /0 strands still linked/.test(asideText2));
+  ok('An unreferenced archived bucket offers a permanent delete',
+    (await rp.$$eval('[data-action="delete-loop-permanently"]', els => els.length)) === 1);
+
+  // 3. Restoring puts the bucket back and re-opens bucket review.
+  await rp.click('[data-action="loop-buckets-reviewed"]');
+  await rp.waitForTimeout(300);
+  ok('Bucket review can be confirmed before restoring',
+    (await rp.$eval('#step-body', el => el.textContent)).includes('Confirmed as they are now.'));
+  ok('Set Aside Loops starts collapsed',
+    (await rp.$eval('.set-aside-loops', el => el.open)) === false);
+  await rp.$eval('.set-aside-loops', el => { el.open = true; });
+  await rp.click('[data-action="restore-loop"][data-id="lp_free"]');
+  await rp.waitForTimeout(400);
+  ok('Restoring returns the bucket to the active list',
+    (await rp.$$eval('.loop-card:not(.set-aside-card)', els => els.length)) === 1);
+  ok('The restored bucket keeps its identity',
+    (await rp.$$eval('.loop-card:not(.set-aside-card)', els => els.map(e => e.getAttribute('data-loop-id'))))[0] === 'lp_free');
+  ok('Set Aside Loops disappears once the last archived bucket is restored',
+    (await rp.$$eval('.set-aside-loops', els => els.length)) === 0);
+  ok('Restoring re-opens the bucket review',
+    (await rp.$eval('#step-body', el => el.textContent)).includes('please confirm again'));
+  ok('Restoring clears "No loops this year"',
+    (await rp.$eval('input[data-action="no-loops-chosen"]', el => el.checked)) === false);
+
+  // 4. A referenced archived bucket cannot be deleted permanently.
+  const usedSeed = baseSeed();
+  usedSeed.loops = [{ id: 'lp_used', title: 'A linked set-aside bucket', active: false, rhythmDayIds: [] }];
+  usedSeed.strandAssignments = [
+    { id: 'sa_u', strandId: 'strand-x', strandLabel: 'Strand X', assignmentMode: 'loop', loopId: 'lp_used' }
+  ];
+  usedSeed.setupPrototype.noLoopsChosen = true;
+  await loadSetup(usedSeed);
+  const usedText = await rp.$eval('.set-aside-loops', el => el.textContent);
+  ok('A referenced archived bucket shows the blocked message',
+    usedText.includes('This loop is still used by 1 strand or placement. Restore it or move those items first.'));
+  ok('A referenced archived bucket offers no permanent delete button',
+    (await rp.$$eval('[data-action="delete-loop-permanently"]', els => els.length)) === 0);
+  ok('A referenced archived bucket still offers Restore',
+    (await rp.$$eval('[data-action="restore-loop"]', els => els.length)) === 1);
+  ok('The blocked message names no child, group, or strand',
+    !/Rowan|Strand X|strand-x/.test(usedText));
+
+  ok('No JS errors through the set-aside recovery path', errs.length === 0);
+  if (errs.length) errs.forEach(e => console.log('  JS error:', e));
+  await rp.evaluate(k => localStorage.removeItem(k), SKEY);
+  await rp.close();
+}
+
+
 await browser.close();
 console.log('\n' + passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total');
 if (failed > 0) process.exit(1);

@@ -3150,6 +3150,267 @@ test('F3.25 every new helper tolerates {} and states missing optional arrays', (
   }
 });
 
+// ---------------------------------------------------------------------------
+// Archived loop buckets — recovery path (restore / permanent delete).
+// ---------------------------------------------------------------------------
+
+// Minimal, name-free state builder. No student, group, subject, or loop title
+// from any real plan.
+function archiveTestState(extra) {
+  return Object.assign({
+    appStateVersion: 1,
+    students: [], groups: [], subjectColumns: [], cards: [],
+    loops: [{ id: 'lp_1', title: 'Bucket One', active: true, rhythmDayIds: ['mon', 'wed'] }],
+    loopItems: [], sequences: [], sequenceItems: [], resources: [], resourceUses: [],
+    strandAssignments: [],
+    weeklyRhythm: { days: [], blocks: [], assignments: [] },
+    setupPrototype: {}
+  }, extra || {});
+}
+
+function archiveIt(state) {
+  return A.setNoLoopsChosen(state, true, { confirmed: true });
+}
+
+test('archiving then restoring returns the loop bucket to the active list', () => {
+  const st = archiveTestState();
+  assert.equal(A.activeLoops(st).length, 1);
+  const archived = archiveIt(st);
+  assert.equal(A.activeLoops(archived).length, 0);
+  assert.equal(A.getArchivedLoopBuckets(archived).length, 1);
+  const restored = A.restoreLoopBucket(archived, 'lp_1');
+  assert.equal(A.activeLoops(restored).length, 1);
+  assert.equal(A.getArchivedLoopBuckets(restored).length, 0);
+  assert.equal(restored.loops[0].active, true);
+});
+
+test('a restored loop bucket keeps its original id — no new one is minted', () => {
+  const st = archiveTestState();
+  const originalId = st.loops[0].id;
+  const restored = A.restoreLoopBucket(archiveIt(st), originalId);
+  assert.equal(restored.loops.length, st.loops.length);
+  assert.equal(restored.loops.length, 1);
+  assert.equal(restored.loops[0].id, originalId);
+  assert.equal(typeof restored.loops[0].id, 'string');
+});
+
+test('strand assignments survive archive and restore, still pointing at the same loop', () => {
+  const st = archiveTestState({
+    strandAssignments: [
+      { id: 'sa_1', strandId: 'strand-a', strandLabel: 'Strand A', assignmentMode: 'loop', loopId: 'lp_1' },
+      { id: 'sa_2', strandId: 'strand-b', strandLabel: 'Strand B', assignmentMode: 'loop', loopId: 'lp_1' }
+    ]
+  });
+  const archived = archiveIt(st);
+  assert.equal(archived.strandAssignments.length, 2);
+  assert.ok(archived.strandAssignments.every((sa) => sa.loopId === 'lp_1'));
+  const restored = A.restoreLoopBucket(archived, 'lp_1');
+  assert.equal(restored.strandAssignments.length, 2);
+  assert.ok(restored.strandAssignments.every((sa) => sa.loopId === 'lp_1'));
+  assert.equal(A.getLoopReferences(restored, 'lp_1').strandCount, 2);
+});
+
+test('restoreLoopBucket clears "no loops this year"', () => {
+  const archived = archiveIt(archiveTestState());
+  assert.equal(archived.setupPrototype.noLoopsChosen, true);
+  const restored = A.restoreLoopBucket(archived, 'lp_1');
+  assert.equal(restored.setupPrototype.noLoopsChosen, false);
+  assert.equal(A.getLoopSortingProgress(restored).noLoopsChosen, false);
+});
+
+test('restoring a bucket invalidates the bucket review via the derived fingerprint', () => {
+  let st = archiveTestState();
+  st = archiveIt(st);
+  st = A.markLoopBucketsReviewed(st);
+  assert.equal(A.getLoopSortingProgress(st).bucketsReviewed, true);
+  const restored = A.restoreLoopBucket(st, 'lp_1');
+  assert.equal(restored.setupPrototype.loopBucketsReviewed, true);
+  assert.equal(A.getLoopSortingProgress(restored).bucketsReviewed, false);
+});
+
+test('archiving a bucket changes the bucket fingerprint', () => {
+  const st = archiveTestState();
+  const before = A.loopBucketFingerprint(st);
+  const archived = archiveIt(st);
+  const after = A.loopBucketFingerprint(archived);
+  assert.notEqual(before, after);
+  assert.equal(after, '');
+  assert.equal(A.loopBucketFingerprint(A.restoreLoopBucket(archived, 'lp_1')), before);
+});
+
+test('getLoopReferences counts a strandAssignment.loopId reference', () => {
+  const st = archiveTestState({
+    strandAssignments: [{ id: 'sa_1', strandId: 'strand-a', strandLabel: 'Strand A', assignmentMode: 'loop', loopId: 'lp_1' }]
+  });
+  const refs = A.getLoopReferences(st, 'lp_1');
+  assert.deepEqual(refs.strandAssignmentIds, ['sa_1']);
+  assert.equal(refs.strandCount, 1);
+  assert.equal(refs.total, 1);
+  assert.equal(refs.canDeletePermanently, false);
+});
+
+test('getLoopReferences counts a card.loopId reference', () => {
+  const st = archiveTestState({ cards: [{ id: 'cd_1', loopId: 'lp_1' }] });
+  const refs = A.getLoopReferences(st, 'lp_1');
+  assert.deepEqual(refs.cardIds, ['cd_1']);
+  assert.equal(refs.total, 1);
+  assert.equal(refs.canDeletePermanently, false);
+});
+
+test('getLoopReferences counts a card.scheduleConfig.loopId reference', () => {
+  const st = archiveTestState({ cards: [{ id: 'cd_2', scheduleConfig: { mode: 'loop', loopId: 'lp_1' } }] });
+  const refs = A.getLoopReferences(st, 'lp_1');
+  assert.deepEqual(refs.scheduleConfigCardIds, ['cd_2']);
+  assert.deepEqual(refs.cardIds, []);
+  assert.equal(refs.total, 1);
+  assert.equal(refs.canDeletePermanently, false);
+});
+
+test('getLoopReferences counts a loopItem.loopId reference', () => {
+  const st = archiveTestState({ loopItems: [{ id: 'li_1', loopId: 'lp_1', title: 'Item' }] });
+  const refs = A.getLoopReferences(st, 'lp_1');
+  assert.deepEqual(refs.loopItemIds, ['li_1']);
+  assert.equal(refs.total, 1);
+  assert.equal(refs.canDeletePermanently, false);
+});
+
+test('getLoopReferences counts a resourceUse.loopId reference', () => {
+  const st = archiveTestState({ resourceUses: [{ id: 'ru_1', resourceId: 'rs_1', loopId: 'lp_1' }] });
+  const refs = A.getLoopReferences(st, 'lp_1');
+  assert.deepEqual(refs.resourceUseIds, ['ru_1']);
+  assert.equal(refs.total, 1);
+  assert.equal(refs.canDeletePermanently, false);
+});
+
+test('getLoopReferences counts a rhythm assignment reference', () => {
+  const st = archiveTestState({
+    weeklyRhythm: {
+      days: [], blocks: [],
+      assignments: [
+        { id: 'ra_1', assignmentType: 'loop', referencedId: 'lp_1' },
+        { id: 'ra_2', assignmentType: 'card', referencedId: 'lp_1' },
+        { id: 'ra_3', assignmentType: 'loop', referencedId: 'lp_other' }
+      ]
+    }
+  });
+  const refs = A.getLoopReferences(st, 'lp_1');
+  assert.deepEqual(refs.rhythmAssignmentIds, ['ra_1']);
+  assert.equal(refs.placementCount, 1);
+  assert.equal(refs.total, 1);
+  assert.equal(refs.canDeletePermanently, false);
+});
+
+test('getLoopReferences on an unreferenced loop reports nothing and allows deletion', () => {
+  const refs = A.getLoopReferences(archiveTestState(), 'lp_1');
+  assert.equal(refs.total, 0);
+  assert.equal(refs.strandCount, 0);
+  assert.equal(refs.placementCount, 0);
+  assert.equal(refs.canDeletePermanently, true);
+  assert.deepEqual(refs.strandLabels, []);
+});
+
+test('permanent delete is blocked while the loop is still referenced', () => {
+  const st = archiveIt(archiveTestState({
+    strandAssignments: [{ id: 'sa_1', strandId: 'strand-a', strandLabel: 'Strand A', assignmentMode: 'loop', loopId: 'lp_1' }]
+  }));
+  const next = A.deleteLoopBucketPermanently(st, 'lp_1', { confirmed: true });
+  assert.equal(next.loops.length, 1);
+  assert.equal(next.loops[0].id, 'lp_1');
+  assert.equal(next.strandAssignments.length, 1);
+  assert.equal(typeof next.loopDeleteBlocked, 'string');
+  assert.ok(next.loopDeleteBlocked.length > 0);
+  assert.equal(Object.prototype.propertyIsEnumerable.call(next, 'loopDeleteBlocked'), false);
+  assert.equal(Object.keys(next).indexOf('loopDeleteBlocked'), -1);
+  const roundTripped = JSON.parse(JSON.stringify(next));
+  assert.equal(roundTripped.loopDeleteBlocked, undefined);
+});
+
+test('permanent delete is blocked without an explicit confirmation, even when unreferenced', () => {
+  const st = archiveIt(archiveTestState());
+  const next = A.deleteLoopBucketPermanently(st, 'lp_1');
+  assert.equal(next.loops.length, 1);
+  assert.equal(next.loopDeleteConfirmationRequired, true);
+  assert.equal(Object.prototype.propertyIsEnumerable.call(next, 'loopDeleteConfirmationRequired'), false);
+  assert.equal(JSON.parse(JSON.stringify(next)).loopDeleteConfirmationRequired, undefined);
+  const still = A.deleteLoopBucketPermanently(st, 'lp_1', {});
+  assert.equal(still.loops.length, 1);
+});
+
+test('permanent delete removes the loop when it is unreferenced and confirmed', () => {
+  const st = archiveIt(archiveTestState());
+  assert.equal(st.loops.length, 1);
+  const next = A.deleteLoopBucketPermanently(st, 'lp_1', { confirmed: true });
+  assert.equal(next.loops.length, 0);
+  assert.equal(A.getArchivedLoopBuckets(next).length, 0);
+  assert.equal(next.loopDeleteBlocked, undefined);
+  // The original state object is untouched — the helper is pure.
+  assert.equal(st.loops.length, 1);
+});
+
+test('blockedReason is singular for one reference, plural otherwise, and names nobody', () => {
+  const one = archiveIt(archiveTestState({
+    strandAssignments: [{ id: 'sa_1', strandId: 'strand-a', strandLabel: 'Strand A', assignmentMode: 'loop', loopId: 'lp_1' }]
+  }));
+  const oneReason = A.getArchivedLoopBuckets(one)[0].blockedReason;
+  assert.equal(oneReason, 'This loop is still used by 1 strand or placement. Restore it or move those items first.');
+
+  const many = archiveIt(archiveTestState({
+    strandAssignments: [
+      { id: 'sa_1', strandId: 'strand-a', strandLabel: 'Strand A', assignmentMode: 'loop', loopId: 'lp_1' },
+      { id: 'sa_2', strandId: 'strand-b', strandLabel: 'Strand B', assignmentMode: 'loop', loopId: 'lp_1' }
+    ],
+    weeklyRhythm: { days: [], blocks: [], assignments: [{ id: 'ra_1', assignmentType: 'loop', referencedId: 'lp_1' }] }
+  }));
+  const manyReason = A.getArchivedLoopBuckets(many)[0].blockedReason;
+  assert.equal(manyReason, 'This loop is still used by 3 strands or placements. Restore it or move those items first.');
+
+  [oneReason, manyReason].forEach((reason) => {
+    assert.equal(/Strand A|Strand B|Bucket One|strand-a|lp_1/.test(reason), false);
+  });
+
+  // Nothing referencing it at all: no reason to show.
+  assert.equal(A.getArchivedLoopBuckets(archiveIt(archiveTestState()))[0].blockedReason, '');
+});
+
+test('getArchivedLoopBuckets lists only loops explicitly marked active === false', () => {
+  const st = archiveTestState({
+    loops: [
+      { id: 'lp_off', title: 'Set aside bucket', active: false, rhythmDayIds: ['tue'] },
+      { id: 'lp_on', title: 'In use bucket', active: true },
+      { id: 'lp_legacy', title: 'Legacy bucket without the field' }
+    ]
+  });
+  const archived = A.getArchivedLoopBuckets(st);
+  assert.deepEqual(archived.map((b) => b.loopId), ['lp_off']);
+  assert.equal(archived[0].title, 'Set aside bucket');
+  assert.deepEqual(archived[0].rhythmDayIds, ['tue']);
+  assert.equal(archived[0].dayLabels.length, 1);
+  assert.deepEqual(A.activeLoops(st).map((l) => l.id), ['lp_on', 'lp_legacy']);
+});
+
+test('the archived-bucket helpers tolerate {} and missing optional arrays', () => {
+  assert.deepEqual(A.getArchivedLoopBuckets({}), []);
+  assert.deepEqual(A.getArchivedLoopBuckets(undefined), []);
+  const refs = A.getLoopReferences({}, 'lp_missing');
+  assert.equal(refs.total, 0);
+  assert.equal(refs.canDeletePermanently, true);
+  assert.deepEqual(refs.cardIds, []);
+  assert.deepEqual(refs.rhythmAssignmentIds, []);
+  assert.deepEqual(A.getLoopReferences(undefined, 'lp_missing').loopItemIds, []);
+  // A loop with no sibling collections at all still lists and restores.
+  const bare = { loops: [{ id: 'lp_bare', active: false }] };
+  const listed = A.getArchivedLoopBuckets(bare);
+  assert.equal(listed.length, 1);
+  assert.deepEqual(listed[0].dayLabels, []);
+  assert.equal(listed[0].canDeletePermanently, true);
+  const restored = A.restoreLoopBucket(bare, 'lp_bare');
+  assert.equal(restored.loops[0].active, true);
+  assert.equal(restored.setupPrototype.noLoopsChosen, false);
+  assert.deepEqual(A.restoreLoopBucket({}, 'nope').loops, []);
+  assert.deepEqual(A.deleteLoopBucketPermanently({}, 'nope', { confirmed: true }).loops, []);
+  assert.equal(A.describeLoopDeleteBlocked({ total: 0 }), '');
+});
+
 
 for (const t of tests) {
   try {

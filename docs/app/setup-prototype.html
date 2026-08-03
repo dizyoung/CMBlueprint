@@ -70,6 +70,15 @@
     border: 1px solid var(--border); border-left: 4px solid var(--poppy);
     border-radius: 8px; padding: 8px 11px; margin: 10px 0 0;
   }
+  .set-aside-loops {
+    border: 1px solid var(--border); border-radius: 10px; background: var(--field-mint);
+    padding: 8px 12px; margin: 12px 0 0; font-size: 13px;
+  }
+  .set-aside-loops > summary { cursor: pointer; }
+  .set-aside-card {
+    border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 10px;
+    background: var(--milk-white); padding: 10px 12px; margin-bottom: 10px;
+  }
   .capacity-legend { font-size: 11px; color: var(--muted); margin: 4px 0 0; }
   .guide ol { margin: 6px 0 0; padding-left: 20px; font-size: 13px; }
   .guide li { margin-bottom: 3px; }
@@ -195,7 +204,11 @@ var REQUIRED_EXPORTS = [
   { name: 'getAvailabilityCompletion', ok: typeof A.getAvailabilityCompletion === 'function' },
   { name: 'createLoopBucket', ok: typeof A.createLoopBucket === 'function' },
   { name: 'setNoLoopsChosen', ok: typeof A.setNoLoopsChosen === 'function' },
-  { name: 'describeNoLoopsImpact', ok: typeof A.describeNoLoopsImpact === 'function' }
+  { name: 'describeNoLoopsImpact', ok: typeof A.describeNoLoopsImpact === 'function' },
+  { name: 'getArchivedLoopBuckets', ok: typeof A.getArchivedLoopBuckets === 'function' },
+  { name: 'getLoopReferences', ok: typeof A.getLoopReferences === 'function' },
+  { name: 'restoreLoopBucket', ok: typeof A.restoreLoopBucket === 'function' },
+  { name: 'deleteLoopBucketPermanently', ok: typeof A.deleteLoopBucketPermanently === 'function' }
 ];
 function missingExports() {
   return REQUIRED_EXPORTS.filter(function (e) { return !e.ok; }).map(function (e) { return e.name; });
@@ -585,6 +598,45 @@ function renderAvailabilityStep() {
 // ---------------------------------------------------------------------------
 // Step 4 — Broad rhythm & loops
 // ---------------------------------------------------------------------------
+// Set-aside buckets are recoverable, and this is the only place that says so.
+// The section is not rendered at all when nothing has been set aside — an
+// empty "Set Aside Loops" heading would be noise. It opens by itself the first
+// time the parent has just set buckets aside, so the way back is never hidden.
+var revealSetAsideLoops = false;
+
+function setAsideLoopsHTML() {
+  var archived = [];
+  try { archived = arr(A.getArchivedLoopBuckets(state)); } catch (e) { archived = []; }
+  if (!archived.length) return '';
+
+  var html = '<details class="set-aside-loops"' + (revealSetAsideLoops ? ' open' : '') + '>' +
+    '<summary><strong>Set Aside Loops</strong> <span class="hint">' + archived.length +
+    ' bucket' + (archived.length === 1 ? '' : 's') + ' you can bring back</span></summary>';
+  html += '<p class="sub" style="margin:8px 0 10px;">These buckets were set aside, not deleted. ' +
+    'Any strands sorted into them are still linked to them, exactly as they were. ' +
+    'Restoring one brings the same bucket back — not a copy.</p>';
+
+  archived.forEach(function (b) {
+    html += '<div class="set-aside-card" data-loop-id="' + escH(b.loopId) + '">';
+    html += '<div><strong>' + escH(b.title) + '</strong></div>';
+    html += '<div class="member-line">Broad days: ' +
+      escH(b.dayLabels.length ? b.dayLabels.join(', ') : 'No days chosen') + '</div>';
+    html += '<div class="member-line">' + b.strandCount + ' strand' +
+      (b.strandCount === 1 ? '' : 's') + ' still linked to it.</div>';
+    html += '<div class="row-actions">' +
+      '<button type="button" class="accent" data-action="restore-loop" data-id="' + escH(b.loopId) + '">Restore</button>';
+    if (b.canDeletePermanently) {
+      html += '<button type="button" class="danger" data-action="delete-loop-permanently" data-id="' +
+        escH(b.loopId) + '">Delete permanently</button>';
+    } else {
+      html += '<span class="hint">' + escH(b.blockedReason) + '</span>';
+    }
+    html += '</div></div>';
+  });
+
+  return html + '</details>';
+}
+
 function renderRhythmStep() {
   var sorting = A.getLoopSortingProgress(state);
   var html = '<div class="panel"><h2 class="section-title">Loop Buckets <span class="hint">buckets only — contents come later</span></h2>';
@@ -612,9 +664,10 @@ function renderRhythmStep() {
     'We will not use loops this year.</label></div>';
   if (archivedCount) {
     html += '<p class="hint">' + archivedCount + ' loop bucket' + (archivedCount === 1 ? '' : 's') +
-      ' set aside. Nothing was deleted, and unticking the box above does not bring them back — ' +
-      'create a bucket again when you want one.</p>';
+      ' set aside. Nothing was deleted. Unticking the box above does not bring them back on its own — ' +
+      'open <strong>Set Aside Loops</strong> below and restore the one you want.</p>';
   }
+  html += setAsideLoopsHTML();
   html += '<div class="row-actions"><button type="button" class="accent" data-action="loop-buckets-reviewed">These buckets look right</button>' +
     '<span class="hint">' + (sorting.bucketsReviewed
       ? 'Confirmed as they are now.'
@@ -873,6 +926,35 @@ document.addEventListener('click', function (ev) {
     commit();
     return;
   }
+
+  if (action === 'restore-loop') {
+    // Puts the SAME bucket back, keeping its id — so every strand, item, card,
+    // resource use, and rhythm placement still pointing at it lines up again.
+    var lp = findLoopLocal(id);
+    if (!window.confirm('Restore "' + ((lp && lp.title) || 'this loop bucket') + '"?\n\n' +
+      'It comes back as the same bucket, and anything still linked to it stays linked.')) return;
+    state = ensureShape(A.restoreLoopBucket(state, id));
+    revealSetAsideLoops = true;
+    commit();
+    return;
+  }
+
+  if (action === 'delete-loop-permanently') {
+    // Only ever offered when nothing references the bucket; the adapter checks
+    // again anyway and simply declines if that changed.
+    var dl = findLoopLocal(id);
+    if (!window.confirm('Delete "' + ((dl && dl.title) || 'this loop bucket') + '" permanently?\n\n' +
+      'This cannot be undone. Nothing is linked to it.')) return;
+    var next = A.deleteLoopBucketPermanently(state, id, { confirmed: true });
+    if (next.loopDeleteBlocked) {
+      window.alert(next.loopDeleteBlocked);
+      return;
+    }
+    state = ensureShape(next);
+    revealSetAsideLoops = true;
+    commit();
+    return;
+  }
 });
 
 document.addEventListener('change', function (ev) {
@@ -941,9 +1023,12 @@ document.addEventListener('change', function (ev) {
       }
       var impactL = A.describeNoLoopsImpact(state);
       if (impactL.activeBucketCount > 0) {
-        var ok = window.confirm(impactL.message + '\n\nSet these buckets aside and say you will not use loops this year?');
+        var ok = window.confirm(impactL.message + '\n\nSet these buckets aside and say you will not use loops this year?' +
+          '\n\nYou can restore any of them later from "Set Aside Loops".');
         if (!ok) { el.checked = false; return; }
         state = A.setNoLoopsChosen(state, true, { confirmed: true });
+        // Show the way back on this very render, not collapsed behind a click.
+        revealSetAsideLoops = true;
       } else {
         state = A.setNoLoopsChosen(state, true);
       }
