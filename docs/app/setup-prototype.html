@@ -58,6 +58,19 @@
   }
   .row-actions { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
   .hint { font-size: 11px; color: var(--muted); font-weight: 400; }
+  /* Calm and informational on purpose — never warning or error styling. */
+  .advisory-list { margin: 10px 0 0; }
+  .advisory {
+    font-size: 12px; color: var(--muted); background: var(--field-mint);
+    border: 1px solid var(--border); border-left: 3px solid var(--lagoon-light);
+    border-radius: 8px; padding: 7px 10px; margin: 0 0 6px;
+  }
+  .conflict-note {
+    font-size: 13px; color: var(--ink); background: var(--blush);
+    border: 1px solid var(--border); border-left: 4px solid var(--poppy);
+    border-radius: 8px; padding: 8px 11px; margin: 10px 0 0;
+  }
+  .capacity-legend { font-size: 11px; color: var(--muted); margin: 4px 0 0; }
   .guide ol { margin: 6px 0 0; padding-left: 20px; font-size: 13px; }
   .guide li { margin-bottom: 3px; }
   input[type="text"] { font: inherit; font-size: 12px; padding: 3px 5px; }
@@ -178,7 +191,11 @@ var REQUIRED_EXPORTS = [
   { name: 'getLoopSortingProgress', ok: typeof A.getLoopSortingProgress === 'function' },
   { name: 'getStudentEffectiveCapacity', ok: typeof A.getStudentEffectiveCapacity === 'function' },
   { name: 'loopBucketFingerprint', ok: typeof A.loopBucketFingerprint === 'function' },
-  { name: 'migrateSetupPrototypeState', ok: typeof A.migrateSetupPrototypeState === 'function' }
+  { name: 'migrateSetupPrototypeState', ok: typeof A.migrateSetupPrototypeState === 'function' },
+  { name: 'getAvailabilityCompletion', ok: typeof A.getAvailabilityCompletion === 'function' },
+  { name: 'createLoopBucket', ok: typeof A.createLoopBucket === 'function' },
+  { name: 'setNoLoopsChosen', ok: typeof A.setNoLoopsChosen === 'function' },
+  { name: 'describeNoLoopsImpact', ok: typeof A.describeNoLoopsImpact === 'function' }
 ];
 function missingExports() {
   return REQUIRED_EXPORTS.filter(function (e) { return !e.ok; }).map(function (e) { return e.name; });
@@ -211,9 +228,11 @@ function ensureShape(s) {
   if (!s.setupPrototype || typeof s.setupPrototype !== 'object') {
     s.setupPrototype = {
       groupsReviewed: false, loopBucketsReviewed: false,
-      loopSortingReviewed: false, noLoopsChosen: false
+      loopSortingReviewed: false, noLoopsChosen: false,
+      availabilityReviewed: false
     };
   }
+  if (s.setupPrototype.availabilityReviewed !== true) s.setupPrototype.availabilityReviewed = false;
   // Old saved state must keep loading: one normalizer, run on every load.
   if (typeof A.migrateSetupPrototypeState === 'function') {
     var migrated = A.migrateSetupPrototypeState(s);
@@ -290,6 +309,20 @@ function weekdayChecksHTML(role, id, checkedIds) {
 var DAY_CAPACITIES = arr(M.DAY_CAPACITIES);
 var WORK_TYPES = arr(M.WORK_TYPES);
 
+// The FOUR parent-facing category names, used identically everywhere on this
+// page — capacity selects, the derived table, the Review step, helper text.
+// The word "available" is deliberately absent: it never said which kind of day
+// it meant.
+var CAPACITY_LABELS = {
+  'full': 'Full workdays',
+  'light-independent': 'Light independent days',
+  'outside-only': 'Outside / co-op only',
+  'off': 'Off'
+};
+function capLabel(id) {
+  return CAPACITY_LABELS[id] || (typeof M.dayCapacityLabel === 'function' ? M.dayCapacityLabel(id) : String(id == null ? '' : id));
+}
+
 // A weekday is not a yes/no question — each day gets a capacity.
 function capacitySelectsHTML(student) {
   return WEEKDAYS.map(function (d) {
@@ -300,7 +333,7 @@ function capacitySelectsHTML(student) {
       '<select data-action="student-capacity" data-id="' + escH(student.id) + '" data-day="' + escH(d.id) +
       '" aria-label="' + escH(d.label) + ' capacity">' +
       DAY_CAPACITIES.map(function (c) {
-        return '<option value="' + escH(c.id) + '"' + (c.id === cur ? ' selected' : '') + '>' + escH(c.label) + '</option>';
+        return '<option value="' + escH(c.id) + '"' + (c.id === cur ? ' selected' : '') + '>' + escH(capLabel(c.id)) + '</option>';
       }).join('') + '</select></label>';
   }).join('');
 }
@@ -316,7 +349,7 @@ function capacitySuggestionsHTML(student) {
     var s = sug[d.id];
     return '<div class="capacity-suggestion">' +
       escH(s.fromCommitmentLabel) + ' suggests ' + escH(d.label) + ' → ' +
-      escH(M.dayCapacityLabel(s.capacity)) +
+      escH(capLabel(s.capacity)) +
       ' <button type="button" data-action="apply-capacity" data-id="' + escH(student.id) +
       '" data-day="' + escH(d.id) + '" data-capacity="' + escH(s.capacity) + '">Apply</button></div>';
   }).join('');
@@ -477,7 +510,7 @@ function renderAvailabilityStep() {
     WEEKDAYS.forEach(function (d) {
       var cap = eff.dayCapacity[d.id];
       var cls = cap === 'full' ? 'day-cell-available' : (cap === 'off' ? 'day-cell-off' : 'day-cell-partial');
-      var cell = '<span class="' + cls + '">' + escH(M.dayCapacityLabel(cap)) + '</span>';
+      var cell = '<span class="' + cls + '">' + escH(capLabel(cap)) + '</span>';
       var blockers = commitmentLabelsOnDay(s.id, d.id);
       if (blockers.length) cell += '<div class="hint">' + escH(blockers.join(', ')) + '</div>';
       html += '<td>' + cell + '</td>';
@@ -485,6 +518,20 @@ function renderAvailabilityStep() {
     html += '</tr>';
   });
   html += '</tbody></table></div>';
+
+  // Calm, informational advisories. Never a warning, never blocking.
+  var completion = A.getAvailabilityCompletion(state);
+  if (arr(completion.advisories).length) {
+    html += '<div class="advisory-list">' + arr(completion.advisories).map(function (adv) {
+      return '<p class="advisory">' + escH(adv.message) + '</p>';
+    }).join('') + '</div>';
+  }
+  html += '<div class="row-actions"><button type="button" class="accent" data-action="availability-reviewed">These day capacities look right</button>' +
+    '<span class="hint">' + escH(completion.availabilityReviewed
+      ? 'Confirmed.'
+      : 'Not confirmed yet — a day left on the suggested setting still needs your nod.') + '</span></div>';
+  html += '<p class="sub" style="margin:6px 0 0;">Every weekday is one of four things: Full workdays, Light independent days, ' +
+    'Outside / co-op only, or Off. A week with no Full workdays is a real, valid week.</p>';
 
   // Derived group availability, per kind of work
   html += '<h2 class="section-title" style="margin-top:16px;">Group availability <span class="hint">computed from members</span></h2>';
@@ -512,7 +559,7 @@ function renderAvailabilityStep() {
         else cell = '<span class="day-cell-blocked">not this day</span>';
         if (blockers.length) {
           cell += '<div class="hint">Blocked by ' + escH(blockers.map(function (b) {
-            return b.name + ' (' + M.dayCapacityLabel(b.capacity) + ')';
+            return b.name + ' (' + capLabel(b.capacity) + ')';
           }).join(', ')) + '</div>';
         }
       } else {
@@ -543,7 +590,13 @@ function renderRhythmStep() {
   var html = '<div class="panel"><h2 class="section-title">Loop Buckets <span class="hint">buckets only — contents come later</span></h2>';
   html += '<p class="sub" style="margin:0 0 10px;"><strong>Create the loop buckets you may use. You will sort strands into them during Feast Planning.</strong></p>';
   html += '<p class="sub" style="margin:0 0 10px;">A bucket needs only a name, and optionally the broad days it may occur on. Nothing about what goes <em>inside</em> a loop is decided here — an empty bucket is a perfectly finished bucket.</p>';
-  var loops = arr(state.loops);
+  // Archived buckets are set aside, never deleted — they are simply not listed
+  // among the buckets in use this year.
+  var loops = arr(state.loops).filter(function (l) { return l && l.active !== false; });
+  var archivedCount = arr(state.loops).length - loops.length;
+  if (sorting.noLoopsConflict) {
+    html += '<div class="conflict-note">' + escH(A.getSetupProgress(state).rhythm.detail) + '</div>';
+  }
   if (!loops.length) html += '<p class="hint">No loop buckets yet.</p>';
   loops.forEach(function (l) {
     html += '<div class="loop-card" data-loop-id="' + escH(l.id) + '">';
@@ -557,6 +610,11 @@ function renderRhythmStep() {
   html += '<div class="row-actions"><label class="daybox">' +
     '<input type="checkbox" data-action="no-loops-chosen"' + (sorting.noLoopsChosen ? ' checked' : '') + '> ' +
     'We will not use loops this year.</label></div>';
+  if (archivedCount) {
+    html += '<p class="hint">' + archivedCount + ' loop bucket' + (archivedCount === 1 ? '' : 's') +
+      ' set aside. Nothing was deleted, and unticking the box above does not bring them back — ' +
+      'create a bucket again when you want one.</p>';
+  }
   html += '<div class="row-actions"><button type="button" class="accent" data-action="loop-buckets-reviewed">These buckets look right</button>' +
     '<span class="hint">' + (sorting.bucketsReviewed
       ? 'Confirmed as they are now.'
@@ -577,6 +635,21 @@ function dayLabels(ids) {
   return WEEKDAYS.filter(function (d) { return arr(ids).indexOf(d.id) > -1; }).map(function (d) { return d.short; }).join(', ');
 }
 
+// The week, broken into the four categories — never one undifferentiated list.
+var CATEGORY_FIELDS = [
+  { key: 'fullWorkdayIds', label: 'Full workdays' },
+  { key: 'lightIndependentDayIds', label: 'Light independent days' },
+  { key: 'outsideOnlyDayIds', label: 'Outside / co-op only' },
+  { key: 'offDayIds', label: 'Off' }
+];
+
+function categoryBreakdownHTML(row) {
+  return '<div class="capacity-legend">' + CATEGORY_FIELDS.map(function (c) {
+    var ids = arr(row[c.key]);
+    return escH(c.label) + ': ' + escH(ids.length ? dayLabels(ids) : 'none');
+  }).join(' · ') + '</div>';
+}
+
 function renderReviewStep() {
   var s = A.buildSetupSummary(state);
   var p = progress();
@@ -587,7 +660,7 @@ function renderReviewStep() {
     ? '<ul>' + s.family.map(function (f) {
         return '<li>' + escH(f.name || '(unnamed)') + ' — ' + escH(f.gradeBandLabel) +
           (f.gradeBandConfirmed ? '' : ' <span class="unconfirmed-tag">UNCONFIRMED</span>') +
-          ' <span class="hint">(' + escH(dayLabels(f.availableDayIds) || 'no available days') + ')</span></li>';
+          categoryBreakdownHTML(f) + '</li>';
       }).join('') + '</ul>'
     : '<p class="hint">No children yet.</p>';
 
@@ -599,12 +672,18 @@ function renderReviewStep() {
       }).join('') + '</ul>'
     : '<p class="hint">No groups.</p>';
 
-  html += '<h3 class="section-title">Availability</h3>';
+  html += '<h3 class="section-title">Each child\'s week</h3>';
   html += s.family.length
     ? '<ul>' + s.family.map(function (f) {
-        return '<li>' + escH(f.name || '(unnamed)') + ': ' + escH(dayLabels(f.availableDayIds) || 'no days available') + '</li>';
+        return '<li>' + escH(f.name || '(unnamed)') + ':' + categoryBreakdownHTML(f) + '</li>';
       }).join('') + '</ul>'
     : '<p class="hint">Nothing to show yet.</p>';
+  var advisories = arr(p.availability.advisories);
+  if (advisories.length) {
+    html += '<div class="advisory-list">' + advisories.map(function (adv) {
+      return '<p class="advisory">' + escH(adv.message) + '</p>';
+    }).join('') + '</div>';
+  }
 
   html += '<h3 class="section-title">Loops</h3>';
   html += s.loops.length
@@ -779,8 +858,18 @@ document.addEventListener('click', function (ev) {
     return;
   }
 
+  if (action === 'availability-reviewed') {
+    // "A valid backward-compatible default has been reviewed." Days still on the
+    // suggested capacity now count as resolved.
+    A.markAvailabilityReviewed(state);
+    commit();
+    return;
+  }
+
   if (action === 'add-loop') {
-    state.loops.push(M.makeLoop({ title: 'New loop', sortOrder: arr(state.loops).length, rhythmDayIds: [] }));
+    // The ONE creation path. It also clears "no loops this year", so the two
+    // answers can never contradict each other.
+    state = ensureShape(A.createLoopBucket(state, 'New loop'));
     commit();
     return;
   }
@@ -841,10 +930,25 @@ document.addEventListener('change', function (ev) {
         stu.dayCapacityExplicit[el.getAttribute('data-day')] = true;
       }
       break;
-    case 'no-loops-chosen':
-      // An explicit answer, stored explicitly. It never creates or deletes loops.
-      state.setupPrototype.noLoopsChosen = el.checked;
+    case 'no-loops-chosen': {
+      // An explicit answer, stored explicitly. It never creates or DELETES a
+      // loop. Ticking it while real buckets exist archives them — but only after
+      // a confirm that names them and says how many strand choices are involved.
+      // Unticking needs no confirmation and never restores archived buckets.
+      if (!el.checked) {
+        state = A.setNoLoopsChosen(state, false);
+        break;
+      }
+      var impactL = A.describeNoLoopsImpact(state);
+      if (impactL.activeBucketCount > 0) {
+        var ok = window.confirm(impactL.message + '\n\nSet these buckets aside and say you will not use loops this year?');
+        if (!ok) { el.checked = false; return; }
+        state = A.setNoLoopsChosen(state, true, { confirmed: true });
+      } else {
+        state = A.setNoLoopsChosen(state, true);
+      }
       break;
+    }
     case 'group-work-type':
       groupWorkType = el.value;
       break;

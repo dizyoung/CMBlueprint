@@ -276,7 +276,8 @@ var REQUIRED_EXPORTS = [
   { name: 'WORK_TYPES', ok: arr(M.WORK_TYPES).length > 0 },
   { name: 'getLoopSortingProgress', ok: typeof A.getLoopSortingProgress === 'function' },
   { name: 'getLoopBucketContents', ok: typeof A.getLoopBucketContents === 'function' },
-  { name: 'migrateSetupPrototypeState', ok: typeof A.migrateSetupPrototypeState === 'function' }
+  { name: 'migrateSetupPrototypeState', ok: typeof A.migrateSetupPrototypeState === 'function' },
+  { name: 'createLoopBucket', ok: typeof A.createLoopBucket === 'function' }
 ];
 function missingExports() {
   return REQUIRED_EXPORTS.filter(function (e) { return !e.ok; }).map(function (e) { return e.name; });
@@ -361,17 +362,28 @@ function audienceHelperHTML(row) {
 // ---------------------------------------------------------------------------
 var WORK_TYPES = arr(M.WORK_TYPES);
 
-function loops() { return arr(state.loops); }
+// Buckets in use this year. An archived bucket (active:false) is set aside, not
+// deleted — strands already sorted into it still resolve to it.
+function loops() { return arr(state.loops).filter(function (l) { return l && l.active !== false; }); }
+function loopById(id) { return arr(state.loops).find(function (l) { return l && l.id === id; }); }
 
 // One select shape everywhere a loop is chosen, so a new bucket is instantly
 // usable in every one of them.
 function loopSelectHTML(role, strandId, currentLoopId) {
   var html = '<select data-role="' + escH(role) + '" data-strand="' + escH(strandId) + '" aria-label="Put in loop">';
   html += '<option value=""' + (currentLoopId ? '' : ' selected') + '>Not in a loop</option>';
-  loops().forEach(function (l) {
+  var listed = loops();
+  listed.forEach(function (l) {
     html += '<option value="' + escH(l.id) + '"' + (l.id === currentLoopId ? ' selected' : '') + '>' +
       escH(l.title || 'Untitled loop') + '</option>';
   });
+  // A strand sorted into a bucket that has since been set aside still shows its
+  // real bucket — the select must never quietly misreport what is saved.
+  if (currentLoopId && !listed.some(function (l) { return l.id === currentLoopId; })) {
+    var archived = loopById(currentLoopId);
+    html += '<option value="' + escH(currentLoopId) + '" selected>' +
+      escH((archived && archived.title) || 'Untitled loop') + ' (set aside)</option>';
+  }
   html += '</select>';
   return html;
 }
@@ -668,9 +680,10 @@ document.getElementById('buckets-panel').addEventListener('click', function (ev)
   if (el.id === 'new-loop-btn') {
     var input = document.getElementById('new-loop-title');
     var title = input && input.value.trim() ? input.value.trim() : 'New loop';
-    if (!Array.isArray(state.loops)) state.loops = [];
-    // Title only — everything else about a loop stays a Setup decision.
-    state.loops.push(M.makeLoop({ title: title, sortOrder: state.loops.length, rhythmDayIds: [] }));
+    // Title only — everything else about a loop stays a Setup decision. The one
+    // shared creation path, so creating a bucket here also clears
+    // "no loops this year" instead of leaving the two answers contradicting.
+    state = A.createLoopBucket(state, title);
     markDirtyAndSave();
     render();
     return;

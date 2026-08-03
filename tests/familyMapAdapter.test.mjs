@@ -1892,7 +1892,12 @@ test('getSetupProgress derives family/availability and reads the two acknowledge
   const state = setupState({ students: [a] });
   let p = A.getSetupProgress(state);
   assert.equal(p.family.complete, false, 'unconfirmed Form blocks the family step');
-  assert.equal(p.availability.complete, true);
+  // Availability now requires every weekday to have a RESOLVED capacity. A brand
+  // new child sits on the suggested defaults until the parent reviews them.
+  assert.equal(p.availability.complete, false);
+  state.setupPrototype = { availabilityReviewed: true };
+  assert.equal(A.getSetupProgress(state).availability.complete, true);
+  p = A.getSetupProgress(state);
   assert.equal(p.groups.complete, false);
   assert.equal(p.rhythm.complete, false);
   assert.equal(p.readyForFeast, false);
@@ -1900,7 +1905,7 @@ test('getSetupProgress derives family/availability and reads the two acknowledge
   a.gradeBandConfirmed = true;
   // The rhythm step is loop BUCKETS only: a bucket must exist AND be reviewed.
   state.loops = [M.makeLoop({ title: 'Beauty loop' })];
-  state.setupPrototype = { groupsReviewed: true };
+  state.setupPrototype = { groupsReviewed: true, availabilityReviewed: true };
   A.markLoopBucketsReviewed(state);
   p = A.getSetupProgress(state);
   assert.equal(p.family.complete, true);
@@ -1908,8 +1913,15 @@ test('getSetupProgress derives family/availability and reads the two acknowledge
   assert.equal(p.rhythm.complete, true);
   assert.equal(p.readyForFeast, true);
 
-  // Availability is derived, not acknowledged: take every day away.
+  // A week with no Full workdays is valid — it is an advisory, never an error.
   a.dayCapacity = { mon: 'off', tue: 'off', wed: 'off', thu: 'off', fri: 'off' };
+  p = A.getSetupProgress(state);
+  assert.equal(p.availability.complete, true, 'an all-off week is still a resolved week');
+  assert.equal(p.availability.advisories.length, 1);
+  assert.equal(p.readyForFeast, true);
+
+  // What DOES make it incomplete: a day still on an unreviewed default.
+  state.setupPrototype.availabilityReviewed = false;
   p = A.getSetupProgress(state);
   assert.equal(p.availability.complete, false);
   assert.equal(p.readyForFeast, false);
@@ -2744,6 +2756,397 @@ test('C4.27 migrateSetupPrototypeState is idempotent and tolerates {}', () => {
     assert.deepEqual(twice.setupPrototype, once.setupPrototype, 'running it twice changes nothing');
     assert.equal(JSON.stringify(twice), JSON.stringify(once));
     assert.equal(typeof once.setupPrototype, 'object');
+  }
+});
+
+
+// ===========================================================================
+// FINAL CLEANUP — CORRECTION 1: availability completion is about RESOLUTION,
+// never about owning a Full workday. Every state is built inline; no student
+// name, group label, or subject is hardcoded into any assertion.
+// ===========================================================================
+
+const WEEK = ['mon', 'tue', 'wed', 'thu', 'fri'];
+function everyDay(capacity) {
+  const out = {};
+  WEEK.forEach((d) => { out[d] = capacity; });
+  return out;
+}
+function allExplicit() {
+  const out = {};
+  WEEK.forEach((d) => { out[d] = true; });
+  return out;
+}
+// A child whose whole week the parent set by hand.
+function explicitStudent(name, dayCapacity) {
+  return M.makeStudent({ name, active: true, dayCapacity: Object.assign({}, dayCapacity), dayCapacityExplicit: allExplicit() });
+}
+
+test('F1.1 a child with only light-independent days is availability-complete', () => {
+  const kid = explicitStudent('Wren', everyDay('light-independent'));
+  const out = A.getAvailabilityCompletion(setupState({ students: [kid] }));
+  assert.equal(out.complete, true);
+  assert.deepEqual(out.unresolved, []);
+  assert.equal(out.activeStudentCount, 1);
+});
+
+test('F1.2 a child with only outside/co-op days is availability-complete', () => {
+  const kid = explicitStudent('Wren', everyDay('outside-only'));
+  assert.equal(A.getAvailabilityCompletion(setupState({ students: [kid] })).complete, true);
+});
+
+test('F1.3 a child with every day off is availability-complete', () => {
+  const kid = explicitStudent('Wren', everyDay('off'));
+  assert.equal(A.getAvailabilityCompletion(setupState({ students: [kid] })).complete, true);
+});
+
+test('F1.4 a mixed week with zero Full days completes and yields exactly one advisory', () => {
+  const kid = explicitStudent('Wren', {
+    mon: 'light-independent', tue: 'outside-only', wed: 'off', thu: 'light-independent', fri: 'off'
+  });
+  const out = A.getAvailabilityCompletion(setupState({ students: [kid] }));
+  assert.equal(out.complete, true);
+  assert.equal(out.advisories.length, 1);
+  assert.equal(out.advisories[0].studentId, kid.id);
+});
+
+test('F1.5 the advisory string has the required shape and uses the child\'s own name', () => {
+  const kid = explicitStudent('Juniper', everyDay('off'));
+  const out = A.getAvailabilityCompletion(setupState({ students: [kid] }));
+  assert.equal(
+    out.advisories[0].message,
+    'No full workdays are selected for ' + kid.name + '. Independent or outside work may still be planned.'
+  );
+  // ...and it really is derived from the name, not a constant.
+  const other = explicitStudent('Rowan', everyDay('off'));
+  const out2 = A.getAvailabilityCompletion(setupState({ students: [other] }));
+  assert.ok(out2.advisories[0].message.indexOf(other.name) > -1);
+  assert.notEqual(out2.advisories[0].message, out.advisories[0].message);
+});
+
+test('F1.6 advisories never change complete or readyForFeast', () => {
+  const withFull = explicitStudent('A', everyDay('full'));
+  withFull.gradeBandConfirmed = true;
+  const noFull = explicitStudent('B', everyDay('off'));
+  noFull.gradeBandConfirmed = true;
+  const state = setupState({
+    students: [withFull, noFull],
+    loops: [M.makeLoop({ title: 'Loop' })],
+    setupPrototype: { groupsReviewed: true }
+  });
+  A.markLoopBucketsReviewed(state);
+  const p = A.getSetupProgress(state);
+  assert.equal(p.availability.advisories.length, 1, 'exactly one child has no full workdays');
+  assert.equal(p.availability.complete, true);
+  assert.equal(p.readyForFeast, true);
+});
+
+test('F1.7 unreviewed pure-default days are unresolved; availabilityReviewed completes them', () => {
+  const kid = M.makeStudent({ name: 'Wren', active: true }); // defaults only, nothing set by hand
+  const state = setupState({ students: [kid] });
+  let out = A.getAvailabilityCompletion(state);
+  assert.equal(out.complete, false);
+  assert.equal(out.unresolved.length, 1);
+  assert.deepEqual(out.unresolved[0].dayIds, WEEK);
+  assert.equal(out.unresolved[0].name, kid.name);
+  assert.ok(typeof out.detail === 'string' && out.detail.length > 0);
+
+  A.markAvailabilityReviewed(state);
+  out = A.getAvailabilityCompletion(state);
+  assert.equal(out.complete, true);
+  assert.deepEqual(out.unresolved, []);
+});
+
+test('F1.8 explicit capacities on every weekday complete WITHOUT availabilityReviewed', () => {
+  const kid = explicitStudent('Wren', everyDay('full'));
+  const state = setupState({ students: [kid] });
+  assert.equal(A.getAvailabilityCompletion(state).availabilityReviewed, false);
+  assert.equal(A.getAvailabilityCompletion(state).complete, true);
+});
+
+test('F1.9 legacy workdays-sourced days count as resolved without availabilityReviewed', () => {
+  // A plan saved before capacities existed: boolean workdays and nothing else.
+  const kid = { id: 'stu_legacy', name: 'Wren', active: true, workdays: { mon: true, tue: false, wed: true, thu: true, fri: false } };
+  const state = setupState({ students: [kid] });
+  const baseline = A.getStudentBaselineCapacity(state, kid.id);
+  WEEK.forEach((d) => assert.equal(baseline.source[d], 'legacy-workdays'));
+  const out = A.getAvailabilityCompletion(state);
+  assert.equal(out.complete, true);
+  assert.equal(out.availabilityReviewed, false);
+  assert.deepEqual(out.unresolved, []);
+});
+
+test('F1.10 zero active students is not complete and does not crash', () => {
+  const out = A.getAvailabilityCompletion(setupState({ students: [] }));
+  assert.equal(out.complete, false);
+  assert.equal(out.activeStudentCount, 0);
+  assert.deepEqual(out.advisories, []);
+  assert.equal(typeof out.detail, 'string');
+  assert.equal(A.getAvailabilityCompletion({}).complete, false);
+  assert.equal(A.getAvailabilityCompletion(undefined).complete, false);
+});
+
+// ===========================================================================
+// FINAL CLEANUP — CORRECTION 2: "no loops this year" and real buckets can
+// never coexist.
+// ===========================================================================
+
+test('F2.11 noLoopsChosen with zero buckets completes the step and reports no conflict', () => {
+  const state = setupState({ setupPrototype: { noLoopsChosen: true } });
+  A.markLoopBucketsReviewed(state);
+  const p = A.getLoopSortingProgress(state);
+  assert.equal(p.bucketsDefined, false);
+  assert.equal(p.noLoopsConflict, false);
+  assert.equal(p.setupStepComplete, true);
+});
+
+test('F2.12 createLoopBucket clears noLoopsChosen and yields an active loop', () => {
+  const before = setupState({ setupPrototype: { noLoopsChosen: true } });
+  const after = A.createLoopBucket(before, 'Morning basket');
+  assert.equal(after.setupPrototype.noLoopsChosen, false);
+  assert.equal(after.loops.length, 1);
+  assert.equal(after.loops[0].active, true);
+  assert.equal(after.loops[0].title, 'Morning basket');
+  // pure: the input state is untouched
+  assert.equal(before.loops.length, 0);
+  assert.equal(before.setupPrototype.noLoopsChosen, true);
+  // and an empty title still produces a usable bucket
+  assert.equal(typeof A.createLoopBucket({}, '').loops[0].title, 'string');
+});
+
+test('F2.13 a contradictory state reports noLoopsConflict and is NOT complete', () => {
+  const state = setupState({
+    loops: [M.makeLoop({ id: 'l1', title: 'X' })],
+    setupPrototype: { noLoopsChosen: true }
+  });
+  A.markLoopBucketsReviewed(state);
+  const p = A.getLoopSortingProgress(state);
+  assert.equal(p.bucketsDefined, true);
+  assert.equal(p.noLoopsChosen, true);
+  assert.equal(p.noLoopsConflict, true);
+  assert.equal(p.bucketsReviewed, true, 'the review itself is still valid');
+  assert.equal(p.setupStepComplete, false, 'a conflict must never read as complete');
+  assert.equal(A.getSetupProgress(state).rhythm.complete, false);
+  assert.equal(A.getSetupProgress(state).readyForFeast, false);
+});
+
+test('F2.14 rhythm.detail names the conflict plainly', () => {
+  const state = setupState({
+    loops: [M.makeLoop({ id: 'l1', title: 'X' }), M.makeLoop({ id: 'l2', title: 'Y' })],
+    setupPrototype: { noLoopsChosen: true }
+  });
+  A.markLoopBucketsReviewed(state);
+  const detail = A.getSetupProgress(state).rhythm.detail;
+  assert.ok(detail.indexOf('"No loops this year"') > -1, detail);
+  assert.ok(detail.indexOf('2 loop buckets') > -1, detail);
+  assert.ok(/still exist/.test(detail), detail);
+});
+
+test('F2.15 setNoLoopsChosen without confirmation leaves active buckets untouched', () => {
+  const state = setupState({ loops: [M.makeLoop({ id: 'l1', title: 'X' })] });
+  const out = A.setNoLoopsChosen(state, true);
+  assert.equal(out.noLoopsConfirmationRequired, true, 'the caller gets a signal it can act on');
+  assert.equal(out.loops.length, 1);
+  assert.equal(out.loops[0].active !== false, true, 'the bucket is still active');
+  assert.equal(A.getLoopSortingProgress(out).noLoopsChosen, false, 'the flag was not written');
+  assert.equal(A.getLoopSortingProgress(out).noLoopsConflict, false);
+  assert.equal(state.loops[0].active !== false, true, 'and the input state is untouched');
+  // The signal is non-enumerable, so it can never leak into saved JSON.
+  assert.equal(Object.keys(out).indexOf('noLoopsConfirmationRequired'), -1);
+  assert.equal(JSON.parse(JSON.stringify(out)).noLoopsConfirmationRequired, undefined);
+});
+
+test('F2.16 setNoLoopsChosen with confirmed:true archives buckets and deletes nothing', () => {
+  const state = setupState({ loops: [M.makeLoop({ id: 'l1', title: 'X' }), M.makeLoop({ id: 'l2', title: 'Y' })] });
+  const out = A.setNoLoopsChosen(state, true, { confirmed: true });
+  assert.equal(out.loops.length, 2, 'nothing was deleted');
+  out.loops.forEach((l) => assert.equal(l.active, false));
+  assert.equal(out.setupPrototype.noLoopsChosen, true);
+  const p = A.getLoopSortingProgress(out);
+  assert.equal(p.bucketsDefined, false, 'archived buckets are not defined buckets');
+  assert.equal(p.bucketCount, 0);
+  assert.equal(p.noLoopsConflict, false);
+  // titles survive, so a parent can still see what was set aside
+  assert.deepEqual(out.loops.map((l) => l.title), state.loops.map((l) => l.title));
+});
+
+test('F2.17 strand assignments pointing at an archived loop survive and still resolve to it', () => {
+  const loop = M.makeLoop({ id: 'l1', title: 'Morning basket' });
+  const strandId = M.FEAST_LIBRARY[0].id;
+  const state = setupState({
+    loops: [loop],
+    strandAssignments: [M.makeStrandAssignment({ strandId, strandLabel: M.FEAST_LIBRARY[0].label, assignmentMode: 'loop', loopId: loop.id })]
+  });
+  const out = A.setNoLoopsChosen(state, true, { confirmed: true });
+  assert.equal(out.strandAssignments.length, 1);
+  assert.equal(out.strandAssignments[0].loopId, loop.id);
+  const row = A.buildFeastRows(out).find((r) => r.strandId === strandId);
+  assert.equal(row.loopId, loop.id);
+  assert.equal(row.loopTitle, loop.title, 'it still resolves to its real bucket');
+  assert.deepEqual(row.warnings, [], 'an archived loop is not a missing loop');
+});
+
+test('F2.18 describeNoLoopsImpact reports bucket count, titles, and affected strand count', () => {
+  const l1 = M.makeLoop({ id: 'l1', title: 'Alpha' });
+  const l2 = M.makeLoop({ id: 'l2', title: 'Beta' });
+  const s0 = M.FEAST_LIBRARY[0];
+  const s1 = M.FEAST_LIBRARY[1];
+  const state = setupState({
+    loops: [l1, l2],
+    strandAssignments: [
+      M.makeStrandAssignment({ strandId: s0.id, strandLabel: s0.label, assignmentMode: 'loop', loopId: l1.id }),
+      M.makeStrandAssignment({ strandId: s1.id, strandLabel: s1.label, assignmentMode: 'loop', loopId: l2.id })
+    ]
+  });
+  const impact = A.describeNoLoopsImpact(state);
+  assert.equal(impact.activeBucketCount, 2);
+  assert.deepEqual(impact.bucketTitles, [l1.title, l2.title]);
+  assert.equal(impact.affectedStrandCount, 2);
+  assert.ok(impact.message.indexOf(l1.title) > -1 && impact.message.indexOf(l2.title) > -1);
+  assert.ok(impact.message.indexOf('2') > -1);
+  // empty case
+  const none = A.describeNoLoopsImpact({});
+  assert.equal(none.activeBucketCount, 0);
+  assert.equal(none.affectedStrandCount, 0);
+  assert.equal(typeof none.message, 'string');
+});
+
+test('F2.19 migration clears a stale noLoopsChosen when active loops exist, idempotently', () => {
+  const seed = setupState({
+    loops: [M.makeLoop({ id: 'l1', title: 'X' })],
+    setupPrototype: { noLoopsChosen: true, groupsReviewed: true }
+  });
+  const once = A.migrateSetupPrototypeState(seed);
+  assert.equal(once.setupPrototype.noLoopsChosen, false, 'real structure wins over a stale flag');
+  assert.equal(once.setupPrototype.groupsReviewed, true, 'nothing else is disturbed');
+  const twice = A.migrateSetupPrototypeState(once);
+  assert.deepEqual(twice.setupPrototype, once.setupPrototype);
+  assert.equal(JSON.stringify(twice), JSON.stringify(once));
+  // an ARCHIVED loop is not a reason to clear the flag
+  const archived = A.migrateSetupPrototypeState(setupState({
+    loops: [M.makeLoop({ id: 'l1', title: 'X', active: false })],
+    setupPrototype: { noLoopsChosen: true }
+  }));
+  assert.equal(archived.setupPrototype.noLoopsChosen, true);
+});
+
+test('F2.20 archived loops are excluded from bucketsDefined and from the fingerprint', () => {
+  const active = setupState({ loops: [M.makeLoop({ id: 'l1', title: 'X' })] });
+  const withArchived = setupState({
+    loops: [M.makeLoop({ id: 'l1', title: 'X' }), M.makeLoop({ id: 'l2', title: 'Y', active: false })]
+  });
+  assert.equal(A.loopBucketFingerprint(withArchived), A.loopBucketFingerprint(active),
+    'archiving a bucket must not invalidate a review of the remaining ones');
+  assert.equal(A.getLoopSortingProgress(withArchived).bucketCount, 1);
+  assert.equal(A.getLoopSortingProgress(withArchived).bucketsDefined, true);
+  const allArchived = setupState({ loops: [M.makeLoop({ id: 'l1', title: 'X', active: false })] });
+  assert.equal(A.getLoopSortingProgress(allArchived).bucketsDefined, false);
+  assert.equal(A.loopBucketFingerprint(allArchived), '');
+  // absent `active` still reads as active
+  assert.equal(A.getLoopSortingProgress(setupState({ loops: [{ id: 'l1', title: 'X' }] })).bucketsDefined, true);
+});
+
+test('F2.21 unticking "no loops" does not resurrect archived loops', () => {
+  const state = setupState({ loops: [M.makeLoop({ id: 'l1', title: 'X' })] });
+  const archived = A.setNoLoopsChosen(state, true, { confirmed: true });
+  const unticked = A.setNoLoopsChosen(archived, false);
+  assert.equal(unticked.setupPrototype.noLoopsChosen, false);
+  assert.equal(unticked.loops.length, 1);
+  assert.equal(unticked.loops[0].active, false, 'the bucket stays set aside');
+  assert.equal(A.getLoopSortingProgress(unticked).bucketsDefined, false);
+  assert.equal(A.getLoopSortingProgress(unticked).noLoopsConflict, false);
+  // creating a bucket is how you get one back
+  const recreated = A.createLoopBucket(unticked, 'Fresh');
+  assert.equal(A.getLoopSortingProgress(recreated).bucketCount, 1);
+  assert.equal(recreated.loops.length, 2, 'the archived one is still there, untouched');
+});
+
+// ===========================================================================
+// FINAL CLEANUP — CORRECTION 3: no ambiguous "available days" language.
+// ===========================================================================
+
+test('F3.22 family rows expose four category arrays that partition the school week', () => {
+  const kid = explicitStudent('Wren', {
+    mon: 'full', tue: 'light-independent', wed: 'outside-only', thu: 'off', fri: 'full'
+  });
+  const summary = A.buildSetupSummary(setupState({ students: [kid] }));
+  const row = summary.family[0];
+  const keys = ['fullWorkdayIds', 'lightIndependentDayIds', 'outsideOnlyDayIds', 'offDayIds'];
+  keys.forEach((k) => assert.ok(Array.isArray(row[k]), k));
+  const all = keys.reduce((acc, k) => acc.concat(row[k]), []);
+  assert.equal(all.length, WEEK.length, 'no weekday appears twice and none is missing');
+  assert.deepEqual(all.slice().sort(), WEEK.slice().sort());
+  assert.deepEqual(row.fullWorkdayIds, ['mon', 'fri']);
+  assert.deepEqual(row.lightIndependentDayIds, ['tue']);
+  assert.deepEqual(row.outsideOnlyDayIds, ['wed']);
+  assert.deepEqual(row.offDayIds, ['thu']);
+});
+
+test('F3.23 the deprecated availableDayIds alias is still present and equals fullWorkdayIds', () => {
+  const kid = explicitStudent('Wren', {
+    mon: 'full', tue: 'light-independent', wed: 'off', thu: 'full', fri: 'outside-only'
+  });
+  const row = A.buildSetupSummary(setupState({ students: [kid] })).family[0];
+  assert.ok(Array.isArray(row.availableDayIds));
+  assert.deepEqual(row.availableDayIds, row.fullWorkdayIds);
+  // getStudentAvailability stays a deprecated compatibility wrapper, unchanged.
+  const av = A.getStudentAvailability(setupState({ students: [kid] }), kid.id);
+  assert.equal(av.deprecated, true);
+  assert.ok(typeof av.deprecationNote === 'string' && av.deprecationNote.length > 0);
+  assert.deepEqual(av.availableDayIds, row.fullWorkdayIds);
+});
+
+test('F3.24 group rows expose unambiguous group-lesson day fields', () => {
+  const a = explicitStudent('A', { mon: 'full', tue: 'full', wed: 'off', thu: 'full', fri: 'full' });
+  const b = explicitStudent('B', { mon: 'full', tue: 'off', wed: 'full', thu: 'full', fri: 'full' });
+  const g = M.makeGroup({ label: 'G', studentIds: [a.id, b.id] });
+  const row = A.buildSetupSummary(setupState({ students: [a, b], groups: [g] })).groups[0];
+  assert.ok(Array.isArray(row.groupLessonDayIds));
+  assert.ok(Array.isArray(row.partialGroupLessonDayIds));
+  assert.deepEqual(row.groupLessonDayIds, ['mon', 'thu', 'fri'], 'only days every member can meet');
+  assert.deepEqual(row.partialGroupLessonDayIds, ['tue', 'wed']);
+  // deprecated alias kept so nothing breaks mid-refactor
+  assert.deepEqual(row.availableDayIds, row.groupLessonDayIds);
+});
+
+test('F3.25 every new helper tolerates {} and states missing optional arrays', () => {
+  const degenerate = [
+    {},
+    undefined,
+    { students: null, groups: undefined, loops: null },
+    { students: [{ id: 's1', name: 'Solo', active: true }] },
+    { students: [{ id: 's1', name: 'Solo', active: true }], groups: [{ id: 'g1', label: 'G' }] },
+    { loops: [{ id: 'l1', title: 'L' }] },
+    { loops: [{ id: 'l1', title: 'L', active: false }], setupPrototype: { noLoopsChosen: true } }
+  ];
+  for (const st of degenerate) {
+    const av = A.getAvailabilityCompletion(st);
+    assert.equal(typeof av.complete, 'boolean');
+    assert.ok(Array.isArray(av.unresolved) && Array.isArray(av.advisories));
+    assert.equal(typeof av.detail, 'string');
+    const impact = A.describeNoLoopsImpact(st);
+    assert.equal(typeof impact.activeBucketCount, 'number');
+    assert.ok(Array.isArray(impact.bucketTitles));
+    assert.equal(typeof impact.message, 'string');
+    const created = A.createLoopBucket(st, 'X');
+    assert.equal(created.loops[created.loops.length - 1].active, true);
+    assert.equal(created.setupPrototype.noLoopsChosen, false);
+    const off = A.setNoLoopsChosen(st, false);
+    assert.equal(off.setupPrototype.noLoopsChosen, false);
+    const on = A.setNoLoopsChosen(st, true, { confirmed: true });
+    assert.equal(on.setupPrototype.noLoopsChosen, true);
+    assert.ok(Array.isArray(A.activeLoops(st)));
+    assert.equal(typeof A.getLoopSortingProgress(st).noLoopsConflict, 'boolean');
+    const summary = A.buildSetupSummary(st);
+    summary.family.forEach((f) => {
+      ['fullWorkdayIds', 'lightIndependentDayIds', 'outsideOnlyDayIds', 'offDayIds', 'availableDayIds']
+        .forEach((k) => assert.ok(Array.isArray(f[k]), k));
+    });
+    summary.groups.forEach((gr) => {
+      ['groupLessonDayIds', 'partialGroupLessonDayIds', 'availableDayIds']
+        .forEach((k) => assert.ok(Array.isArray(gr[k]), k));
+    });
+    assert.ok(Array.isArray(A.getSetupProgress(st).availability.advisories));
   }
 });
 

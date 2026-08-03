@@ -633,7 +633,7 @@ const SKEY = 'cmblueprint.familySchoolMap.v1';
     appStateVersion: 1, subjectColumns: [], cards: [], loops: [], groups: [], strandAssignments: [],
     outsideCommitments: [],
     students: [{ id: 'stu_b', name: 'Juniper', active: true, gradeBand: 'form2', gradeBandConfirmed: true }],
-    setupPrototype: { groupsReviewed: true }
+    setupPrototype: { groupsReviewed: true, availabilityReviewed: true }
   })]);
   await bp.goto(SETUP_URL);
   await bp.waitForLoadState('networkidle');
@@ -738,6 +738,99 @@ const SKEY = 'cmblueprint.familySchoolMap.v1';
   ok('A legacy user is not forced to re-confirm unchanged buckets', migrated.buckets === true);
   await mp.close();
 }
+
+// --- Availability advisories are calm, and "no loops" vs real buckets ---
+{
+  const ap = await browser.newPage();
+  const errs = [];
+  ap.on('pageerror', e => errs.push(e.message));
+  const dialogs = [];
+  ap.on('dialog', async d => { dialogs.push(d.message()); await d.accept(); });
+
+  const OFF_WEEK = { mon: 'off', tue: 'off', wed: 'off', thu: 'off', fri: 'off' };
+  const ALL_EXPLICIT = { mon: true, tue: true, wed: true, thu: true, fri: true };
+  await ap.goto(SETUP_URL);
+  await ap.evaluate(([k, v]) => localStorage.setItem(k, v), [SKEY, JSON.stringify({
+    appStateVersion: 1, subjectColumns: [], cards: [], loops: [], groups: [], strandAssignments: [],
+    outsideCommitments: [],
+    students: [{
+      id: 'stu_adv', name: 'Juniper', active: true, gradeBand: 'form2', gradeBandConfirmed: true,
+      dayCapacity: OFF_WEEK, dayCapacityExplicit: ALL_EXPLICIT
+    }],
+    setupPrototype: { groupsReviewed: true }
+  })]);
+  await ap.goto(SETUP_URL);
+  await ap.waitForLoadState('networkidle');
+  await ap.waitForTimeout(400);
+
+  // A child with zero Full workdays: calm advisory, and Setup still completes.
+  await ap.click('[data-action="goto-step"][data-step="availability"]');
+  await ap.waitForTimeout(300);
+  const advText = await ap.$eval('#step-body', el => el.textContent);
+  ok('A child with no full workdays gets the advisory sentence',
+    /No full workdays are selected for Juniper\. Independent or outside work may still be planned\./.test(advText));
+  const advCalm = await ap.$$eval('#step-body .advisory', els => els.length);
+  ok('The advisory renders in calm/informational styling', advCalm === 1);
+  const advErrorish = await ap.$$eval('#step-body .notice, #step-body [role="alert"], #step-body .conflict-note', els => els.length);
+  ok('The advisory is not rendered as a warning or an error', advErrorish === 0);
+  const availDone = await ap.$eval('[data-action="goto-step"][data-step="availability"]',
+    el => el.className.includes('is-complete'));
+  ok('Zero full workdays still completes the availability step', availDone);
+
+  // "No loops this year" with a real bucket asks first, then sets it aside.
+  await ap.click('[data-action="goto-step"][data-step="rhythm"]');
+  await ap.waitForTimeout(300);
+  await ap.click('[data-action="add-loop"]');
+  await ap.waitForTimeout(300);
+  ok('A loop bucket can be created from Setup',
+    (await ap.$$eval('.loop-card', els => els.length)) === 1);
+  dialogs.length = 0;
+  await ap.check('input[data-action="no-loops-chosen"]');
+  await ap.waitForTimeout(500);
+  ok('Ticking "No loops this year" with a bucket asks for confirmation', dialogs.length === 1);
+  ok('The confirmation names the bucket and the strand impact',
+    /New loop/.test(dialogs[0] || '') && /strand|No strands/.test(dialogs[0] || ''));
+  ok('Once accepted, the bucket disappears from the active list',
+    (await ap.$$eval('.loop-card', els => els.length)) === 0);
+  const asideText = await ap.$eval('#step-body', el => el.textContent);
+  ok('Setup says the bucket was set aside, not deleted', /set aside/.test(asideText));
+
+  // Creating a loop while "no loops" is ticked clears the tick.
+  ok('"No loops this year" is ticked before creating a bucket',
+    (await ap.$eval('input[data-action="no-loops-chosen"]', el => el.checked)) === true);
+  await ap.click('[data-action="add-loop"]');
+  await ap.waitForTimeout(400);
+  ok('Creating a loop clears the "No loops this year" tick',
+    (await ap.$eval('input[data-action="no-loops-chosen"]', el => el.checked)) === false);
+  ok('The new bucket is listed', (await ap.$$eval('.loop-card', els => els.length)) === 1);
+  const noConflict = await ap.$$eval('#step-body .conflict-note', els => els.length);
+  ok('No conflict note is shown once the two answers agree', noConflict === 0);
+
+  // The Review step shows the four categories, and never "available days".
+  await ap.click('[data-action="loop-buckets-reviewed"]');
+  await ap.waitForTimeout(300);
+  await ap.click('[data-action="goto-step"][data-step="review"]');
+  await ap.waitForTimeout(300);
+  const reviewText = await ap.$eval('#step-body', el => el.textContent);
+  for (const label of ['Full workdays', 'Light independent days', 'Outside / co-op only', 'Off']) {
+    ok('Review step shows the "' + label + '" category', reviewText.includes(label));
+  }
+  ok('Review step shows the advisory too, calmly', reviewText.includes('No full workdays are selected for'));
+  ok('No JS errors through advisories and loop-conflict handling', errs.length === 0);
+  if (errs.length) errs.forEach(e => console.log('  JS error:', e));
+
+  // "available days" appears nowhere in parent-facing copy on either page.
+  const setupCopy = await ap.$eval('body', el => el.innerText);
+  ok('Setup page copy never says "available days"', !/available\s+days|days\s+available/i.test(setupCopy));
+  await ap.goto(FEAST_URL);
+  await ap.waitForLoadState('networkidle');
+  await ap.waitForTimeout(500);
+  const feastCopy = await ap.$eval('body', el => el.innerText);
+  ok('Feast page copy never says "available days"', !/available\s+days|days\s+available/i.test(feastCopy));
+  await ap.evaluate(k => localStorage.removeItem(k), SKEY);
+  await ap.close();
+}
+
 
 await browser.close();
 console.log('\n' + passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total');
