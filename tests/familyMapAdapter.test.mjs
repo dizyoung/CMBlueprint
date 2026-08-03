@@ -3228,6 +3228,32 @@ test('restoring a bucket invalidates the bucket review via the derived fingerpri
   assert.equal(A.getLoopSortingProgress(restored).bucketsReviewed, false);
 });
 
+test('restore invalidates bucket review in the REAL parent ordering (review -> archive -> restore)', () => {
+  // Regression: the original coverage reviewed the ALREADY-ARCHIVED state and
+  // then restored, which is the one ordering where the derived fingerprint
+  // happens to change. A parent reviews the bucket FIRST. In that ordering the
+  // fingerprint returns to byte-identical after restore, so relying on the
+  // derived check left the review silently valid.
+  let st = archiveTestState();
+  st = A.markLoopBucketsReviewed(st);                 // 1. review while ACTIVE
+  const reviewedFingerprint = A.loopBucketFingerprint(st);
+  assert.equal(A.getLoopSortingProgress(st).bucketsReviewed, true);
+
+  st = archiveIt(st);                                  // 2. archive
+  assert.equal(A.getLoopSortingProgress(st).bucketsReviewed, false);
+
+  const restored = A.restoreLoopBucket(st, 'lp_1');    // 3. restore
+  assert.equal(A.loopBucketFingerprint(restored), reviewedFingerprint,
+    'the active structure really is identical again — which is exactly why the derived check was not enough');
+  assert.equal(A.getLoopSortingProgress(restored).bucketsReviewed, false,
+    'restore must still require re-confirmation');
+  assert.equal(A.getLoopSortingProgress(restored).setupStepComplete, false);
+
+  // And confirming again genuinely clears it.
+  const reconfirmed = A.markLoopBucketsReviewed(restored);
+  assert.equal(A.getLoopSortingProgress(reconfirmed).bucketsReviewed, true);
+});
+
 test('archiving a bucket changes the bucket fingerprint', () => {
   const st = archiveTestState();
   const before = A.loopBucketFingerprint(st);
