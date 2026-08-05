@@ -1,0 +1,2115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Family School Map</title>
+<link rel="stylesheet" href="./shared.css">
+<style>
+  table.map { border-collapse: collapse; width: max-content; min-width: 100%; background: var(--milk-white); margin-bottom: 26px; border-radius: 10px; overflow: hidden; }
+  table.map th, table.map td { border: 1px solid var(--border); vertical-align: top; padding: 8px; font-size: 13px; min-height: 56px; min-width: 110px; max-width: 220px; }
+  table.map thead th { background: var(--navy-story); color: var(--milk-white); text-align: center; padding: 10px 6px; font-size: 12px; font-weight: 600; overflow-wrap: break-word; word-break: normal; }
+  table.map th.row-head { background: var(--field-mint); color: var(--navy-story); text-align: left; font-weight: 600; width: 110px; min-width: 80px; max-width: 130px; font-size: 13px; }
+  table.map td:empty { background: repeating-linear-gradient(45deg, var(--milk-white), var(--milk-white) 10px, #fafdfd 10px, #fafdfd 20px); }
+
+  /* ---- Resources mode: clean list cells ---- */
+  .res-cell { padding: 2px 0; }
+  .res-card-block { margin-bottom: 5px; }
+  .res-card-block:last-child { margin-bottom: 0; }
+  .res-card-block + .res-card-block { border-top: 1px dotted var(--border); padding-top: 5px; }
+  .res-card-block.lens-dim { opacity: 0.28; }
+  .res-card-block.lens-match { outline: 1px solid var(--wonder-marine); outline-offset: 2px; border-radius: 3px; padding: 1px 3px; }
+  .res-card-block.res-block-hidden { display: none; }
+  .res-group-name { font-size: 11px; font-weight: 600; color: var(--wonder-marine); margin-bottom: 3px; }
+  .res-label { font-size: 12px; color: var(--ink); line-height: 1.45; padding: 1px 0; overflow-wrap: break-word; word-break: normal; }
+  .res-label::before { content: '· '; color: var(--lagoon-light); font-weight: 700; }
+
+  /* ---- Subject / Detailed chip view ---- */
+  .chip { border: 1px solid var(--border); border-left: 4px solid var(--lagoon-light); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; background: var(--milk-white); box-shadow: 0 1px 2px rgba(9,69,78,0.04); transition: opacity 0.15s, box-shadow 0.15s; overflow: hidden; }
+  .chip.chip-single { cursor: pointer; }
+  .chip.chip-single:hover { background: var(--field-mint); }
+  .chip.chip-group { cursor: default; background: #f0f7f5; }
+  .chip:last-child { margin-bottom: 0; }
+  .chip.lens-dim { opacity: 0.28; }
+  .chip.lens-match { box-shadow: 0 0 0 2px var(--wonder-marine) inset; }
+  .chip.filtered-out { display: none; }
+  .chip-title { font-weight: 600; font-size: 13px; color: var(--ink); line-height: 1.3; display: flex; align-items: flex-start; gap: 5px; }
+  .chip-title-text { flex: 1; min-width: 0; overflow-wrap: break-word; word-break: normal; hyphens: none; }
+  .chip-sub { color: var(--muted); font-size: 11px; margin-top: 3px; overflow-wrap: break-word; word-break: normal; line-height: 1.4; }
+
+  /* notice: compact variant shown only in print */
+  .notice-compact { display: none; }
+  .notice-full-list { display: inline; }
+
+  .status-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+  .status-dot.dot-book { background: #4a9b5e; }
+  .status-dot.dot-needbook { background: #d9534f; }
+  .status-dot.dot-practice { background: #999; }
+  .status-dot.dot-coop { background: #5c8fc9; }
+  .status-dot.dot-optional { background: #c9a45c; }
+  .status-dot.dot-unplaced { background: #d9534f; border: 1px dashed #a33; }
+
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; margin-bottom: 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+
+  .filters-row { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .filter-chip { font-size: 12px; padding: 5px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--milk-white); cursor: pointer; color: var(--muted); }
+  .filter-chip.active { background: var(--wonder-marine); color: var(--milk-white); border-color: var(--wonder-marine); }
+
+  .participants-row { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+  .p-dot { width: 18px; height: 18px; border-radius: 50%; font-size: 9px; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
+
+  .density-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .density-toggle button { border: none; background: var(--milk-white); padding: 6px 12px; font-size: 12px; cursor: pointer; }
+  .density-toggle button.active { background: var(--wonder-marine); color: var(--milk-white); }
+
+  .combine-table th { background: var(--color-panel-bg,#f5f5f5); padding:6px 10px; text-align:left; border-bottom:2px solid var(--color-border,#ddd); }
+  .combine-table td { padding:5px 10px; border-bottom:1px solid var(--color-border,#eee); vertical-align:top; }
+  .rhythm-badge { font-size:0.78em; padding:2px 7px; border-radius:10px; display:inline-block; }
+  .rhythm-badge.placed { background:#d4edda; color:#155724; }
+  .rhythm-badge.covered { background:#cce5ff; color:#004085; }
+  .rhythm-badge.not-placed { background:#fff3cd; color:#856404; }
+
+  .loop-card { border:1px solid var(--border,#ddd); border-radius:8px; padding:12px 14px; margin-bottom:12px; background:var(--field-mint,#f9f9f9); }
+  .loop-card-header { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .loop-card-title { font-weight:600; font-size:1em; }
+  .loop-card-meta { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+  .loop-meta-tag { font-size:0.78em; background:var(--border,#e8e8e8); border-radius:10px; padding:2px 8px; }
+  .loop-items-list { display:flex; flex-direction:column; gap:4px; }
+  .loop-item-row { display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:4px; background:var(--milk-white,#fff); border:1px solid var(--border,#e8e8e8); }
+  .loop-item-row.loop-item-current { border-color:#4a90d9; background:#eaf3fd; }
+  .loop-item-handle { color:var(--muted,#aaa); cursor:grab; }
+  .loop-item-label { flex:1; font-size:0.88em; }
+  .btn-mini { font-size:0.75em; padding:1px 6px; border:1px solid var(--border,#ccc); border-radius:3px; cursor:pointer; background:var(--milk-white,#fff); }
+  .btn-mini.btn-danger { border-color:#e57373; color:#c62828; }
+  .btn-small { font-size:0.82em; padding:3px 10px; }
+
+  /* Loop item picker modal */
+  #loop-item-picker-modal { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:9999; display:none; align-items:center; justify-content:center; }
+  #loop-item-picker-modal.open { display:flex; }
+  .lip-modal-card { background:var(--milk-white); border-radius:10px; padding:18px 20px; width:420px; max-width:95vw; max-height:80vh; display:flex; flex-direction:column; gap:10px; box-shadow:0 4px 24px rgba(0,0,0,0.18); }
+  .lip-list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:4px; max-height:260px; }
+  .lip-card-row { padding:7px 10px; border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:13px; display:flex; align-items:center; gap:8px; }
+  .lip-card-row:hover { background:var(--field-mint); }
+  .lip-card-row.selected { background:#eaf3fd; border-color:#4a90d9; }
+  .lip-subject-tag { font-size:10px; color:var(--muted); border:1px solid var(--border); border-radius:4px; padding:1px 5px; flex-shrink:0; }
+  .lip-linked-badge { font-size:10px; background:#cce5ff; color:#004085; border-radius:4px; padding:1px 5px; flex-shrink:0; }
+  .lip-custom-row { display:flex; gap:6px; align-items:center; padding-top:8px; border-top:1px solid var(--border); }
+
+  /* Combine edit panel */
+  .combine-edit-panel { background:var(--field-mint); border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin:4px 0 8px; display:none; }
+  .combine-edit-panel.open { display:block; }
+  .combine-edit-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; margin-bottom:10px; }
+  .combine-edit-field label { font-size:11px; font-weight:600; color:var(--ink); display:block; margin-bottom:3px; }
+  .combine-edit-field select, .combine-edit-field input { font-size:12px; padding:4px 6px; border:1px solid var(--border); border-radius:5px; background:var(--milk-white); width:100%; box-sizing:border-box; }
+
+  .starter-panel { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; background: var(--field-mint); display: none; }
+  .starter-panel.show { display: block; }
+  .starter-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .starter-row:last-child { border-bottom: none; }
+  .starter-row .starter-meta { font-size: 12px; color: var(--ink); }
+  .starter-row .starter-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .starter-row button { flex-shrink: 0; }
+
+  .loop-row, .seq-row { padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .loop-row:last-child, .seq-row:last-child { border-bottom: none; }
+  .seq-item { font-size: 12px; padding: 2px 0; }
+  .seq-item.completed { color: var(--muted); text-decoration: line-through; }
+  .seq-item.current { font-weight: 600; color: var(--wonder-marine); background: var(--field-mint); border-radius: 5px; padding: 2px 6px; display: inline-block; }
+  .seq-item.upcoming { color: var(--muted); }
+  .seq-controls { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .seq-current-label { font-size: 12px; color: var(--muted); }
+
+  .manage-panel { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; background: var(--field-mint); display: none; }
+  .manage-panel.show { display: block; }
+  .manage-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .manage-row:last-child { border-bottom: none; }
+  .manage-row.inactive { opacity: 0.5; }
+  .manage-meta { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .swatch { width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+  .swatch-sq { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; display: inline-block; }
+
+  .res-group { margin-bottom: 18px; }
+  .res-group h3 { font-size: 12px; margin: 0 0 8px; letter-spacing: 0.3px; color: var(--wonder-marine); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .res-card { border: 1px solid var(--border); border-left: 4px solid var(--lagoon-light); border-radius: 8px; padding: 9px 12px; margin-bottom: 8px; font-size: 12px; background: var(--milk-white); }
+  .res-card-title { font-weight: 600; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .res-status { font-size: 11px; border-radius: 7px; padding: 4px 8px; margin-left: auto; background: var(--field-mint); border: 1px solid var(--border); }
+  .res-use { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .res-dupe-note { font-size: 11px; font-weight: 400; color: var(--muted); font-style: italic; }
+
+  /* Resource editor rows inside card overlay */
+  .resource-list-editor { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+  .resource-row { display: flex; gap: 6px; align-items: center; }
+  .resource-row .res-title-inp { flex: 1; font-size: 13px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--milk-white); }
+  .resource-row .res-status-sel { font-size: 12px; padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--milk-white); max-width: 130px; }
+  .res-hint { font-size: 10px; color: var(--muted); padding: 1px 0 2px; }
+  .resource-row .remove-res-btn { border: none; background: none; cursor: pointer; color: var(--muted); font-size: 16px; line-height: 1; padding: 2px 4px; }
+  .resource-row .remove-res-btn:hover { color: var(--poppy); }
+  .add-resource-row-btn { font-size: 12px; color: var(--wonder-marine); background: none; border: 1px dashed var(--border); border-radius: 6px; padding: 5px 10px; cursor: pointer; width: 100%; margin-top: 2px; }
+  .add-resource-row-btn:hover { background: var(--field-mint); }
+  .res-block-clickable { cursor: pointer; transition: background 0.12s; }
+  .res-block-clickable:hover { background: #eaf6f7; border-radius: 4px; padding-left: 3px; }
+  .res-add-btn { font-size: 11px; color: var(--wonder-marine); background: none; border: 1px dashed var(--border); border-radius: 5px; padding: 2px 7px; cursor: pointer; margin-top: 4px; width: 100%; }
+  .res-add-btn:hover { background: var(--field-mint); }
+  .res-cell-add { margin-top: 3px; }
+  .res-need-choose { font-size: 11px; color: var(--muted); font-style: italic; }
+  .ed-pattern-label { font-size: 11px; color: var(--muted); margin: 2px 0 8px; }
+  .ed-seq-row { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+  .ed-seq-status { font-size: 11px; padding: 2px 7px; border-radius: 4px; flex-shrink: 0; white-space: nowrap; }
+  .ed-seq-status.seq-current { background: var(--wonder-marine); color: #fff; font-weight: 600; }
+  .ed-seq-status.seq-completed { background: #eee; color: var(--muted); }
+  .ed-seq-status.seq-upcoming { background: var(--field-mint); color: var(--muted); }
+  .ed-res-empty { font-size: 12px; color: var(--muted); padding: 4px 0; font-style: italic; }
+  .ed-reorder-btn { border: none; background: none; cursor: pointer; color: var(--muted); font-size: 13px; line-height: 1; padding: 2px 3px; }
+  .ed-reorder-btn:hover { color: var(--wonder-marine); }
+  .ed-reorder-btn:disabled { opacity: 0.25; cursor: default; }
+  .ed-field-hint { font-size: 11px; color: var(--muted); margin: 1px 0 6px; }
+  .ed-timing-section { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .ed-timing-row { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 8px; }
+  .ed-timing-row label { font-size: 12px; font-weight: 600; color: var(--ink); display: block; margin-bottom: 3px; }
+  .ed-timing-row input, .ed-timing-row select { font-size: 13px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--milk-white); }
+  .ed-timing-col { flex: 1; min-width: 130px; }
+  .ed-form-checks { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
+  .ed-form-checks label { font-size: 12px; font-weight: 400; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+
+  /* Group detail overlay */
+  .gd-card-row { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; font-size: 13px; }
+  .gd-card-title { font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .gd-card-resources { font-size: 12px; color: var(--muted); margin-top: 5px; }
+  .gd-edit-btn { font-size: 11px; padding: 3px 9px; border: 1px solid var(--border); border-radius: 5px; background: var(--field-mint); cursor: pointer; white-space: nowrap; }
+  .gd-edit-btn:hover { background: var(--lagoon-light); color: var(--milk-white); }
+
+  @media print {
+    /* Hide all app chrome and controls */
+    .app-header, .banner, #save-bar, .toolbar, .legend, .filters-row,
+    .starter-panel, .manage-panel, .overlay, #loops-panel, #sequences-panel { display: none !important; }
+
+    @page { size: landscape; margin: 0.45in 0.35in; }
+
+    /* Resources-only print mode */
+    body.print-resources table.map, body.print-resources #review-panel { display: none !important; }
+    body:not(.print-resources) #resources-panel { display: none !important; }
+
+    /* Page-level layout */
+    .page-wrap { padding: 0; }
+    .page-title { font-size: 15px; margin: 0 0 2px; }
+    .sub { font-size: 10px; margin: 0 0 6px; }
+
+    /* Compact review panel */
+    #review-panel { margin-bottom: 4px; }
+    .notice { font-size: 10px; padding: 3px 8px; border-radius: 4px; margin-bottom: 4px; }
+    .notice-full-list { display: none !important; }
+    .notice-compact { display: inline !important; }
+
+    /* Map table — compact and readable */
+    div[style*="overflow-x"] { overflow: visible; }
+    table.map { width: 100%; font-size: 10px; border-radius: 0; margin-bottom: 0; }
+    table.map th, table.map td { padding: 3px 4px; min-width: 52px; max-width: 130px; min-height: 0; font-size: 10px; }
+    table.map thead th { font-size: 9px; padding: 4px 3px; }
+    table.map th.row-head { width: 68px; min-width: 52px; max-width: 90px; font-size: 10px; }
+
+    /* Resources mode list cells — compact for print */
+    .res-label { font-size: 9px; padding: 0; line-height: 1.35; }
+    .res-card-block { margin-bottom: 3px; }
+    .res-card-block + .res-card-block { padding-top: 3px; }
+    .res-card-block.lens-match { outline: none; padding: 0; }
+
+    /* Chips (Subjects/Detailed modes) — compact */
+    .chip { padding: 3px 5px; margin-bottom: 2px; box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
+    .chip-title { font-size: 10px; gap: 3px; }
+    .chip-sub { font-size: 8px; margin-top: 1px; line-height: 1.3; }
+    .participants-row { display: none !important; }
+    .status-dot { width: 6px; height: 6px; }
+
+    /* Hide empty rows, individual-student rows, optional/unplaced rows */
+    tr.row-empty { display: none !important; }
+    tr[data-row-type="individual"] { display: none !important; }
+    tr.row-optional, tr.row-unplaced { display: none !important; }
+
+    /* Avoid row splitting */
+    tbody tr { break-inside: avoid; page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div id="app-header"></div>
+
+<div class="page-wrap">
+
+<div class="banner">
+  Beta preview: your plan saves in this browser as you go. Use <strong>Export Backup</strong> to protect your work or move it
+  to another device. Today, Term Plan, Progress, accounts, and cloud sync are not built yet.
+</div>
+
+<div id="save-bar"></div>
+
+<h1 class="page-title">Family School Map</h1>
+<p class="sub">Rows show who it's for. Columns show subjects. Cards show what your family has chosen.</p>
+
+<div class="toolbar">
+  <label>View for
+    <select id="lens-select"></select>
+  </label>
+  <div class="density-toggle" id="main-tab-bar">
+    <button type="button" class="active" data-tab="map" onclick="switchTab('map')">Family School Map</button>
+    <button type="button" data-tab="combine" onclick="switchTab('combine')">Combine &amp; Plan</button>
+    <button type="button" data-tab="loopbuilder" onclick="switchTab('loopbuilder')">Loop Builder</button>
+    <button type="button" data-tab="subject" onclick="switchTab('subject')" style="font-size:11px;color:var(--muted);">Subject View</button>
+    <button type="button" data-tab="detailed" onclick="switchTab('detailed')" style="font-size:11px;color:var(--muted);">Detailed View</button>
+  </div>
+  <button onclick="render()">Refresh</button>
+  <span style="font-size:10px;color:var(--muted);margin-left:8px;font-family:monospace;" title="Build identifier">build:strand-card-model</span>
+  <button class="accent" id="print-resource-btn">Print resource map</button>
+  <button class="accent" onclick="document.body.classList.remove('print-resources'); window.print();">Print full map</button>
+  <button class="accent" onclick="document.body.classList.add('print-resources'); window.print();">Print Book &amp; Resource List</button>
+  <button type="button" id="starter-toggle-btn">Add starter cards</button>
+  <button type="button" id="learners-toggle-btn">Family members</button>
+  <button type="button" id="subjects-toggle-btn">Subjects</button>
+  <button type="button" id="planning-view-toggle-btn" onclick="togglePlanningView()">Planning View</button>
+  <a href="./feast-prototype.html" id="feast-prototype-link">Feast Prototype</a>
+</div>
+
+<div class="legend">
+  <span><span class="status-dot dot-book"></span>Have resource</span>
+  <span><span class="status-dot dot-needbook"></span>Need resource</span>
+  <span><span class="status-dot dot-practice"></span>Practice / no resource</span>
+  <span><span class="status-dot dot-coop"></span>Co-op / outside</span>
+  <span><span class="status-dot dot-optional"></span>Optional</span>
+  <span><span class="status-dot dot-unplaced"></span>Not in weekly rhythm yet</span>
+</div>
+
+<div class="filters-row" id="filters-row"></div>
+
+<div class="starter-panel" id="starter-panel">
+  <p class="sub" style="margin:0 0 8px;">Add a starter card to the map. You can edit it afterward.</p>
+  <div id="starter-list"></div>
+  <div style="margin-top:10px;text-align:right;">
+    <button type="button" id="starter-close-btn" style="font-size:12px;">Done adding starter cards</button>
+  </div>
+</div>
+
+<div class="manage-panel" id="learners-panel">
+  <p class="sub" style="margin:0 0 8px;">Family members shown on the map and in lenses.</p>
+  <div id="learners-list"></div>
+  <button type="button" id="add-learner-btn" style="margin-top:8px;">Add learner</button>
+</div>
+
+<div class="manage-panel" id="subjects-panel">
+  <p class="sub" style="margin:0 0 8px;">Subjects shown as columns on the map.</p>
+  <div id="subjects-list"></div>
+  <button type="button" id="add-subject-btn" style="margin-top:8px;">Add subject</button>
+</div>
+
+<div id="review-panel"></div>
+
+<div id="combine-panel" style="display:none;"></div>
+<div id="loopbuilder-panel" style="display:none;"></div>
+<div id="planning-view-panel" style="display:none;"></div>
+
+<div id="map-body-wrapper">
+<div style="overflow-x:auto;">
+<table class="map" id="map-table">
+  <thead><tr id="map-head-row"><th class="row-head"></th></tr></thead>
+  <tbody id="map-body"></tbody>
+</table>
+</div>
+</div>
+
+<div class="panel" id="loops-panel">
+  <h2 class="section-title">Loops</h2>
+  <div id="loops-body"></div>
+</div>
+
+<div class="panel" id="sequences-panel">
+  <h2 class="section-title">Sequences</h2>
+  <div id="sequences-body"></div>
+</div>
+
+<div class="panel" id="resources-panel">
+  <h2 class="section-title">Book &amp; Resource List</h2>
+  <div class="toolbar">
+    <label>Group by
+      <select id="res-groupby">
+        <option value="subject">Subject</option>
+        <option value="student">Student</option>
+        <option value="status">Status</option>
+      </select>
+    </label>
+    <label>Show
+      <select id="res-filter">
+        <option value="all">Everything</option>
+        <option value="need-to-get">Only things I need to get</option>
+        <option value="missing">Only missing or undecided</option>
+      </select>
+    </label>
+  </div>
+  <div id="resources-body"></div>
+</div>
+
+</div>
+
+<div id="loop-item-picker-modal">
+  <div class="lip-modal-card">
+    <h3 style="margin:0 0 6px;font-size:14px;">Add loop item</h3>
+    <p style="margin:0 0 8px;font-size:12px;color:var(--muted);">Pick a planned subject to link, or enter a custom label.</p>
+    <div class="lip-list" id="lip-card-list"></div>
+    <div class="lip-custom-row">
+      <input type="text" id="lip-custom-text" placeholder="Custom item title…" style="flex:1;font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--milk-white);">
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">
+      <button type="button" id="lip-cancel-btn">Cancel</button>
+      <button type="button" class="accent" id="lip-add-btn">Add</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="card-editor-overlay" style="display:none;">
+  <div class="modal-card">
+    <h2 id="editor-title">Edit subject</h2>
+    <label for="ed-title">Title</label>
+    <input type="text" id="ed-title">
+
+    <h3 style="margin:14px 0 6px;font-size:13px;color:var(--wonder-marine);">Move this subject</h3>
+    <label for="ed-row">Who is this for?</label>
+    <select id="ed-row"></select>
+
+    <label for="ed-subject">Subject</label>
+    <select id="ed-subject"></select>
+
+    <label>Who is included?</label>
+    <div class="checkrow"><input type="checkbox" id="ed-use-default" checked><label for="ed-use-default" style="margin:0;font-weight:400;">Use default for who this is for</label></div>
+    <div id="ed-participants-checks" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
+
+    <div id="ed-resources-section"></div>
+
+    <div id="ed-timing-section"></div>
+
+    <div class="modal-actions" style="margin-top:16px;">
+      <span></span>
+      <div class="right">
+        <button id="ed-cancel">Cancel</button>
+        <button class="accent" id="ed-save">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="group-detail-overlay" style="display:none;">
+  <div class="modal-card" style="max-width:520px;">
+    <h2 id="gd-title" style="margin-bottom:14px;">Group</h2>
+    <div id="gd-cards-list"></div>
+    <div class="modal-actions" style="margin-top:12px;">
+      <span></span>
+      <div class="right"><button id="gd-close">Close</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="learner-editor-overlay" style="display:none;">
+  <div class="modal-card">
+    <h2 id="learner-editor-title">Add learner</h2>
+    <label for="lr-name">Name</label>
+    <input type="text" id="lr-name">
+
+    <label for="lr-initials">Initials</label>
+    <input type="text" id="lr-initials" maxlength="3">
+
+    <label for="lr-color">Color</label>
+    <input type="color" id="lr-color" value="#5c8fc9">
+
+    <label for="lr-grade">Grade / Form</label>
+    <input type="text" id="lr-grade" placeholder="e.g. Form II">
+
+    <label for="lr-gradeband">Form / stage (for suggested lesson lengths &amp; starter cards)</label>
+    <select id="lr-gradeband">
+      <option value="form1">Form I (younger)</option>
+      <option value="form2">Form II (middle)</option>
+      <option value="form3">Form III (older)</option>
+      <option value="form4">Grades 10–12 / Form IV+</option>
+      <option value="custom">Custom / not sure yet</option>
+    </select>
+
+    <div class="checkrow"><input type="checkbox" id="lr-active" checked><label for="lr-active" style="margin:0;font-weight:400;">Active (include in Together/Family work)</label></div>
+
+    <div class="modal-actions">
+      <span></span>
+      <div class="right">
+        <button id="lr-cancel">Cancel</button>
+        <button class="accent" id="lr-save">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="subject-editor-overlay" style="display:none;">
+  <div class="modal-card">
+    <h2 id="subject-editor-title">Add subject</h2>
+    <label for="sj-label">Subject name</label>
+    <input type="text" id="sj-label">
+
+    <label for="sj-color">Color</label>
+    <input type="color" id="sj-color" value="#5c8fc9">
+
+    <div class="checkrow"><input type="checkbox" id="sj-visible" checked><label for="sj-visible" style="margin:0;font-weight:400;">Show on map</label></div>
+
+    <div class="modal-actions">
+      <span></span>
+      <div class="right">
+        <button id="sj-cancel">Cancel</button>
+        <button class="accent" id="sj-save">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="learner-wizard-overlay" style="display:none;">
+  <div class="modal-card">
+    <div id="wizard-step-cards">
+      <h2>Add starter cards for this learner?</h2>
+      <p class="sub" style="margin:0 0 10px;">Charlotte Mason-inspired, form-aware suggestions — just a starting point. Nothing is added until you choose.</p>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button type="button" id="wiz-add-core">Add core subjects</button>
+        <button type="button" id="wiz-add-riches">Add beauty &amp; riches</button>
+        <button type="button" id="wiz-add-skills">Add skill subjects</button>
+        <button type="button" id="wiz-add-light">Add a light full starter set</button>
+        <button type="button" id="wiz-skip-cards">Skip for now</button>
+      </div>
+    </div>
+    <div id="wizard-step-rhythm" style="display:none;">
+      <h2>Place these into a weekly rhythm?</h2>
+      <p class="sub" style="margin:0 0 10px;">This only creates a suggested rhythm placement — fully editable afterward.</p>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button type="button" id="wiz-use-rhythm">Use a gentle CM/PNEU-inspired rhythm for this form</button>
+        <button type="button" id="wiz-map-only">Add cards to the map only</button>
+        <button type="button" id="wiz-place-later">I'll place them myself later</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import * as A from '../../lib/familyMapAdapter.mjs';
+import * as M from '../../lib/familyMap.mjs';
+import * as R from '../../lib/weeklyRhythm.mjs';
+import { createSaveBar, loadInitialState } from './saveBar.mjs';
+import { appHeaderHTML } from './nav.mjs';
+
+document.getElementById('app-header').outerHTML = appHeaderHTML('map');
+
+window.A = A;
+window.M = M;
+
+var initial = loadInitialState();
+window.state = initial.state;
+// Migrate persisted state to ensure new fields exist
+if (window.state && !window.state.strandAssignments) window.state.strandAssignments = [];
+window.lens = { type: 'all' };
+window.editingCardId = null;
+
+window.render = render;
+window.onLensChange = onLensChange;
+window.openEditor = openEditor;
+window.closeEditor = closeEditor;
+window.saveEditor = saveEditor;
+window.advanceLoop = advanceLoopUI;
+window.advanceSequence = advanceSequenceUI;
+window.reverseSequence = reverseSequenceUI;
+window.addStarterCard = addStarterCard;
+window.setResourceStatusUI = setResourceStatusUI;
+window.openLearnerEditor = openLearnerEditor;
+window.openSubjectEditor = openSubjectEditor;
+window.setLearnerActiveUI = setLearnerActiveUI;
+window.setSubjectVisibleUI = setSubjectVisibleUI;
+
+var saveBar = createSaveBar({
+  onStateReplaced: function (newState, source) {
+    window.state = newState;
+    populateLensSelect();
+    populateSubjectSelect();
+    populateStarterSelect();
+    renderLearnersPanel();
+    renderSubjectsPanel();
+    render();
+    saveBar.setStatus(source === 'sample' ? 'Using sample plan' : 'Saved in this browser', source === 'sample' ? 'sample' : 'saved');
+  }
+});
+saveBar.mountControls(document.getElementById('save-bar'));
+saveBar.wire(function () { return window.state; });
+saveBar.setStatus(initial.source === 'saved' ? 'Saved in this browser' : 'Using sample plan', initial.source === 'saved' ? 'saved' : 'sample');
+if (initial.source === 'reset-after-invalid') {
+  saveBar.saveNow(window.state);
+  window.alert('Your saved plan could not be opened, so the sample plan was loaded instead.');
+}
+function markDirtyAndSave() { saveBar.scheduleSave(window.state); }
+
+function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+
+function populateLensSelect() {
+  var sel = document.getElementById('lens-select');
+  var html = '<option value="all">Everyone</option>';
+  state.students.forEach(function (s) { html += '<option value="student:' + s.id + '">' + escapeHtml(s.name) + '</option>'; });
+  state.groups.forEach(function (g) { html += '<option value="group:' + g.id + '">' + escapeHtml(g.label) + ' (group)</option>'; });
+  state.subjectColumns.forEach(function (c) { html += '<option value="subject:' + c.id + '">' + escapeHtml(c.label) + ' (subject)</option>'; });
+  sel.innerHTML = html;
+}
+
+function onLensChange() {
+  var v = document.getElementById('lens-select').value;
+  if (v === 'all') { lens = { type: 'all' }; }
+  else {
+    var parts = v.split(':');
+    if (parts[0] === 'student') lens = { type: 'student', studentId: parts[1] };
+    else if (parts[0] === 'group') lens = { type: 'group', groupId: parts[1] };
+    else if (parts[0] === 'subject') lens = { type: 'subject', subjectColumnId: parts[1] };
+  }
+  render();
+}
+
+var FILTER_AUDIENCES = [
+  { value: 'together', label: 'Together' },
+  { value: 'group', label: 'Group' },
+  { value: 'individual', label: 'Individual' },
+  { value: 'coop-outside', label: 'Co-op' },
+  { value: 'optional', label: 'Optional' },
+  { value: 'unplaced', label: 'Not in weekly rhythm yet' }
+];
+var activeFilters = new Set();
+
+function cardStatusDot(card) {
+  if (card.audience === 'coop-outside') return 'dot-coop';
+  if (card.audience === 'optional') return 'dot-optional';
+  if (card.audience === 'unplaced') return 'dot-unplaced';
+  var useIds = card.resourceUseIds || [];
+  if (!useIds.length) return 'dot-practice';
+  var needsSomething = useIds.some(function (uid) {
+    var use = state.resourceUses.find(function (u) { return u.id === uid; });
+    var res = use ? A.findResource(state, use.resourceId) : null;
+    return res && ['need-to-buy', 'need-to-choose', 'need-library', 'undecided'].indexOf(res.status) > -1;
+  });
+  return needsSomething ? 'dot-needbook' : 'dot-book';
+}
+
+var mapViewMode = 'resources'; // 'resources' | 'subjects' | 'detailed'
+
+function participantPillsHTML(participantIds) {
+  return participantIds.map(function (id) {
+    var s = A.findStudent(state, id);
+    if (!s) return '';
+    return '<span class="p-dot" style="background:' + s.color + ';" title="' + escapeHtml(s.name) + '">' + escapeHtml(s.initials || s.name.charAt(0)) + '</span>';
+  }).join('');
+}
+
+function cardChipHTML(card) {
+  var participants = M.resolveParticipants(card, state.students, state.groups);
+  var matches = A.cardMatchesLens(card, lens, state);
+  var lensCls = lens.type === 'all' ? '' : (matches ? ' lens-match' : ' lens-dim');
+  var filterCls = (activeFilters.size && !activeFilters.has(card.audience)) ? ' filtered-out' : '';
+  var pillsHtml = participantPillsHTML(participants);
+  var subject = A.findSubject(state, card.subjectColumnId);
+  var borderStyle = subject ? ' style="border-left-color:' + subject.color + ';"' : '';
+  var subLabel = card.planningStatus === 'co-op-external' ? 'Co-op / External' : card.audience;
+  return (
+    '<div class="chip chip-single' + lensCls + filterCls + '"' + borderStyle + ' onclick="openEditor(\'' + card.id + '\')">' +
+      '<div class="chip-title"><span class="status-dot ' + cardStatusDot(card) + '"></span><span class="chip-title-text">' + escapeHtml(card.title || '(untitled)') + '</span></div>' +
+      '<div class="chip-sub">' + escapeHtml(subLabel) + '</div>' +
+      '<div class="participants-row">' + pillsHtml + '</div>' +
+    '</div>'
+  );
+}
+
+function groupStatusDot(cards) {
+  if (cards.some(function (c) { return c.audience === 'coop-outside'; })) return 'dot-coop';
+  if (cards.some(function (c) { return c.audience === 'optional'; })) return 'dot-optional';
+  var hasNeed = cards.some(function (c) {
+    return (c.resourceUseIds || []).some(function (uid) {
+      var use = (state.resourceUses || []).find(function (u) { return u.id === uid; });
+      var res = use ? A.findResource(state, use.resourceId) : null;
+      return res && ['need-to-buy', 'need-to-choose', 'need-library', 'undecided'].indexOf(res.status) > -1;
+    });
+  });
+  if (hasNeed) return 'dot-needbook';
+  var allPractice = cards.every(function (c) { return !(c.resourceUseIds || []).length; });
+  return allPractice ? 'dot-practice' : 'dot-book';
+}
+
+function cleanMapLabel(title) {
+  // Strip placeholder suffixes that add noise to the map without informing the parent.
+  return title
+    .replace(/\s*[—–-]\s*TBD(?=\s*\))/gi, '') // "(Kayla — TBD)" → "(Kayla)"
+    .replace(/\s*\(\s*TBD\s*\)\s*$/i, '')       // trailing "(TBD)"
+    .trim();
+}
+
+function getMapLabels(card) {
+  return A.getCardMapLabels(state, card);
+}
+
+function resourceCellHTML(cards, col) {
+  // Resources mode: group by mapGroup, then individual ungrouped cards
+  if (!cards.length) return '';
+  var groups = {}; var groupOrder = []; var ungrouped = [];
+  cards.forEach(function (card) {
+    if (card.mapGroup) {
+      if (!groups[card.mapGroup]) { groups[card.mapGroup] = []; groupOrder.push(card.mapGroup); }
+      groups[card.mapGroup].push(card);
+    } else { ungrouped.push(card); }
+  });
+  var html = '<div class="res-cell">';
+  groupOrder.forEach(function (groupName) {
+    var groupCards = groups[groupName];
+    var allLabels = [];
+    groupCards.forEach(function (card) { getMapLabels(card).forEach(function (l) { allLabels.push(l); }); });
+    var anyMatch = groupCards.some(function (c) { return A.cardMatchesLens(c, lens, state); });
+    var lensCls = lens.type === 'all' ? '' : (anyMatch ? ' lens-match' : ' lens-dim');
+    var allFiltered = activeFilters.size && groupCards.every(function (c) { return !activeFilters.has(c.audience); });
+    var filterCls = allFiltered ? ' res-block-hidden' : '';
+    var safeGroup = groupName.replace(/\\/g, '\\\\').replace(/'/g, '\\\'');
+    html += '<div class="res-card-block res-block-clickable' + lensCls + filterCls + '" onclick="openGroupDetail(\'' + safeGroup + '\')" title="Click to view and edit ' + escapeHtml(groupName) + '">';
+    html += '<div class="res-group-name">' + escapeHtml(groupName) + '</div>';
+    allLabels.forEach(function (label) { html += '<div class="res-label">' + escapeHtml(label) + '</div>'; });
+    html += '</div>';
+  });
+  ungrouped.forEach(function (card) {
+    var labels = getMapLabels(card);
+    var matches = A.cardMatchesLens(card, lens, state);
+    var lensCls = lens.type === 'all' ? '' : (matches ? ' lens-match' : ' lens-dim');
+    var filterCls = (activeFilters.size && !activeFilters.has(card.audience)) ? ' res-block-hidden' : '';
+    var safeId = card.id.replace(/'/g, '\\\'');
+    html += '<div class="res-card-block res-block-clickable' + lensCls + filterCls + '" onclick="openEditorFromMap(\'' + safeId + '\')" title="Click to edit ' + escapeHtml(card.title || 'subject') + '">';
+    if (A.cardNeedsResourceChoice(state, card)) {
+      html += '<div class="res-need-choose">Need to choose: ' + escapeHtml(card.title) + '</div>';
+    } else {
+      labels.forEach(function (label) { html += '<div class="res-label">' + escapeHtml(label) + '</div>'; });
+    }
+    var hintParts = [];
+    if (card.suggestedWeeklyTouches) hintParts.push(card.suggestedWeeklyTouches);
+    var lenText = A.lessonLengthText(card);
+    if (lenText) hintParts.push(lenText);
+    if (hintParts.length) html += '<div class="res-hint">' + escapeHtml(hintParts.join(' · ')) + '</div>';
+    html += '</div>';
+  });
+  html += '<div class="res-cell-add"><button class="res-add-btn" onclick="openAddSubjectForCell(\'' + col.id.replace(/'/g, '\\\'') + '\',\'' + (cards[0] ? A.rowIdForCard(cards[0]) : 'unplaced') + '\')">+ Add subject</button></div>';
+  html += '</div>';
+  return html;
+}
+
+function groupChipHTML(groupName, cards) {
+  var allParticipants = [];
+  var seen = {};
+  cards.forEach(function (c) {
+    M.resolveParticipants(c, state.students, state.groups).forEach(function (id) {
+      if (!seen[id]) { seen[id] = true; allParticipants.push(id); }
+    });
+  });
+  var allFiltered = activeFilters.size && cards.every(function (c) { return !activeFilters.has(c.audience); });
+  var filterCls = allFiltered ? ' filtered-out' : '';
+  var matches = cards.some(function (c) { return A.cardMatchesLens(c, lens, state); });
+  var lensCls = lens.type === 'all' ? '' : (matches ? ' lens-match' : ' lens-dim');
+  var subject = A.findSubject(state, cards[0].subjectColumnId);
+  var dotCls = groupStatusDot(cards);
+  var subText = cards.map(function (c) { return c.title; }).join(', ');
+  var pillsHtml = participantPillsHTML(allParticipants);
+  var groupStyle = (subject && subject.color ? 'border-left-color:' + subject.color + ';' : '') + 'cursor:pointer;';
+  return (
+    '<div class="chip chip-group' + lensCls + filterCls + '" style="' + groupStyle + '"' +
+      ' onclick="openGroupDetail(\'' + groupName.replace(/\\/g, '\\\\').replace(/'/g, '\\\'') + '\')" title="Click to view and edit ' + escapeHtml(groupName) + '">' +
+      '<div class="chip-title"><span class="status-dot ' + dotCls + '"></span><span class="chip-title-text">' + escapeHtml(groupName) + '</span></div>' +
+      '<div class="chip-sub">' + escapeHtml(subText) + '</div>' +
+      '<div class="participants-row">' + pillsHtml + '</div>' +
+    '</div>'
+  );
+}
+
+function cellChipsHTML(cards, col) {
+  if (!cards.length) return '';
+  // Resources: clean strand/resource list — the default, most like a spreadsheet
+  if (mapViewMode === 'resources') {
+    return resourceCellHTML(cards, col);
+  }
+  // Detailed: every card individually as a chip
+  if (mapViewMode === 'detailed') {
+    return cards.map(cardChipHTML).join('');
+  }
+  // Subjects: group cards by mapGroup, ungrouped cards shown individually
+  var groups = {};
+  var order = [];
+  var ungrouped = [];
+  cards.forEach(function (c) {
+    if (c.mapGroup) {
+      if (!groups[c.mapGroup]) { groups[c.mapGroup] = []; order.push(c.mapGroup); }
+      groups[c.mapGroup].push(c);
+    } else {
+      ungrouped.push(c);
+    }
+  });
+  var html = '';
+  order.forEach(function (name) { html += groupChipHTML(name, groups[name]); });
+  ungrouped.forEach(function (c) { html += cardChipHTML(c); });
+  return html;
+}
+
+function renderMap() {
+  var { rows, columns, grid } = A.buildMapGrid(state);
+  var head = document.getElementById('map-head-row');
+  var headHtml = '<th class="row-head"></th>';
+  columns.forEach(function (col) { headHtml += '<th style="background:' + col.color + ';">' + escapeHtml(col.label) + '</th>'; });
+  head.innerHTML = headHtml;
+
+  var body = document.getElementById('map-body');
+  var html = '';
+  grid.forEach(function (g) {
+    var rowEmpty = columns.every(function (col) { return !(g.cells[col.id] || []).length; });
+    var rid = g.row.id;
+    var rowType = rid === 'together' ? 'together' :
+                  rid === 'coop-outside' ? 'coop' :
+                  rid === 'optional' ? 'optional' :
+                  rid === 'unplaced' ? 'unplaced' :
+                  rid.startsWith('group:') ? 'group' :
+                  rid.startsWith('individual:') ? 'individual' : 'other';
+    var rowClasses = [];
+    if (rowEmpty) rowClasses.push('row-empty');
+    if (rowType === 'optional') rowClasses.push('row-optional');
+    if (rowType === 'unplaced') rowClasses.push('row-unplaced');
+    html += '<tr data-row-type="' + rowType + '"' + (rowClasses.length ? ' class="' + rowClasses.join(' ') + '"' : '') + '>';
+    html += '<th class="row-head">' + escapeHtml(g.row.label) + '</th>';
+    columns.forEach(function (col) {
+      var cards = g.cells[col.id] || [];
+      html += '<td>' + cellChipsHTML(cards, col) + '</td>';
+    });
+    html += '</tr>';
+  });
+  body.innerHTML = html;
+}
+
+function renderLoops() {
+  var html = '';
+  state.loops.forEach(function (loop) {
+    var item = A.currentLoopItem(state, loop.id);
+    html += '<div class="loop-row">' +
+      '<strong>' + escapeHtml(loop.title) + '</strong> <span style="color:var(--muted);font-size:12px;">— ' + loop.turnsPerWeek + ' turns/week</span><br>' +
+      'Current: ' + escapeHtml(item ? item.title : '—') + (item && item.nextAssignment ? ' — next: ' + escapeHtml(item.nextAssignment) : '') + ' ' +
+      '<button onclick="advanceLoop(\'' + loop.id + '\')">Advance</button>' +
+    '</div>';
+  });
+  document.getElementById('loops-body').innerHTML = html || '<p style="color:var(--muted);font-size:13px;">No loops yet.</p>';
+}
+
+function renderSequences() {
+  var html = '';
+  state.sequences.forEach(function (seq) {
+    var progress = A.sequenceProgress(state, seq.id);
+    var canAdvance = A.sequenceCanAdvance(state, seq.id);
+    var canReverse = A.sequenceCanReverse(state, seq.id);
+    var itemsHtml = state.sequenceItems.filter(function (i) { return i.sequenceId === seq.id; })
+      .sort(function (a, b) { return a.position - b.position; })
+      .map(function (i) {
+        var label = i.status === 'current' ? 'Current' : (i.status === 'completed' ? 'Finished' : 'Up next');
+        return '<div class="seq-item ' + i.status + '">' + escapeHtml(i.title) + ' <span style="font-size:10px;color:var(--muted);">(' + label + ')</span></div>';
+      })
+      .join('');
+    var currentLabel = progress.current ? escapeHtml(progress.current.title) : (progress.completed.length ? 'Finished' : '—');
+    html += '<div class="seq-row">' +
+      '<strong>' + escapeHtml(seq.title) + '</strong>' +
+      '<div class="seq-controls">' +
+        '<button' + (canReverse ? '' : ' disabled') + ' onclick="reverseSequence(\'' + seq.id + '\')">Previous</button>' +
+        '<button' + (canAdvance ? '' : ' disabled') + ' onclick="advanceSequence(\'' + seq.id + '\')">Next</button>' +
+        '<span class="seq-current-label">Current: ' + currentLabel + '</span>' +
+      '</div>' +
+      itemsHtml +
+    '</div>';
+  });
+  document.getElementById('sequences-body').innerHTML = html || '<p style="color:var(--muted);font-size:13px;">No sequences yet.</p>';
+}
+
+function renderResources() {
+  var groupBy = document.getElementById('res-groupby').value;
+  var filter = document.getElementById('res-filter').value;
+  var grouped = A.getResourceList(state, { groupBy: groupBy, filter: filter });
+  var titleCounts = {};
+  Object.keys(grouped).forEach(function (key) {
+    grouped[key].forEach(function (r) {
+      var t = (r.title || '').trim().toLowerCase();
+      titleCounts[t] = (titleCounts[t] || 0) + 1;
+    });
+  });
+  var html = '';
+  Object.keys(grouped).forEach(function (key) {
+    var resources = grouped[key];
+    if (!resources.length) return;
+    html += '<div class="res-group"><h3>' + escapeHtml(key) + '</h3>';
+    resources.forEach(function (r) {
+      var dupeNote = titleCounts[(r.title || '').trim().toLowerCase()] > 1
+        ? ' <span class="res-dupe-note">Same title, separate uses</span>' : '';
+      var firstSubject = r.uses.length ? A.findSubject(state, r.uses[0].subjectColumnId) : null;
+      var borderStyle = firstSubject ? ' style="border-left-color:' + firstSubject.color + ';"' : '';
+      html += '<div class="res-card"' + borderStyle + '><div class="res-card-title">' +
+        '<span class="status-dot ' + (['need-to-buy', 'need-to-choose', 'need-library', 'undecided'].indexOf(r.status) > -1 ? 'dot-needbook' : (r.status === 'no-resource' ? 'dot-practice' : 'dot-book')) + '"></span>' +
+        escapeHtml(r.title) + dupeNote +
+        '<select class="res-status" onchange="window.setResourceStatusUI(\'' + r.id + '\', this.value)">' +
+        M.RESOURCE_STATUSES.map(function (st) {
+          return '<option value="' + st + '"' + (st === r.status ? ' selected' : '') + '>' + escapeHtml(M.RESOURCE_STATUS_LABELS[st] || st) + '</option>';
+        }).join('') + '</select></div>';
+      r.uses.forEach(function (u) {
+        var who = u.participants.length ? u.participants.map(function (id) { var s = A.findStudent(state, id); return s ? s.name : id; }).join(', ') : 'Everyone';
+        html += '<div class="res-use">Used in ' + escapeHtml(A.resourceUseContextLabel(u, state)) + ' — ' + escapeHtml(who) + '</div>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+  document.getElementById('resources-body').innerHTML = html || '<p style="color:var(--muted);font-size:13px;">No resources match.</p>';
+}
+
+function populateSubjectSelect() {
+  var sel = document.getElementById('ed-subject');
+  sel.innerHTML = state.subjectColumns.map(function (c) { return '<option value="' + c.id + '">' + escapeHtml(c.label) + '</option>'; }).join('');
+}
+
+function populateRowSelect() {
+  var sel = document.getElementById('ed-row');
+  var rows = A.buildMapRows(state);
+  sel.innerHTML = rows.map(function (r) { return '<option value="' + r.id + '">' + escapeHtml(r.label) + '</option>'; }).join('');
+}
+
+// ---------------------------------------------------------------------------
+// Resource editor helpers (shared pattern with Subjects & Books)
+// ---------------------------------------------------------------------------
+var edPendingResources = [];  // [{_resId, _useId, title, status}]
+var edPendingSeqItems  = [];  // [{_itemId, title, status}]
+var edPendingLoopItems = [];  // [{_itemId, title}]
+var edPendingTiming    = {};  // {suggestedWeeklyTouches, lessonTargetMinutes, scheduleStyleSuggestion, formApplicability, notes}
+
+var RES_STATUS_OPTIONS = [
+  { value: 'have-it',            label: 'Have it' },
+  { value: 'need-to-buy',        label: 'Need to buy' },
+  { value: 'need-to-choose',     label: 'Need to choose' },
+  { value: 'no-resource-needed', label: 'No resource needed' }
+];
+
+function loadEditorResources(cardId) {
+  var uses = A.getResourceUsesForCard(state, cardId);
+  edPendingResources = uses.map(function (use) {
+    var res = A.findResource(state, use.resourceId);
+    return res ? { _resId: res.id, _useId: use.id, title: res.title, status: res.status } : null;
+  }).filter(Boolean);
+  edPendingSeqItems = A.getCardSequenceItems(state, cardId).map(function (si) {
+    return { _itemId: si.id, title: si.title, status: si.status };
+  });
+  edPendingLoopItems = A.getCardLoopItems(state, cardId).map(function (li) {
+    return { _itemId: li.id, title: li.title };
+  });
+}
+
+var SCHEDULE_STYLE_OPTS = [
+  { value: '', label: '— not specified —' },
+  { value: 'fixed', label: 'Fixed rhythm' },
+  { value: 'loop', label: 'Loop-friendly' },
+  { value: 'fixed-or-loop', label: 'Fixed or loop' },
+  { value: 'family-rhythm', label: 'Family rhythm' },
+  { value: 'seasonal', label: 'Seasonal' },
+  { value: 'co-op-external', label: 'Co-op / External' },
+  { value: 'manual', label: 'As scheduled' }
+];
+
+function renderEditorTimingSection() {
+  var t = edPendingTiming;
+  var styleOpts = SCHEDULE_STYLE_OPTS.map(function (o) {
+    return '<option value="' + o.value + '"' + (t.scheduleStyleSuggestion === o.value ? ' selected' : '') + '>' + o.label + '</option>';
+  }).join('');
+  var faChecks = ['form1', 'form2', 'form3'].map(function (f, idx) {
+    var label = ['Form I', 'Form II', 'Form III+'][idx];
+    var checked = Array.isArray(t.formApplicability) && t.formApplicability.indexOf(f) !== -1 ? ' checked' : '';
+    return '<label><input type="checkbox" class="ed-fa-check" value="' + f + '"' + checked + '> ' + label + '</label>';
+  }).join('');
+  var html =
+    '<div class="ed-timing-section">' +
+    '<h3 style="margin:0 0 10px;font-size:13px;color:var(--wonder-marine);">Time + rhythm</h3>' +
+    '<div class="ed-timing-row">' +
+      '<div class="ed-timing-col">' +
+        '<label for="ed-freq">Times per week</label>' +
+        '<input type="text" id="ed-freq" placeholder="e.g. daily, 3x/week" value="' + escapeHtml(t.suggestedWeeklyTouches || '') + '" maxlength="30">' +
+        '<div class="ed-field-hint">Shown on the map and used to help place work in the Weekly Rhythm.</div>' +
+      '</div>' +
+      '<div class="ed-timing-col">' +
+        '<label for="ed-lesson-min">Lesson length (min)</label>' +
+        '<input type="number" id="ed-lesson-min" placeholder="e.g. 20" min="1" max="180" value="' + escapeHtml(String(t.lessonTargetMinutes || '')) + '" style="max-width:80px;">' +
+        '<div class="ed-field-hint">Target minutes per session.</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="ed-timing-row">' +
+      '<div class="ed-timing-col">' +
+        '<label for="ed-rhythm-style">Rhythm style</label>' +
+        '<select id="ed-rhythm-style">' + styleOpts + '</select>' +
+        '<div class="ed-field-hint">Helps the Weekly Rhythm planner know how to place this.</div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="margin-bottom:8px;">' +
+      '<label style="font-size:12px;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">Form applicability</label>' +
+      '<div class="ed-form-checks">' + faChecks + '</div>' +
+      '<div class="ed-field-hint">Leave all unchecked for "All forms / Family".</div>' +
+    '</div>' +
+    '<div style="margin-bottom:4px;">' +
+      '<label for="ed-notes" style="font-size:12px;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">Notes</label>' +
+      '<textarea id="ed-notes" rows="2" style="width:100%;box-sizing:border-box;font-size:13px;padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-family:inherit;resize:vertical;" placeholder="Approach, method, source, anything to remember.">' + escapeHtml(t.notes || '') + '</textarea>' +
+    '</div>' +
+    '</div>';
+
+  var timingEl = document.getElementById('ed-timing-section');
+  if (timingEl) {
+    timingEl.innerHTML = html;
+  } else {
+    var section = document.getElementById('ed-resources-section');
+    if (section) section.insertAdjacentHTML('afterend', '<div id="ed-timing-section">' + html + '</div>');
+  }
+
+  // Wire timing handlers
+  var freqInp = document.getElementById('ed-freq');
+  if (freqInp) freqInp.addEventListener('input', function () { edPendingTiming.suggestedWeeklyTouches = freqInp.value.trim() || null; });
+  var lessonInp = document.getElementById('ed-lesson-min');
+  if (lessonInp) lessonInp.addEventListener('input', function () {
+    var v = parseInt(lessonInp.value, 10);
+    edPendingTiming.lessonTargetMinutes = isNaN(v) ? null : v;
+  });
+  var styleEl = document.getElementById('ed-rhythm-style');
+  if (styleEl) styleEl.addEventListener('change', function () { edPendingTiming.scheduleStyleSuggestion = styleEl.value || null; });
+  document.querySelectorAll('.ed-fa-check').forEach(function (cb) {
+    cb.addEventListener('change', function () {
+      edPendingTiming.formApplicability = Array.prototype.slice.call(document.querySelectorAll('.ed-fa-check:checked')).map(function (el) { return el.value; });
+    });
+  });
+  var notesEl = document.getElementById('ed-notes');
+  if (notesEl) notesEl.addEventListener('input', function () { edPendingTiming.notes = notesEl.value.trim() || null; });
+}
+
+function renderEditorResourceSection() {
+  var section = document.getElementById('ed-resources-section');
+  if (!section) return;
+  var card = editingCardId ? A.findCard(state, editingCardId) : null;
+  var h3Style = 'margin:16px 0 3px;font-size:13px;color:var(--wonder-marine);';
+  var html = '';
+
+  // ---- Reading order (sequence) section ----
+  if (card && card.sequenceId) {
+    var seq = A.getCardSequence(state, editingCardId);
+    html += '<h3 style="' + h3Style + '">Reading order' + (seq ? ': ' + escapeHtml(seq.title) : '') + '</h3>';
+    html += '<div class="ed-pattern-label">One at a time, in order</div>';
+    html += '<div class="resource-list-editor" id="ed-seq-rows">';
+    if (edPendingSeqItems.length) {
+      edPendingSeqItems.forEach(function (item, i) {
+        var sc = item.status === 'current' ? 'seq-current' : (item.status === 'completed' ? 'seq-completed' : 'seq-upcoming');
+        var sl = item.status === 'current' ? 'Current' : (item.status === 'completed' ? 'Finished' : 'Up next');
+        var upDis = i === 0 ? ' disabled' : '';
+        var downDis = i === edPendingSeqItems.length - 1 ? ' disabled' : '';
+        html += '<div class="ed-seq-row" data-seq-idx="' + i + '">' +
+          '<div style="display:flex;flex-direction:column;gap:1px;">' +
+            '<button class="ed-reorder-btn ed-seq-up" data-seq-idx="' + i + '" title="Move up"' + upDis + '>▲</button>' +
+            '<button class="ed-reorder-btn ed-seq-down" data-seq-idx="' + i + '" title="Move down"' + downDis + '>▼</button>' +
+          '</div>' +
+          '<input type="text" class="res-title-inp ed-seq-title" placeholder="Book or resource title" value="' + escapeHtml(item.title || '') + '" data-seq-idx="' + i + '">' +
+          '<span class="ed-seq-status ' + sc + '">' + sl + '</span>' +
+          '<button class="remove-res-btn ed-seq-remove" data-seq-idx="' + i + '" title="Remove from reading order">&times;</button>' +
+          '</div>';
+      });
+    } else {
+      html += '<div class="ed-res-empty">No books in this reading order yet.</div>';
+    }
+    html += '</div>';
+    html += '<button type="button" class="add-resource-row-btn" id="ed-add-seq-item-btn">+ Add book to reading order</button>';
+  }
+
+  // ---- Loop / rotation section ----
+  if (card && card.loopId) {
+    var loop = A.getCardLoop(state, editingCardId);
+    var turnsText = loop && loop.turnsPerWeek ? loop.turnsPerWeek + ' turns/week' : '';
+    html += '<h3 style="' + h3Style + '">Loop / rotation' + (loop ? ': ' + escapeHtml(loop.title) : '') + '</h3>';
+    html += '<div class="ed-pattern-label">Rotate through these resources' + (turnsText ? ' — ' + escapeHtml(turnsText) : '') + '</div>';
+    html += '<div class="resource-list-editor" id="ed-loop-rows">';
+    if (edPendingLoopItems.length) {
+      edPendingLoopItems.forEach(function (item, i) {
+        var upDis = i === 0 ? ' disabled' : '';
+        var downDis = i === edPendingLoopItems.length - 1 ? ' disabled' : '';
+        html += '<div class="resource-row" data-loop-idx="' + i + '">' +
+          '<div style="display:flex;flex-direction:column;gap:1px;">' +
+            '<button class="ed-reorder-btn ed-loop-up" data-loop-idx="' + i + '" title="Move up"' + upDis + '>▲</button>' +
+            '<button class="ed-reorder-btn ed-loop-down" data-loop-idx="' + i + '" title="Move down"' + downDis + '>▼</button>' +
+          '</div>' +
+          '<input type="text" class="res-title-inp ed-loop-title" placeholder="Loop item title" value="' + escapeHtml(item.title || '') + '" data-loop-idx="' + i + '">' +
+          '<button class="remove-res-btn ed-loop-remove" data-loop-idx="' + i + '" title="Remove from loop">&times;</button>' +
+          '</div>';
+      });
+    } else {
+      html += '<div class="ed-res-empty">No items in this loop yet.</div>';
+    }
+    html += '</div>';
+    html += '<button type="button" class="add-resource-row-btn" id="ed-add-loop-item-btn">+ Add to loop</button>';
+  }
+
+  // ---- Other resources section ----
+  var hasSeqOrLoop = card && (card.sequenceId || card.loopId);
+  var directHeading = hasSeqOrLoop ? 'Other resources' : 'Resources';
+  var directEmpty   = hasSeqOrLoop
+    ? 'No other resources. Materials for this subject not part of the reading order or loop.'
+    : 'No resources attached yet.';
+  html += '<h3 style="' + h3Style + '">' + directHeading + '</h3>';
+  html += '<div class="resource-list-editor" id="ed-resource-rows">';
+  if (edPendingResources.length) {
+    edPendingResources.forEach(function (r, i) {
+      var statusOpts = RES_STATUS_OPTIONS.map(function (o) {
+        return '<option value="' + o.value + '"' + (r.status === o.value ? ' selected' : '') + '>' + o.label + '</option>';
+      }).join('');
+      html += '<div class="resource-row" data-res-idx="' + i + '">' +
+        '<input type="text" class="res-title-inp ed-direct-title" placeholder="e.g. American History Spine, New Testament" value="' + escapeHtml(r.title || '') + '" data-res-idx="' + i + '">' +
+        '<select class="res-status-sel ed-direct-status" data-res-idx="' + i + '">' + statusOpts + '</select>' +
+        '<button class="remove-res-btn ed-direct-remove" data-res-idx="' + i + '">&times;</button>' +
+        '</div>';
+    });
+  } else {
+    html += '<div class="ed-res-empty">' + directEmpty + '</div>';
+  }
+  html += '</div>';
+  html += '<button type="button" class="add-resource-row-btn" id="ed-add-resource-btn">+ Add resource</button>';
+
+  section.innerHTML = html;
+
+  // Wire sequence handlers
+  if (card && card.sequenceId) {
+    section.querySelectorAll('.ed-seq-title').forEach(function (inp) {
+      var i = Number(inp.dataset.seqIdx);
+      inp.addEventListener('input', function () { edPendingSeqItems[i].title = inp.value; });
+    });
+    section.querySelectorAll('.ed-seq-remove').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        edPendingSeqItems.splice(Number(btn.dataset.seqIdx), 1);
+        renderEditorResourceSection();
+      });
+    });
+    section.querySelectorAll('.ed-seq-up').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var i = Number(btn.dataset.seqIdx);
+        if (i > 0) { var tmp = edPendingSeqItems[i-1]; edPendingSeqItems[i-1] = edPendingSeqItems[i]; edPendingSeqItems[i] = tmp; }
+        renderEditorResourceSection();
+      });
+    });
+    section.querySelectorAll('.ed-seq-down').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var i = Number(btn.dataset.seqIdx);
+        if (i < edPendingSeqItems.length - 1) { var tmp = edPendingSeqItems[i+1]; edPendingSeqItems[i+1] = edPendingSeqItems[i]; edPendingSeqItems[i] = tmp; }
+        renderEditorResourceSection();
+      });
+    });
+    var addSeqBtn = section.querySelector('#ed-add-seq-item-btn');
+    if (addSeqBtn) addSeqBtn.addEventListener('click', function () {
+      edPendingSeqItems.push({ _itemId: null, title: '', status: 'upcoming' });
+      renderEditorResourceSection();
+      var seqInputs = section.querySelectorAll('.ed-seq-title');
+      if (seqInputs.length) seqInputs[seqInputs.length - 1].focus();
+    });
+  }
+
+  // Wire loop handlers
+  if (card && card.loopId) {
+    section.querySelectorAll('.ed-loop-title').forEach(function (inp) {
+      var i = Number(inp.dataset.loopIdx);
+      inp.addEventListener('input', function () { edPendingLoopItems[i].title = inp.value; });
+    });
+    section.querySelectorAll('.ed-loop-remove').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        edPendingLoopItems.splice(Number(btn.dataset.loopIdx), 1);
+        renderEditorResourceSection();
+      });
+    });
+    section.querySelectorAll('.ed-loop-up').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var i = Number(btn.dataset.loopIdx);
+        if (i > 0) { var tmp = edPendingLoopItems[i-1]; edPendingLoopItems[i-1] = edPendingLoopItems[i]; edPendingLoopItems[i] = tmp; }
+        renderEditorResourceSection();
+      });
+    });
+    section.querySelectorAll('.ed-loop-down').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var i = Number(btn.dataset.loopIdx);
+        if (i < edPendingLoopItems.length - 1) { var tmp = edPendingLoopItems[i+1]; edPendingLoopItems[i+1] = edPendingLoopItems[i]; edPendingLoopItems[i] = tmp; }
+        renderEditorResourceSection();
+      });
+    });
+    var addLoopBtn = section.querySelector('#ed-add-loop-item-btn');
+    if (addLoopBtn) addLoopBtn.addEventListener('click', function () {
+      edPendingLoopItems.push({ _itemId: null, title: '' });
+      renderEditorResourceSection();
+      var loopInputs = section.querySelectorAll('.ed-loop-title');
+      if (loopInputs.length) loopInputs[loopInputs.length - 1].focus();
+    });
+  }
+
+  // Wire direct resource handlers
+  section.querySelectorAll('.ed-direct-title').forEach(function (inp) {
+    var i = Number(inp.dataset.resIdx);
+    inp.addEventListener('input', function () { edPendingResources[i].title = inp.value; });
+  });
+  section.querySelectorAll('.ed-direct-status').forEach(function (sel) {
+    var i = Number(sel.dataset.resIdx);
+    sel.addEventListener('change', function () { edPendingResources[i].status = sel.value; });
+  });
+  section.querySelectorAll('.ed-direct-remove').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      edPendingResources.splice(Number(btn.dataset.resIdx), 1);
+      renderEditorResourceSection();
+    });
+  });
+  var addResBtn = section.querySelector('#ed-add-resource-btn');
+  if (addResBtn) addResBtn.addEventListener('click', function () {
+    edPendingResources.push({ _resId: null, _useId: null, title: '', status: 'need-to-choose' });
+    renderEditorResourceSection();
+    var resInputs = section.querySelectorAll('.ed-direct-title');
+    if (resInputs.length) resInputs[resInputs.length - 1].focus();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Subject editor overlay
+// ---------------------------------------------------------------------------
+function openEditor(cardId) {
+  var card = A.findCard(state, cardId);
+  if (!card) return;
+  editingCardId = cardId;
+  document.getElementById('editor-title').textContent = card.title || 'Edit subject';
+  document.getElementById('ed-title').value = card.title || '';
+  populateRowSelect();
+  document.getElementById('ed-row').value = A.rowIdForCard(card);
+  var isOverride = card.participantMode === 'override' && Array.isArray(card.participantIds) && card.participantIds.length > 0;
+  var checksBox = document.getElementById('ed-participants-checks');
+  var activeStudents = state.students.filter(function (s) { return s.active; });
+  checksBox.innerHTML = activeStudents.map(function (s) {
+    var checked = isOverride && card.participantIds.indexOf(s.id) !== -1 ? ' checked' : '';
+    return '<label style="display:flex;align-items:center;gap:6px;font-weight:400;margin:0;">' +
+      '<input type="checkbox" class="ed-participant-check" value="' + s.id + '"' + checked + '>' +
+      escapeHtml(s.name) + '</label>';
+  }).join('');
+  var useDefault = document.getElementById('ed-use-default');
+  useDefault.checked = !isOverride;
+  checksBox.style.display = isOverride ? 'flex' : 'none';
+  document.getElementById('ed-subject').value = card.subjectColumnId;
+  loadEditorResources(cardId);
+  renderEditorResourceSection();
+  edPendingTiming = {
+    suggestedWeeklyTouches: card.suggestedWeeklyTouches || null,
+    lessonTargetMinutes: (card.lessonTimeConfig && card.lessonTimeConfig.targetMinutes) || null,
+    scheduleStyleSuggestion: card.scheduleStyleSuggestion || null,
+    formApplicability: card.formApplicability ? card.formApplicability.slice() : [],
+    notes: card.notes || null
+  };
+  renderEditorTimingSection();
+  document.getElementById('card-editor-overlay').style.display = 'flex';
+}
+
+function closeEditor() {
+  editingCardId = null;
+  edPendingResources = [];
+  edPendingSeqItems  = [];
+  edPendingLoopItems = [];
+  edPendingTiming    = {};
+  document.getElementById('card-editor-overlay').style.display = 'none';
+}
+
+function saveEditor() {
+  if (!editingCardId) return;
+  A.setCardTitle(state, editingCardId, document.getElementById('ed-title').value);
+  A.moveCardToRow(state, editingCardId, document.getElementById('ed-row').value);
+  A.moveCardToSubject(state, editingCardId, document.getElementById('ed-subject').value);
+  var card = A.findCard(state, editingCardId);
+  var useDefault = document.getElementById('ed-use-default').checked;
+  var ids = useDefault ? [] : Array.prototype.slice.call(document.querySelectorAll('.ed-participant-check:checked')).map(function (el) { return el.value; });
+  A.setCardParticipants(state, editingCardId, ids.length ? 'override' : card.participantMode, ids);
+  A.commitCardResources(state, editingCardId, edPendingResources);
+  A.commitSequenceItems(state, editingCardId, edPendingSeqItems);
+  A.commitLoopItems(state, editingCardId, edPendingLoopItems);
+  var timingUpdate = {
+    suggestedWeeklyTouches: edPendingTiming.suggestedWeeklyTouches || null,
+    scheduleStyleSuggestion: edPendingTiming.scheduleStyleSuggestion || null,
+    formApplicability: edPendingTiming.formApplicability || [],
+    notes: edPendingTiming.notes || null
+  };
+  if (edPendingTiming.lessonTargetMinutes) {
+    timingUpdate.lessonTimeConfig = { targetMinutes: edPendingTiming.lessonTargetMinutes };
+  }
+  A.updateCard(state, editingCardId, timingUpdate);
+  closeEditor();
+  render();
+  markDirtyAndSave();
+}
+
+document.getElementById('ed-use-default').addEventListener('change', function (e) {
+  document.getElementById('ed-participants-checks').style.display = e.target.checked ? 'none' : 'flex';
+});
+document.getElementById('ed-cancel').addEventListener('click', closeEditor);
+document.getElementById('ed-save').addEventListener('click', saveEditor);
+document.getElementById('card-editor-overlay').addEventListener('click', function (e) {
+  if (e.target.id === 'card-editor-overlay') closeEditor();
+});
+
+// ---------------------------------------------------------------------------
+// Group detail overlay (Subject Map / Resource Map grouped cards)
+// ---------------------------------------------------------------------------
+function openGroupDetail(groupName) {
+  var allCards = state.cards.filter(function (c) { return c.mapGroup === groupName; });
+  document.getElementById('gd-title').textContent = groupName;
+  var seqStatusMap = { current: 'Current', completed: 'Finished', upcoming: 'Up next' };
+  var resStatusMap = { 'have-it': 'Have it', 'need-to-buy': 'Need to buy', 'need-to-choose': 'Need to choose', 'no-resource-needed': 'No resource needed' };
+  var html = '';
+  allCards.forEach(function (card) {
+    var resHtml = '';
+    var seqItems = A.getCardSequenceItems(state, card.id);
+    seqItems.forEach(function (si) {
+      var sl = seqStatusMap[si.status] || si.status;
+      resHtml += '<div>· ' + escapeHtml(si.title) + ' <span style="color:var(--muted);font-size:11px;">(' + escapeHtml(sl) + ')</span></div>';
+    });
+    var loopItems = A.getCardLoopItems(state, card.id);
+    loopItems.forEach(function (li) {
+      resHtml += '<div>· ' + escapeHtml(li.title) + '</div>';
+    });
+    var uses = A.getResourceUsesForCard(state, card.id);
+    uses.forEach(function (use) {
+      var res = A.findResource(state, use.resourceId);
+      if (!res) return;
+      var statusLabel = resStatusMap[res.status] || res.status;
+      resHtml += '<div>· ' + escapeHtml(res.title) + ' <span style="color:var(--muted);font-size:11px;">(' + escapeHtml(statusLabel) + ')</span></div>';
+    });
+    if (!resHtml) resHtml = '<div class="ed-res-empty">No resources yet.</div>';
+    html += '<div class="gd-card-row">' +
+      '<div class="gd-card-title">' + escapeHtml(card.title) +
+        '<button class="gd-edit-btn" onclick="closeGroupDetail();openEditor(\'' + card.id + '\')">Edit</button>' +
+      '</div>' +
+      '<div class="gd-card-resources">' + resHtml + '</div>' +
+      '</div>';
+  });
+  if (!allCards.length) html = '<div class="ed-res-empty">No cards in this group.</div>';
+  document.getElementById('gd-cards-list').innerHTML = html;
+  document.getElementById('group-detail-overlay').style.display = 'flex';
+}
+
+function closeGroupDetail() {
+  document.getElementById('group-detail-overlay').style.display = 'none';
+}
+
+document.getElementById('gd-close').addEventListener('click', closeGroupDetail);
+document.getElementById('group-detail-overlay').addEventListener('click', function (e) {
+  if (e.target.id === 'group-detail-overlay') closeGroupDetail();
+});
+
+function openEditorFromMap(cardId) {
+  openEditor(cardId);
+  setTimeout(function () {
+    var res = document.getElementById('ed-resources-section');
+    if (res) res.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 80);
+}
+
+function openAddSubjectForCell(subjectColumnId, rowId) {
+  A.addCard(state, { subjectColumnId: subjectColumnId, status: rowId === 'optional' ? 'optional' : 'active' });
+  var cards = A.getCardsForSubjectColumn(state, subjectColumnId);
+  var newCard = cards[cards.length - 1];
+  if (!newCard) return;
+  A.moveCardToRow(state, newCard.id, rowId || 'unplaced');
+  render();
+  markDirtyAndSave();
+  openEditor(newCard.id);
+}
+
+window.openGroupDetail = openGroupDetail;
+window.closeGroupDetail = closeGroupDetail;
+window.openEditorFromMap = openEditorFromMap;
+window.openAddSubjectForCell = openAddSubjectForCell;
+
+function advanceLoopUI(loopId) { A.advanceLoopInState(state, loopId); render(); markDirtyAndSave(); }
+function advanceSequenceUI(sequenceId) { A.advanceSequenceInState(state, sequenceId); render(); markDirtyAndSave(); }
+function reverseSequenceUI(sequenceId) { A.reverseSequenceInState(state, sequenceId); render(); markDirtyAndSave(); }
+function setResourceStatusUI(resourceId, status) { A.setResourceStatus(state, resourceId, status); render(); markDirtyAndSave(); }
+
+// ---------------------------------------------------------------------------
+// Family members / Learners management
+// ---------------------------------------------------------------------------
+window.editingLearnerId = null;
+
+function renderLearnersPanel() {
+  var list = document.getElementById('learners-list');
+  list.innerHTML = state.students.map(function (s) {
+    return '<div class="manage-row' + (s.active ? '' : ' inactive') + '">' +
+      '<div class="manage-meta"><span class="swatch" style="background:' + s.color + ';"></span>' +
+        escapeHtml(s.name) + ' <span style="color:var(--muted);">(' + escapeHtml(s.initials || '') + (s.grade ? ', ' + escapeHtml(s.grade) : '') + ')</span>' +
+        (s.active ? '' : ' <span style="color:var(--muted);font-style:italic;">inactive</span>') +
+      '</div>' +
+      '<div>' +
+        '<button onclick="openLearnerEditor(\'' + s.id + '\')">Edit</button> ' +
+        '<button onclick="setLearnerActiveUI(\'' + s.id + '\', ' + (s.active ? 'false' : 'true') + ')">' + (s.active ? 'Deactivate' : 'Reactivate') + '</button>' +
+      '</div>' +
+    '</div>';
+  }).join('') || '<p style="color:var(--muted);font-size:13px;">No family members yet.</p>';
+}
+
+function openLearnerEditor(studentId) {
+  window.editingLearnerId = studentId || null;
+  var s = studentId ? A.findStudent(state, studentId) : null;
+  document.getElementById('learner-editor-title').textContent = s ? 'Edit learner' : 'Add learner';
+  document.getElementById('lr-name').value = s ? s.name : '';
+  document.getElementById('lr-initials').value = s ? (s.initials || '') : '';
+  document.getElementById('lr-color').value = s ? s.color : '#5c8fc9';
+  document.getElementById('lr-grade').value = s ? (s.grade || '') : '';
+  document.getElementById('lr-gradeband').value = s ? (s.gradeBand || 'form1') : 'form1';
+  document.getElementById('lr-active').checked = s ? !!s.active : true;
+  document.getElementById('learner-editor-overlay').style.display = 'flex';
+}
+
+function closeLearnerEditor() {
+  window.editingLearnerId = null;
+  document.getElementById('learner-editor-overlay').style.display = 'none';
+}
+
+function saveLearnerEditor() {
+  var name = document.getElementById('lr-name').value.trim();
+  if (!name) return;
+  var isNew = !window.editingLearnerId;
+  var fields = {
+    name: name,
+    initials: document.getElementById('lr-initials').value.trim() || M.autoInitials(name),
+    color: document.getElementById('lr-color').value,
+    grade: document.getElementById('lr-grade').value.trim(),
+    gradeBand: document.getElementById('lr-gradeband').value,
+    active: document.getElementById('lr-active').checked
+  };
+  var student;
+  if (window.editingLearnerId) {
+    student = A.updateStudent(state, window.editingLearnerId, fields);
+  } else {
+    student = A.addStudent(state, fields);
+  }
+  closeLearnerEditor();
+  populateLensSelect();
+  renderLearnersPanel();
+  render();
+  markDirtyAndSave();
+  if (isNew && student) openLearnerWizard(student.id);
+}
+
+// ---------------------------------------------------------------------------
+// Learner onboarding wizard — offered once, right after adding a new learner.
+// Separates "add starter cards to the map" from "place them in the weekly
+// rhythm" per Phase 1D.9: never silently creates a pile of cards/rhythm
+// assignments without asking.
+// ---------------------------------------------------------------------------
+window.learnerWizardStudentId = null;
+window.learnerWizardCardIds = [];
+
+function openLearnerWizard(studentId) {
+  window.learnerWizardStudentId = studentId;
+  window.learnerWizardCardIds = [];
+  document.getElementById('wizard-step-cards').style.display = 'block';
+  document.getElementById('wizard-step-rhythm').style.display = 'none';
+  document.getElementById('learner-wizard-overlay').style.display = 'flex';
+}
+
+function closeLearnerWizard() {
+  document.getElementById('learner-wizard-overlay').style.display = 'none';
+  window.learnerWizardStudentId = null;
+  window.learnerWizardCardIds = [];
+}
+
+function addWizardCardsByCategory(category) {
+  var student = A.findStudent(state, window.learnerWizardStudentId);
+  if (!student) { closeLearnerWizard(); return; }
+  var templates = A.getStarterTemplatesByCategory(state, student.gradeBand, category);
+  var cards = A.addStarterCardsBulk(state, templates.map(function (t) { return t.id; }), student.id);
+  window.learnerWizardCardIds = window.learnerWizardCardIds.concat(cards.map(function (c) { return c.id; }));
+  render();
+  markDirtyAndSave();
+  goToWizardRhythmStep();
+}
+
+function addWizardLightStarterSet() {
+  var student = A.findStudent(state, window.learnerWizardStudentId);
+  if (!student) { closeLearnerWizard(); return; }
+  var core = A.getStarterTemplatesByCategory(state, student.gradeBand, 'core').slice(0, 3);
+  var riches = A.getStarterTemplatesByCategory(state, student.gradeBand, 'riches').slice(0, 1);
+  var ids = core.concat(riches).map(function (t) { return t.id; });
+  var cards = A.addStarterCardsBulk(state, ids, student.id);
+  window.learnerWizardCardIds = window.learnerWizardCardIds.concat(cards.map(function (c) { return c.id; }));
+  render();
+  markDirtyAndSave();
+  goToWizardRhythmStep();
+}
+
+function goToWizardRhythmStep() {
+  document.getElementById('wizard-step-cards').style.display = 'none';
+  document.getElementById('wizard-step-rhythm').style.display = 'block';
+}
+
+function useWizardRhythmPreset() {
+  var student = A.findStudent(state, window.learnerWizardStudentId);
+  if (student && window.learnerWizardCardIds.length) {
+    var presets = R.getRhythmPresetsForForm(student.gradeBand);
+    var preset = presets.find(function (p) { return p.id === 'preset_' + student.gradeBand; }) || presets[0];
+    if (preset) A.placeStarterCardsWithRhythmPreset(state, preset.id, window.learnerWizardCardIds);
+  }
+  render();
+  markDirtyAndSave();
+  closeLearnerWizard();
+}
+
+document.getElementById('wiz-add-core').addEventListener('click', function () { addWizardCardsByCategory('core'); });
+document.getElementById('wiz-add-riches').addEventListener('click', function () { addWizardCardsByCategory('riches'); });
+document.getElementById('wiz-add-skills').addEventListener('click', function () { addWizardCardsByCategory('skills'); });
+document.getElementById('wiz-add-light').addEventListener('click', addWizardLightStarterSet);
+document.getElementById('wiz-skip-cards').addEventListener('click', closeLearnerWizard);
+document.getElementById('wiz-use-rhythm').addEventListener('click', useWizardRhythmPreset);
+document.getElementById('wiz-map-only').addEventListener('click', closeLearnerWizard);
+document.getElementById('wiz-place-later').addEventListener('click', closeLearnerWizard);
+document.getElementById('learner-wizard-overlay').addEventListener('click', function (e) {
+  if (e.target.id === 'learner-wizard-overlay') closeLearnerWizard();
+});
+
+function setLearnerActiveUI(studentId, active) {
+  A.setStudentActive(state, studentId, active);
+  populateLensSelect();
+  renderLearnersPanel();
+  render();
+  markDirtyAndSave();
+}
+
+document.getElementById('add-learner-btn').addEventListener('click', function () { openLearnerEditor(null); });
+document.getElementById('lr-cancel').addEventListener('click', closeLearnerEditor);
+document.getElementById('lr-save').addEventListener('click', saveLearnerEditor);
+document.getElementById('learner-editor-overlay').addEventListener('click', function (e) {
+  if (e.target.id === 'learner-editor-overlay') closeLearnerEditor();
+});
+
+// ---------------------------------------------------------------------------
+// Subjects management
+// ---------------------------------------------------------------------------
+window.editingSubjectId = null;
+
+function renderSubjectsPanel() {
+  var list = document.getElementById('subjects-list');
+  list.innerHTML = state.subjectColumns.map(function (c) {
+    return '<div class="manage-row' + (c.visible === false ? ' inactive' : '') + '">' +
+      '<div class="manage-meta"><span class="swatch-sq" style="background:' + c.color + ';"></span>' +
+        escapeHtml(c.label) + (c.visible === false ? ' <span style="color:var(--muted);font-style:italic;">hidden</span>' : '') +
+      '</div>' +
+      '<div>' +
+        '<button onclick="openSubjectEditor(\'' + c.id + '\')">Edit</button> ' +
+        '<button onclick="setSubjectVisibleUI(\'' + c.id + '\', ' + (c.visible === false ? 'true' : 'false') + ')">' + (c.visible === false ? 'Show' : 'Hide') + '</button>' +
+      '</div>' +
+    '</div>';
+  }).join('') || '<p style="color:var(--muted);font-size:13px;">No subjects yet.</p>';
+}
+
+function openSubjectEditor(subjectId) {
+  window.editingSubjectId = subjectId || null;
+  var c = subjectId ? A.findSubject(state, subjectId) : null;
+  document.getElementById('subject-editor-title').textContent = c ? 'Edit subject' : 'Add subject';
+  document.getElementById('sj-label').value = c ? c.label : '';
+  document.getElementById('sj-color').value = c ? c.color : '#5c8fc9';
+  document.getElementById('sj-visible').checked = c ? c.visible !== false : true;
+  document.getElementById('subject-editor-overlay').style.display = 'flex';
+}
+
+function closeSubjectEditor() {
+  window.editingSubjectId = null;
+  document.getElementById('subject-editor-overlay').style.display = 'none';
+}
+
+function saveSubjectEditor() {
+  var label = document.getElementById('sj-label').value.trim();
+  if (!label) return;
+  var fields = {
+    label: label,
+    color: document.getElementById('sj-color').value,
+    visible: document.getElementById('sj-visible').checked
+  };
+  if (window.editingSubjectId) {
+    A.updateSubjectColumn(state, window.editingSubjectId, fields);
+  } else {
+    A.addSubjectColumn(state, fields);
+  }
+  closeSubjectEditor();
+  populateLensSelect();
+  populateSubjectSelect();
+  renderSubjectsPanel();
+  render();
+  markDirtyAndSave();
+}
+
+function setSubjectVisibleUI(subjectId, visible) {
+  A.setSubjectVisible(state, subjectId, visible);
+  populateSubjectSelect();
+  renderSubjectsPanel();
+  render();
+  markDirtyAndSave();
+}
+
+document.getElementById('add-subject-btn').addEventListener('click', function () { openSubjectEditor(null); });
+document.getElementById('sj-cancel').addEventListener('click', closeSubjectEditor);
+document.getElementById('sj-save').addEventListener('click', saveSubjectEditor);
+document.getElementById('subject-editor-overlay').addEventListener('click', function (e) {
+  if (e.target.id === 'subject-editor-overlay') closeSubjectEditor();
+});
+
+function populateStarterSelect() {
+  var list = document.getElementById('starter-list');
+  list.innerHTML = state.starterTemplates.map(function (t) {
+    var subject = A.findSubject(state, t.subjectColumnId);
+    var descBits = [];
+    descBits.push(subject ? subject.label : 'No subject');
+    descBits.push(t.suggestedAudience);
+    descBits.push(t.suggestedResourceExpectation === 'none' ? 'no resource expected' : t.suggestedResourceExpectation + ' expected');
+    return '<div class="starter-row">' +
+      '<div class="starter-meta">' + escapeHtml(t.title) +
+        '<div class="starter-desc">' + escapeHtml(descBits.join(' · ')) + '</div>' +
+      '</div>' +
+      '<button onclick="addStarterCard(\'' + t.id + '\')">Add</button>' +
+    '</div>';
+  }).join('') || '<p style="color:var(--muted);font-size:13px;">No starter cards yet.</p>';
+}
+
+function addStarterCard(templateId) {
+  if (!templateId) return;
+  A.addCardFromTemplate(state, templateId);
+  render();
+  markDirtyAndSave();
+}
+
+function renderFilterChips() {
+  var row = document.getElementById('filters-row');
+  row.innerHTML = FILTER_AUDIENCES.map(function (f) {
+    var active = activeFilters.has(f.value) ? ' active' : '';
+    return '<button type="button" class="filter-chip' + active + '" data-audience="' + f.value + '">' + escapeHtml(f.label) + '</button>';
+  }).join('');
+  row.querySelectorAll('.filter-chip').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var v = btn.getAttribute('data-audience');
+      if (activeFilters.has(v)) activeFilters.delete(v); else activeFilters.add(v);
+      renderFilterChips();
+      renderMap();
+    });
+  });
+}
+
+function renderReviewPanel() {
+  var panel = document.getElementById('review-panel');
+  var reviewItems = A.getRhythmReviewItems(state);
+  // Exclude cards covered by a placed loop — they are "in rhythm" via their loop
+  var coveredCardIds = R.getLoopCoveredCardIds(state.weeklyRhythm, state.loops, state.loopItems);
+  var cardsNoPlacement = A.getCardsWithoutRhythmPlacement(state).filter(function(c) {
+    return coveredCardIds.indexOf(c.id) === -1;
+  });
+  var html = '';
+  if (reviewItems.length) {
+    html += '<div class="notice"><strong>Worth a second look:</strong> ' + reviewItems.map(function (a) { return escapeHtml(a.label || a.id); }).join(', ') + '.</div>';
+  }
+  if (cardsNoPlacement.length) {
+    html += '<div class="notice"><strong>Not in weekly rhythm yet:</strong> ' +
+      '<span class="notice-compact">' + cardsNoPlacement.length + ' items — see Weekly Rhythm.</span>' +
+      '<span class="notice-full-list">' + cardsNoPlacement.map(function (c) { return escapeHtml(c.title); }).join(', ') + '.</span>' +
+    '</div>';
+  }
+  panel.innerHTML = html;
+}
+
+function render() {
+  renderFilterChips();
+  renderMap();
+  renderLoops();
+  renderSequences();
+  renderResources();
+  renderReviewPanel();
+}
+
+var currentTab = 'map';
+
+function switchTab(tabId) {
+  currentTab = tabId;
+  document.querySelectorAll('#main-tab-bar button').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.tab === tabId);
+  });
+  var mapWrapper = document.getElementById('map-body-wrapper');
+  var loopsPanel = document.getElementById('loops-panel');
+  var seqPanel = document.getElementById('sequences-panel');
+  var resPanel = document.getElementById('resources-panel');
+  var showMap = (tabId === 'map' || tabId === 'subject' || tabId === 'detailed');
+  if (mapWrapper) mapWrapper.style.display = showMap ? '' : 'none';
+  if (loopsPanel) loopsPanel.style.display = showMap ? '' : 'none';
+  if (seqPanel) seqPanel.style.display = showMap ? '' : 'none';
+  if (resPanel) resPanel.style.display = showMap ? '' : 'none';
+  document.getElementById('combine-panel').style.display = tabId === 'combine' ? '' : 'none';
+  document.getElementById('loopbuilder-panel').style.display = tabId === 'loopbuilder' ? '' : 'none';
+  if (tabId === 'subject') { mapViewMode = 'subjects'; }
+  else if (tabId === 'detailed') { mapViewMode = 'detailed'; }
+  else if (tabId === 'map') { mapViewMode = 'resources'; }
+  if (showMap) render();
+  if (tabId === 'combine') renderCombineAndPlan();
+  if (tabId === 'loopbuilder') renderLoopBuilder();
+}
+
+function escH(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+var _combineEditOpenId = null;
+
+function renderCombineAndPlan() {
+  var panel = document.getElementById('combine-panel');
+  if (!panel) return;
+  var rows = A.buildCombineAndPlanRows(state);
+  var html = '<h2 style="margin:16px 0 8px;">Combine &amp; Plan</h2>';
+  html += '<p style="color:var(--muted);font-size:0.85em;margin:0 0 16px;">Review how subjects are grouped, who does them, whether Mom is needed, and their rhythm status. Click Edit to change a row.</p>';
+  html += '<div style="overflow-x:auto;"><table class="combine-table" style="width:100%;border-collapse:collapse;font-size:0.88em;">';
+  html += '<thead><tr>';
+  html += '<th>Subject / strand</th><th>Who</th><th>Together?</th><th>Mom needed?</th><th>Rhythm status</th><th>Approx time</th><th>Loop / block</th><th></th>';
+  html += '</tr></thead><tbody id="combine-tbody">';
+  rows.forEach(function(row) {
+    var rhythmLabel = row.rhythmStatus === 'placed' ? '<span class="rhythm-badge placed">In weekly rhythm</span>'
+      : row.rhythmStatus === 'covered-by-loop'
+        ? '<span class="rhythm-badge covered">Covered by ' + escH(row.rhythmDetail && row.rhythmDetail.loopTitle ? row.rhythmDetail.loopTitle : 'loop') + '</span>'
+      : '<span class="rhythm-badge not-placed">Not in weekly rhythm yet</span>';
+    var momLabel = !row.momNeeded ? '–'
+      : row.momNeeded === 'yes' ? 'Mom leads'
+      : row.momNeeded === 'nearby' ? 'Mom nearby'
+      : 'Independent';
+    var loopLabel = row.loopTitle ? escH(row.loopTitle) : (row.type === 'loop' ? '<em>This is a loop</em>' : '–');
+    var typeTag = row.type === 'loop' ? ' <span style="font-size:0.75em;opacity:0.6;">(loop)</span>' : '';
+    html += '<tr data-combine-id="' + escH(row.id) + '" data-combine-type="' + escH(row.type) + '">';
+    html += '<td><strong>' + escH(row.title) + '</strong>' + typeTag + '</td>';
+    html += '<td>' + escH(row.who) + '</td>';
+    html += '<td style="text-align:center;">' + (row.together ? '✓' : '') + '</td>';
+    html += '<td>' + momLabel + '</td>';
+    html += '<td>' + rhythmLabel + '</td>';
+    html += '<td>' + escH(row.timeLabel) + '</td>';
+    html += '<td>' + loopLabel + '</td>';
+    html += '<td><button class="btn-mini combine-edit-btn" data-id="' + escH(row.id) + '" data-type="' + escH(row.type) + '">Edit</button></td>';
+    html += '</tr>';
+    html += '<tr class="combine-edit-row" id="cer-' + escH(row.id) + '" style="display:none;"><td colspan="8"><div class="combine-edit-panel open" id="cep-' + escH(row.id) + '"></div></td></tr>';
+  });
+  html += '</tbody></table></div>';
+  panel.innerHTML = html;
+
+  panel.querySelectorAll('.combine-edit-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var id = btn.dataset.id;
+      var type = btn.dataset.type;
+      if (_combineEditOpenId === id) {
+        closeCombineEdit();
+      } else {
+        openCombineEdit(id, type, rows);
+      }
+    });
+  });
+}
+
+function closeCombineEdit() {
+  if (_combineEditOpenId) {
+    var row = document.getElementById('cer-' + _combineEditOpenId);
+    if (row) row.style.display = 'none';
+    _combineEditOpenId = null;
+  }
+}
+
+function openCombineEdit(id, type, rows) {
+  closeCombineEdit();
+  _combineEditOpenId = id;
+  var editRow = document.getElementById('cer-' + id);
+  var editPanel = document.getElementById('cep-' + id);
+  if (!editRow || !editPanel) return;
+  editRow.style.display = '';
+
+  var row = rows.find(function(r) { return r.id === id; });
+  if (!row) return;
+
+  var html = '';
+
+  if (type === 'card') {
+    var card = A.findCard(state, id);
+    if (!card) return;
+    // Who options
+    var rowOptions = A.buildMapRows(state).map(function(r) {
+      return '<option value="' + escH(r.id) + '"' + (A.rowIdForCard(card) === r.id ? ' selected' : '') + '>' + escH(r.label) + '</option>';
+    }).join('');
+    // Mom needed options
+    var momOpts = [['','–'],['yes','Mom leads'],['nearby','Mom nearby'],['no','Independent']].map(function(o) {
+      return '<option value="' + o[0] + '"' + (card.momNeeded === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('');
+    // Loop assignment options
+    var loopOpts = '<option value="">(none)</option>' + state.loops.map(function(l) {
+      return '<option value="' + escH(l.id) + '"' + (card.loopId === l.id ? ' selected' : '') + '>' + escH(l.title) + '</option>';
+    }).join('');
+    // Times per week
+    var freq = card.suggestedWeeklyTouches || '';
+    // Lesson time
+    var lessonMin = (card.lessonTimeConfig && card.lessonTimeConfig.targetMinutes) || '';
+
+    html += '<div class="combine-edit-grid">';
+    html += '<div class="combine-edit-field"><label>Who is this for?</label><select id="cef-row-' + escH(id) + '">' + rowOptions + '</select></div>';
+    html += '<div class="combine-edit-field"><label>Mom needed?</label><select id="cef-mom-' + escH(id) + '">' + momOpts + '</select></div>';
+    html += '<div class="combine-edit-field"><label>Times per week</label><input type="text" id="cef-freq-' + escH(id) + '" value="' + escH(freq) + '" placeholder="e.g. 3x/week"></div>';
+    html += '<div class="combine-edit-field"><label>Approx time (min)</label><input type="number" id="cef-time-' + escH(id) + '" value="' + escH(String(lessonMin)) + '" min="1" max="180"></div>';
+    html += '<div class="combine-edit-field"><label>Add to loop</label><select id="cef-loop-' + escH(id) + '">' + loopOpts + '</select><div style="font-size:10px;color:var(--muted);margin-top:2px;">Assigns this subject to a loop and creates a linked loop item.</div></div>';
+    html += '</div>';
+  } else if (type === 'loop') {
+    var loop = state.loops.find(function(l) { return l.id === id; });
+    if (!loop) return;
+    var momOpts2 = [['','–'],['yes','Mom leads'],['nearby','Mom nearby'],['no','Independent']].map(function(o) {
+      return '<option value="' + o[0] + '"' + (loop.momNeeded === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('');
+    var attnOpts = [['','–'],['read-aloud','Read-aloud'],['guided','Guided'],['independent','Independent'],['listen','Listen'],['look','Look / observe']].map(function(o) {
+      return '<option value="' + o[0] + '"' + (loop.kindOfAttention === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('');
+    var touches = loop.touchesPerWeek || '';
+    var approxTime = loop.approxTimeLabel || '';
+    html += '<div class="combine-edit-grid">';
+    html += '<div class="combine-edit-field"><label>Mom needed?</label><select id="cef-mom-' + escH(id) + '">' + momOpts2 + '</select></div>';
+    html += '<div class="combine-edit-field"><label>Kind of attention</label><select id="cef-attn-' + escH(id) + '">' + attnOpts + '</select></div>';
+    html += '<div class="combine-edit-field"><label>Touches/week</label><input type="number" id="cef-touches-' + escH(id) + '" value="' + escH(String(touches)) + '" min="1" max="30"></div>';
+    html += '<div class="combine-edit-field"><label>Approx time</label><input type="text" id="cef-time-' + escH(id) + '" value="' + escH(approxTime) + '" placeholder="e.g. 10–15 min"></div>';
+    html += '</div>';
+  }
+
+  html += '<div style="display:flex;gap:8px;justify-content:flex-end;">';
+  html += '<button class="btn-mini" id="cef-cancel-' + escH(id) + '">Cancel</button>';
+  html += '<button class="btn-mini accent" id="cef-save-' + escH(id) + '">Save</button>';
+  html += '</div>';
+
+  editPanel.innerHTML = html;
+
+  document.getElementById('cef-cancel-' + id).addEventListener('click', closeCombineEdit);
+  document.getElementById('cef-save-' + id).addEventListener('click', function() {
+    saveCombineEdit(id, type);
+  });
+}
+
+function saveCombineEdit(id, type) {
+  if (type === 'card') {
+    var card = A.findCard(state, id);
+    if (!card) { closeCombineEdit(); return; }
+    var rowSel = document.getElementById('cef-row-' + id);
+    if (rowSel) A.moveCardToRow(state, id, rowSel.value);
+    var momSel = document.getElementById('cef-mom-' + id);
+    if (momSel) card.momNeeded = momSel.value || null;
+    var freqInp = document.getElementById('cef-freq-' + id);
+    if (freqInp) card.suggestedWeeklyTouches = freqInp.value.trim() || null;
+    var timeInp = document.getElementById('cef-time-' + id);
+    if (timeInp && timeInp.value) {
+      var min = parseInt(timeInp.value, 10);
+      if (!isNaN(min)) card.lessonTimeConfig = Object.assign(card.lessonTimeConfig || {}, { targetMinutes: min });
+    }
+    // Handle loop assignment
+    var loopSel = document.getElementById('cef-loop-' + id);
+    if (loopSel) {
+      var newLoopId = loopSel.value || null;
+      var oldLoopId = card.loopId || null;
+      if (newLoopId !== oldLoopId) {
+        card.loopId = newLoopId;
+        if (newLoopId) {
+          // Add a loop item linking this card to the loop
+          var existingItem = state.loopItems.find(function(li) { return li.loopId === newLoopId && li.linkedCardId === id; });
+          if (!existingItem) {
+            var maxOrder = (state.loopItems.filter(function(li) { return li.loopId === newLoopId; })
+              .reduce(function(m, li) { return Math.max(m, li.sortOrder || 0); }, -1)) + 1;
+            var newItem = M.makeLoopItem({ loopId: newLoopId, title: card.title, sortOrder: maxOrder, linkedCardId: id });
+            state.loopItems.push(newItem);
+            state.loops = state.loops.map(function(l) {
+              if (l.id !== newLoopId) return l;
+              return Object.assign({}, l, { itemIds: (l.itemIds || []).concat([newItem.id]) });
+            });
+          }
+        }
+      }
+    }
+  } else if (type === 'loop') {
+    var loop = state.loops.find(function(l) { return l.id === id; });
+    if (!loop) { closeCombineEdit(); return; }
+    var momSel2 = document.getElementById('cef-mom-' + id);
+    if (momSel2) loop.momNeeded = momSel2.value || null;
+    var attnSel = document.getElementById('cef-attn-' + id);
+    if (attnSel) loop.kindOfAttention = attnSel.value || null;
+    var touchInp = document.getElementById('cef-touches-' + id);
+    if (touchInp && touchInp.value) {
+      var t2 = parseInt(touchInp.value, 10);
+      if (!isNaN(t2)) loop.touchesPerWeek = t2;
+    }
+    var timeInp2 = document.getElementById('cef-time-' + id);
+    if (timeInp2) loop.approxTimeLabel = timeInp2.value.trim() || null;
+  }
+  markDirtyAndSave();
+  closeCombineEdit();
+  renderCombineAndPlan();
+}
+
+window.saveCombineEdit = saveCombineEdit;
+window.closeCombineEdit = closeCombineEdit;
+
+
+function renderLoopBuilder() {
+  var panel = document.getElementById('loopbuilder-panel');
+  if (!panel) return;
+  var loops = state.loops || [];
+  var loopItems = state.loopItems || [];
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;">';
+  html += '<h2 style="margin:0;">Loop Builder</h2>';
+  html += '<button class="btn-secondary" onclick="openNewLoopEditor()">+ New loop</button>';
+  html += '</div>';
+  html += '<p style="color:var(--muted);font-size:0.85em;margin:0 0 16px;">Loops let you rotate through subjects so you cover all of them over time without scheduling every one every day.</p>';
+  if (!loops.length) {
+    html += '<p style="color:var(--muted);">No loops yet. Click "+ New loop" to create one.</p>';
+  }
+  loops.forEach(function(loop) {
+    var items = loopItems.filter(function(li) { return li.loopId === loop.id; })
+      .sort(function(a,b) { return a.sortOrder - b.sortOrder; });
+    var rhythmStatus = A.getLoopRhythmStatus(state, loop.id).status;
+    var rhythmBadge = rhythmStatus === 'placed'
+      ? '<span class="rhythm-badge placed">In weekly rhythm</span>'
+      : '<span class="rhythm-badge not-placed">Not in weekly rhythm yet</span>';
+    var momLabel = !loop.momNeeded ? '' : loop.momNeeded === 'yes' ? 'Mom leads' : loop.momNeeded === 'nearby' ? 'Mom nearby' : 'Independent';
+    var attnMap = {'read-aloud':'Read-aloud','guided':'Guided','independent':'Independent','listen':'Listen','look':'Look / observe'};
+    var attnLabel = !loop.kindOfAttention ? '' : (attnMap[loop.kindOfAttention] || loop.kindOfAttention);
+    html += '<div class="loop-card" data-loop-id="' + escH(loop.id) + '">';
+    html += '<div class="loop-card-header">';
+    html += '<span class="loop-card-title">' + escH(loop.title) + '</span>';
+    html += '<span style="margin-left:10px;">' + rhythmBadge + '</span>';
+    html += '<span style="flex:1;"></span>';
+    html += '<button class="btn-mini" onclick="editLoop(' + JSON.stringify(loop.id) + ')">Edit</button>';
+    html += '</div>';
+    html += '<div class="loop-card-meta">';
+    if (momLabel) html += '<span class="loop-meta-tag">' + escH(momLabel) + '</span>';
+    if (attnLabel) html += '<span class="loop-meta-tag">' + escH(attnLabel) + '</span>';
+    if (loop.approxTimeLabel) html += '<span class="loop-meta-tag">' + escH(loop.approxTimeLabel) + '</span>';
+    if (loop.touchesPerWeek) html += '<span class="loop-meta-tag">' + loop.touchesPerWeek + 'x/week</span>';
+    html += '</div>';
+    html += '<div class="loop-items-list">';
+    items.forEach(function(item, idx) {
+      var isCurrent = loop.currentItemId === item.id;
+      html += '<div class="loop-item-row' + (isCurrent ? ' loop-item-current' : '') + '" data-item-id="' + escH(item.id) + '">';
+      html += '<span class="loop-item-handle">☰</span>';
+      var linkedCard = item.linkedCardId ? (state.cards || []).find(function(c) { return c.id === item.linkedCardId; }) : null;
+      var linkedBadge = linkedCard ? ' <span class="lip-linked-badge" style="font-size:10px;">→ ' + escH(linkedCard.title) + '</span>' : '';
+      html += '<span class="loop-item-label">' + (isCurrent ? '▶ ' : '') + escH(item.title) + linkedBadge + '</span>';
+      html += '<span style="flex:1;"></span>';
+      if (idx > 0) html += '<button class="btn-mini" onclick="moveLoopItem(' + JSON.stringify(loop.id) + ',' + JSON.stringify(item.id) + ',-1)">↑</button>';
+      if (idx < items.length - 1) html += '<button class="btn-mini" onclick="moveLoopItem(' + JSON.stringify(loop.id) + ',' + JSON.stringify(item.id) + ',1)">↓</button>';
+      html += '<button class="btn-mini btn-danger" onclick="removeLoopItem(' + JSON.stringify(loop.id) + ',' + JSON.stringify(item.id) + ')">✕</button>';
+      html += '</div>';
+    });
+    html += '</div>';
+    // Strand coverage section
+    var coveredStrands = A.getStrandsCoveredByLoop(state, loop.id);
+    if (coveredStrands.length > 0) {
+      html += '<div style="margin-top:8px;font-size:0.82em;color:var(--muted);">Covers: ';
+      html += coveredStrands.map(function(sa) { return escH(sa.strandLabel); }).join(', ');
+      html += '</div>';
+    }
+    html += '<button class="btn-secondary btn-small" style="margin-top:6px;" onclick="addLoopItemPrompt(' + JSON.stringify(loop.id) + ')">+ Add item</button>';
+    html += '</div>';
+  });
+  panel.innerHTML = html;
+}
+
+function moveLoopItem(loopId, itemId, direction) {
+  var items = state.loopItems.filter(function(li) { return li.loopId === loopId; })
+    .sort(function(a,b) { return a.sortOrder - b.sortOrder; });
+  var idx = items.findIndex(function(li) { return li.id === itemId; });
+  var swapIdx = idx + direction;
+  if (swapIdx < 0 || swapIdx >= items.length) return;
+  var tmp = items[idx].sortOrder;
+  state.loopItems = state.loopItems.map(function(li) {
+    if (li.id === items[idx].id) return Object.assign({}, li, { sortOrder: items[swapIdx].sortOrder });
+    if (li.id === items[swapIdx].id) return Object.assign({}, li, { sortOrder: tmp });
+    return li;
+  });
+  markDirtyAndSave();
+  renderLoopBuilder();
+}
+
+function removeLoopItem(loopId, itemId) {
+  if (!confirm('Remove this item from the loop?')) return;
+  state.loopItems = state.loopItems.filter(function(li) { return li.id !== itemId; });
+  state.loops = state.loops.map(function(l) {
+    if (l.id !== loopId) return l;
+    return Object.assign({}, l, { itemIds: (l.itemIds || []).filter(function(id) { return id !== itemId; }) });
+  });
+  markDirtyAndSave();
+  renderLoopBuilder();
+}
+
+var _lipCurrentLoopId = null;
+var _lipSelectedCardId = null;
+
+function addLoopItemPrompt(loopId) {
+  _lipCurrentLoopId = loopId;
+  _lipSelectedCardId = null;
+  // Populate card list with cards not already linked in this loop
+  var alreadyLinked = state.loopItems.filter(function(li) { return li.loopId === loopId && li.linkedCardId; }).map(function(li) { return li.linkedCardId; });
+  var cardList = document.getElementById('lip-card-list');
+  var cards = (state.cards || []).filter(function(c) { return c.status === 'active'; });
+  var html = cards.map(function(c) {
+    var isLinked = alreadyLinked.indexOf(c.id) > -1;
+    return '<div class="lip-card-row' + (isLinked ? ' lip-linked' : '') + '" data-card-id="' + escH(c.id) + '" onclick="lipSelectCard(this,' + JSON.stringify(c.id) + ')">' +
+      '<span style="flex:1;">' + escH(c.title) + '</span>' +
+      (c.subjectArea ? '<span class="lip-subject-tag">' + escH(c.subjectArea) + '</span>' : '') +
+      (isLinked ? '<span class="lip-linked-badge">Already in loop</span>' : '') +
+      '</div>';
+  }).join('');
+  if (!html) html = '<p style="color:var(--muted);font-size:12px;padding:4px 0;">No active subjects found.</p>';
+  cardList.innerHTML = html;
+  document.getElementById('lip-custom-text').value = '';
+  document.getElementById('loop-item-picker-modal').classList.add('open');
+}
+
+function lipSelectCard(el, cardId) {
+  document.querySelectorAll('.lip-card-row').forEach(function(r) { r.classList.remove('selected'); });
+  if (_lipSelectedCardId === cardId) {
+    _lipSelectedCardId = null;
+  } else {
+    el.classList.add('selected');
+    _lipSelectedCardId = cardId;
+    // Pre-fill custom text with card title
+    var card = (state.cards || []).find(function(c) { return c.id === cardId; });
+    if (card) document.getElementById('lip-custom-text').value = card.title;
+  }
+}
+
+function lipClose() {
+  document.getElementById('loop-item-picker-modal').classList.remove('open');
+  _lipCurrentLoopId = null;
+  _lipSelectedCardId = null;
+}
+
+function lipAdd() {
+  var loopId = _lipCurrentLoopId;
+  if (!loopId) return;
+  var customText = document.getElementById('lip-custom-text').value.trim();
+  var title = customText;
+  var linkedCardId = _lipSelectedCardId || null;
+  if (!title && linkedCardId) {
+    var c = (state.cards || []).find(function(c) { return c.id === linkedCardId; });
+    title = c ? c.title : '';
+  }
+  if (!title) { alert('Please enter a title or select a subject.'); return; }
+  var loop = state.loops.find(function(l) { return l.id === loopId; });
+  if (!loop) { lipClose(); return; }
+  var maxOrder = (state.loopItems.filter(function(li) { return li.loopId === loopId; })
+    .reduce(function(m, li) { return Math.max(m, li.sortOrder || 0); }, -1)) + 1;
+  var newItem = M.makeLoopItem({ loopId: loopId, title: title, sortOrder: maxOrder, linkedCardId: linkedCardId });
+  state.loopItems.push(newItem);
+  state.loops = state.loops.map(function(l) {
+    if (l.id !== loopId) return l;
+    return Object.assign({}, l, { itemIds: (l.itemIds || []).concat([newItem.id]) });
+  });
+  markDirtyAndSave();
+  lipClose();
+  renderLoopBuilder();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  var cancelBtn = document.getElementById('lip-cancel-btn');
+  var addBtn = document.getElementById('lip-add-btn');
+  if (cancelBtn) cancelBtn.addEventListener('click', lipClose);
+  if (addBtn) addBtn.addEventListener('click', lipAdd);
+});
+
+function openNewLoopEditor() {
+  var title = prompt('New loop title:');
+  if (!title || !title.trim()) return;
+  var newLoop = M.makeLoop({ title: title.trim(), sortOrder: state.loops.length });
+  state.loops.push(newLoop);
+  markDirtyAndSave();
+  renderLoopBuilder();
+}
+
+function editLoop(loopId) {
+  var loop = state.loops.find(function(l) { return l.id === loopId; });
+  if (!loop) return;
+  var newTitle = prompt('Loop title:', loop.title);
+  if (newTitle === null) return;
+  state.loops = state.loops.map(function(l) {
+    if (l.id !== loopId) return l;
+    return Object.assign({}, l, { title: newTitle.trim() });
+  });
+  markDirtyAndSave();
+  renderLoopBuilder();
+}
+
+function togglePlanningView() {
+  var panel = document.getElementById('planning-view-panel');
+  var btn = document.getElementById('planning-view-toggle-btn');
+  if (!panel) return;
+  var visible = panel.style.display !== 'none';
+  panel.style.display = visible ? 'none' : 'block';
+  if (btn) btn.textContent = visible ? 'Planning View' : 'Hide Planning View';
+  if (!visible) {
+    // Render planning view content — strand assignments summary
+    var assignments = (state.strandAssignments || []);
+    var html = '<h3 style="margin:0 0 8px;">Strand assignments</h3>';
+    if (assignments.length === 0) {
+      html += '<p class="sub">No strand assignments yet. Use grouping decisions to generate teaching cards.</p>';
+    } else {
+      html += '<ul style="margin:0;padding-left:18px;">';
+      assignments.forEach(function(sa) {
+        html += '<li><strong>' + escH(sa.strandLabel) + '</strong>: ' + escH(sa.assignmentMode);
+        if (sa.loopId) html += ' (loop: ' + escH(sa.loopId) + ')';
+        html += '</li>';
+      });
+      html += '</ul>';
+    }
+    panel.innerHTML = html;
+  }
+}
+
+// localStorage migration: ensure strandAssignments array exists in persisted state
+function migrateAppState(s) {
+  if (s && !s.strandAssignments) s.strandAssignments = [];
+  return s;
+}
+
+window.switchTab = switchTab;
+window.renderCombineAndPlan = renderCombineAndPlan;
+window.renderLoopBuilder = renderLoopBuilder;
+window.moveLoopItem = moveLoopItem;
+window.removeLoopItem = removeLoopItem;
+window.addLoopItemPrompt = addLoopItemPrompt;
+window.openNewLoopEditor = openNewLoopEditor;
+window.editLoop = editLoop;
+
+document.getElementById('print-resource-btn').addEventListener('click', function () {
+  var prev = mapViewMode;
+  setMapViewMode('resources');
+  document.body.classList.remove('print-resources');
+  window.print();
+  window.addEventListener('afterprint', function restoreMode() {
+    window.removeEventListener('afterprint', restoreMode);
+    setMapViewMode(prev);
+  }, { once: true });
+});
+function updateStarterToggleLabel() {
+  var open = document.getElementById('starter-panel').classList.contains('show');
+  document.getElementById('starter-toggle-btn').textContent = open ? 'Hide starter cards' : 'Add starter cards';
+}
+document.getElementById('starter-toggle-btn').addEventListener('click', function () {
+  document.getElementById('starter-panel').classList.toggle('show');
+  updateStarterToggleLabel();
+});
+document.getElementById('starter-close-btn').addEventListener('click', function () {
+  document.getElementById('starter-panel').classList.remove('show');
+  updateStarterToggleLabel();
+});
+document.getElementById('learners-toggle-btn').addEventListener('click', function () {
+  document.getElementById('learners-panel').classList.toggle('show');
+});
+document.getElementById('subjects-toggle-btn').addEventListener('click', function () {
+  document.getElementById('subjects-panel').classList.toggle('show');
+});
+
+populateLensSelect();
+populateSubjectSelect();
+populateStarterSelect();
+renderLearnersPanel();
+renderSubjectsPanel();
+document.getElementById('res-groupby').addEventListener('change', renderResources);
+document.getElementById('res-filter').addEventListener('change', renderResources);
+document.getElementById('lens-select').addEventListener('change', onLensChange);
+render();
+</script>
+</body>
+</html>

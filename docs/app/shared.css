@@ -1,0 +1,181 @@
+/* Family School Map — shared look & feel (Chasing Wonder palette).
+   Used by index.html, family-school-map.html, and weekly-rhythm.html so the
+   app feels like one connected place instead of separate test pages. */
+
+:root {
+  --wonder-marine: #17626D;
+  --lagoon-light: #1FB6B6;
+  --poppy: #E44349;
+  --sunshine: #FBD060;
+  --blush: #FFECE9;
+  --field-mint: #F2F9FA;
+  --milk-white: #FCFDFD;
+  --inkwell: #09454E;
+  --navy-story: #17416B;
+
+  --border: #dbe7e8;
+  --ink: var(--inkwell);
+  --muted: #5b7a7e;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  margin: 0;
+  padding: 0 0 36px;
+  background: var(--field-mint);
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+.page-wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+/* ---------------------------------------------------------------------- */
+/* App header / nav                                                       */
+/* ---------------------------------------------------------------------- */
+.app-header {
+  background: var(--wonder-marine);
+  color: var(--milk-white);
+  padding: 14px 24px;
+  margin-bottom: 24px;
+}
+.app-header-inner { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.app-brand { font-weight: 700; font-size: 15px; letter-spacing: 0.2px; margin-right: auto; }
+.app-nav { display: flex; gap: 6px; flex-wrap: wrap; }
+.app-nav a {
+  color: var(--milk-white);
+  text-decoration: none;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  opacity: 0.85;
+}
+.app-nav a:hover { background: rgba(255,255,255,0.12); opacity: 1; }
+.app-nav a.active { background: var(--lagoon-light); color: var(--inkwell); opacity: 1; font-weight: 600; }
+
+/* ---------------------------------------------------------------------- */
+/* Banners / headings                                                     */
+/* ---------------------------------------------------------------------- */
+.banner {
+  background: var(--field-mint);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 13px;
+  margin-bottom: 20px;
+  color: var(--inkwell);
+}
+.banner strong { color: var(--wonder-marine); }
+.banner.banner-calm { background: var(--field-mint); border-color: var(--border); }
+
+h1 { font-size: 24px; margin: 0 0 6px; color: var(--navy-story); }
+h1.page-title { display: flex; align-items: center; gap: 10px; }
+p.sub { color: var(--muted); font-size: 14px; margin: 0 0 22px; max-width: 720px; }
+
+h2.section-title {
+  font-size: 16px;
+  margin: 0 0 12px;
+  color: var(--navy-story);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+h2.section-title .hint { font-size: 12px; color: var(--muted); font-weight: 400; }
+
+/* ---------------------------------------------------------------------- */
+/* Save / export / import / reset area                                    */
+/* ---------------------------------------------------------------------- */
+.save-area {
+  background: var(--milk-white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 22px;
+}
+.save-area .save-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.save-status { font-size: 12px; font-weight: 600; margin-right: auto; padding: 4px 10px; border-radius: 12px; background: var(--field-mint); color: var(--wonder-marine); }
+.save-status.status-sample { background: var(--sunshine); color: #5a4400; }
+.save-status.status-saved { background: var(--field-mint); color: var(--wonder-marine); }
+.save-status.status-unsaved { background: var(--blush); color: var(--poppy); }
+/* A failed save is the one status a parent must never be able to miss: it is
+   loud, and it stays put until the next save succeeds. */
+.save-status.status-failed {
+  background: var(--poppy); color: #fff; font-weight: 800;
+  border: 2px solid #7a0000; padding: 6px 12px;
+}
+.save-area .save-explain { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+.save-area .save-buttons { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* ---------------------------------------------------------------------- */
+/* Buttons / inputs / toolbars                                            */
+/* ---------------------------------------------------------------------- */
+.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.toolbar label { font-size: 13px; display: flex; align-items: center; gap: 6px; color: var(--ink); }
+
+select, input[type=text] {
+  font-size: 13px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--milk-white);
+  color: var(--ink);
+}
+
+button {
+  font-size: 13px;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--milk-white);
+  color: var(--ink);
+  cursor: pointer;
+}
+button:hover { background: var(--field-mint); }
+button.accent { border-color: var(--wonder-marine); color: var(--wonder-marine); font-weight: 600; }
+button.accent:hover { background: var(--field-mint); }
+button.danger { border-color: var(--poppy); color: var(--poppy); }
+button.danger:hover { background: var(--blush); }
+button.quiet { border-color: transparent; color: var(--muted); background: transparent; }
+
+/* ---------------------------------------------------------------------- */
+/* Panels                                                                  */
+/* ---------------------------------------------------------------------- */
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  background: var(--milk-white);
+  margin-bottom: 22px;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Calm review / placement notices                                        */
+/* ---------------------------------------------------------------------- */
+.notice {
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 18px;
+  background: var(--field-mint);
+  border: 1px solid var(--border);
+  color: var(--ink);
+}
+.notice strong { color: var(--wonder-marine); }
+.notice ul { margin: 6px 0 0; padding-left: 18px; }
+.notice li { margin-bottom: 2px; }
+
+/* ---------------------------------------------------------------------- */
+/* Modal overlay (shared by rhythm item editor / card editor)             */
+/* ---------------------------------------------------------------------- */
+.overlay { position: fixed; inset: 0; background: rgba(9,69,78,0.35); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.modal-card { background: var(--milk-white); border-radius: 12px; padding: 22px 24px; width: 380px; max-height: 88vh; overflow-y: auto; box-shadow: 0 10px 35px rgba(9,69,78,0.25); }
+.modal-card h2 { font-size: 17px; margin: 0 0 14px; color: var(--navy-story); }
+.modal-card label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 5px; color: var(--ink); }
+.modal-card input[type=text], .modal-card select, .modal-card textarea {
+  width: 100%; font-size: 13px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px; font-family: inherit;
+}
+.modal-card textarea { resize: vertical; min-height: 54px; }
+.checkrow { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 13px; font-weight: 400; }
+.modal-actions { display: flex; justify-content: space-between; margin-top: 18px; gap: 8px; }
+.modal-actions .right { display: flex; gap: 8px; }

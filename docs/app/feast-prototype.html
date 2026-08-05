@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Feast Planning Prototype</title>
+<link rel="stylesheet" href="./shared.css">
+<style>
+  /* ---- Prototype badge / header ---- */
+  .proto-badge {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+    background: var(--sunshine); color: #5a4400; border-radius: 12px; padding: 5px 12px;
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+  .proto-note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  /* The shared save bar's "Reset to sample plan" would replace the whole plan,
+     which would make the prototype badge a lie. Hidden here on purpose — the
+     prototype's own reset only clears choices made on this page. */
+  #save-bar #reset-btn { display: none; }
+  .build-label { font-size: 10px; color: var(--muted); font-family: monospace; }
+
+  /* ---- Feast grid ---- */
+  .form-section { margin-bottom: 26px; }
+  table.feast { border-collapse: collapse; width: 100%; background: var(--milk-white); border-radius: 10px; overflow: hidden; }
+  table.feast th, table.feast td { border: 1px solid var(--border); vertical-align: top; padding: 8px; font-size: 13px; }
+  table.feast th.row-head { background: var(--field-mint); color: var(--navy-story); text-align: left; font-weight: 600; width: 190px; font-size: 13px; }
+  table.feast td.strand-cell { padding: 6px; }
+  .cell-strands { display: flex; flex-wrap: wrap; gap: 8px; }
+  .cell-empty { color: var(--muted); font-size: 11px; font-style: italic; }
+
+  /* ---- Strand chip ---- */
+  .strand-chip {
+    border: 1px solid var(--border); border-left: 4px solid var(--lagoon-light); border-radius: 8px;
+    padding: 7px 9px; background: var(--milk-white); min-width: 210px; max-width: 260px; flex: 1 1 210px;
+  }
+  .strand-chip .chip-label { font-weight: 600; font-size: 13px; line-height: 1.25; overflow-wrap: break-word; }
+  .strand-chip .chip-who { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .strand-chip .chip-badge {
+    display: inline-block; font-size: 10px; border-radius: 9px; padding: 2px 7px; margin-top: 4px;
+    background: var(--field-mint); color: var(--wonder-marine); border: 1px solid var(--border);
+  }
+  .strand-chip .chip-members { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .strand-chip .chip-consequence { font-size: 11px; color: var(--navy-story); margin-top: 3px; line-height: 1.35; }
+  .setup-warning-banner {
+    border: 1px solid var(--sunshine); border-left: 5px solid var(--sunshine); background: #fbf6e6;
+    border-radius: 10px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px;
+  }
+  .strand-chip .chip-warn { font-size: 10px; color: var(--poppy); margin-top: 4px; }
+  .strand-chip .chip-controls { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+  .strand-chip .chip-use { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .strand-chip select { font-size: 11px; padding: 3px 5px; width: 100%; }
+  .chip-off-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.4px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+
+  /* Muted, never hidden. A strand that is off / looped / placed stays on the
+     page — it just reads quieter. Nothing here uses display:none. */
+  .strand-chip.state-not-this-year { opacity: 0.5; filter: saturate(0.35); border-left-color: var(--muted); }
+  .strand-chip.state-not-this-year .chip-label { text-decoration: line-through; }
+  .strand-chip.state-covered-by-loop { background: #eef6fb; border-left-color: var(--navy-story); }
+  .strand-chip.state-covered-by-loop .chip-badge { background: #dceaf6; color: var(--navy-story); }
+  .strand-chip.state-in-loop-not-placed { background: #f7f4ea; border-left-color: var(--sunshine); }
+  .strand-chip.state-in-loop-not-placed .chip-badge { background: #f3ebd2; color: #6a5400; }
+  .strand-chip.state-placed { border-left-color: #4a9b5e; }
+  .strand-chip.state-placed .chip-badge { background: #e4f2e7; color: #24632f; }
+  .strand-chip.state-coop-outside { border-left-color: var(--poppy); opacity: 0.85; }
+  .strand-chip.state-still-to-place { border-left-color: var(--poppy); }
+  .strand-chip.state-still-to-place .chip-badge { background: var(--blush); color: var(--poppy); }
+  .strand-chip.state-unassigned { border-left-color: var(--border); }
+
+  /* ---- Sorting panels ---- */
+  .sort-panel { margin-bottom: 18px; }
+  .sort-panel .section-title .count-pill {
+    display: inline-block; font-size: 12px; font-weight: 700; border-radius: 10px; padding: 1px 9px;
+    background: var(--blush); color: var(--poppy); border: 1px solid var(--border); margin-left: 6px;
+  }
+  .sort-panel .count-pill.is-zero { background: var(--field-mint); color: var(--wonder-marine); }
+  .unsorted-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .unsorted-item {
+    border: 1px solid var(--border); border-left: 4px solid var(--poppy); border-radius: 8px;
+    padding: 7px 9px; background: var(--milk-white); min-width: 240px; max-width: 320px; flex: 1 1 240px;
+  }
+  .unsorted-item .u-label { font-weight: 600; font-size: 13px; }
+  .unsorted-item .u-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .unsorted-item .u-actions { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .calm-empty { font-size: 13px; color: var(--wonder-marine); margin-top: 6px; }
+  .loop-bucket {
+    border: 1px solid var(--border); border-left: 4px solid var(--navy-story); border-radius: 10px;
+    background: var(--milk-white); padding: 10px 12px; margin-bottom: 10px;
+  }
+  .loop-bucket h3 { margin: 0 0 4px; font-size: 13px; }
+  .bucket-empty { font-size: 12px; color: var(--muted); font-style: italic; }
+  .bucket-member { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12px; padding: 3px 0; }
+  .bucket-member .bm-label { font-weight: 600; }
+  .bucket-member .bm-meta { color: var(--muted); font-size: 11px; }
+  .new-loop-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  .chip-worktype summary { font-size: 11px; color: var(--muted); cursor: pointer; }
+  .chip-worktype { margin-top: 4px; }
+  .chip-worktype .wt-body { margin-top: 4px; display: flex; flex-direction: column; gap: 4px; }
+  .chip-loop-row { display: flex; gap: 4px; align-items: center; }
+  .chip-loop-row label { font-size: 11px; color: var(--muted); }
+
+  /* ---- Strands in set-aside loops ---- */
+  .archived-group {
+    border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 10px;
+    background: var(--milk-white); padding: 10px 12px; margin-bottom: 10px;
+  }
+  .archived-group.is-focused { border-left-color: var(--wonder-marine); outline: 2px solid var(--lagoon-light); }
+  .archived-group h3 { margin: 0 0 4px; font-size: 13px; }
+  .archived-strand { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12px; padding: 3px 0; }
+  .archived-strand .as-label { font-weight: 600; }
+  .archived-strand .as-meta { color: var(--muted); font-size: 11px; }
+
+  /* ---- View controls (compact segmented control) ---- */
+  .view-controls { display: flex; flex-wrap: wrap; gap: 0; margin: 0 0 14px; }
+  .view-controls button {
+    font: inherit; font-size: 12px; padding: 5px 12px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--milk-white); color: var(--ink);
+    border-radius: 0; margin: 0 -1px 0 0;
+  }
+  .view-controls button:first-child { border-radius: 8px 0 0 8px; }
+  .view-controls button:last-child { border-radius: 0 8px 8px 0; }
+  .view-controls button.is-current { background: var(--wonder-marine); color: #fff; font-weight: 600; }
+
+  /* ---- Stacks ---- */
+  .stack-section { margin-bottom: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--milk-white); }
+  .stack-section > summary { cursor: pointer; padding: 8px 12px; font-weight: 600; font-size: 13px; }
+  .stack-body { padding: 0 10px 10px; }
+  .stack-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 0 0 8px; font-size: 12px; }
+  .stack-actions select, .stack-actions button { font-size: 12px; }
+
+  /* ---- Loop cards + loop detail ---- */
+  .loop-bucket.is-clickable { cursor: pointer; }
+  .loop-open-btn {
+    display: inline-block; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    background: var(--wonder-marine); color: #fff; border: none; border-radius: 8px; padding: 6px 12px;
+  }
+  .loop-detail { border-left: 4px solid var(--wonder-marine); }
+  .loop-detail .detail-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; padding: 3px 0; }
+  .loop-detail .detail-row .dr-label { font-weight: 600; }
+  .loop-detail .detail-row .dr-aud { color: var(--navy-story); }
+  .loop-detail .dr-unresolved { color: var(--poppy); }
+  .help-more { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+  .help-more > summary { cursor: pointer; }
+  .chip-more { margin-top: 4px; }
+  .chip-more > summary { font-size: 11px; color: var(--muted); cursor: pointer; }
+  .chip-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* ---- Side panels ---- */
+  .panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 900px) { .panel-grid { grid-template-columns: 1fr; } }
+  .preview-group { margin-bottom: 14px; }
+  .preview-group h3 { font-size: 12px; margin: 0 0 6px; color: var(--wonder-marine); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .preview-group ul { margin: 0; padding-left: 18px; font-size: 12px; }
+  .preview-group li { margin-bottom: 2px; }
+  .preview-group .empty { font-size: 12px; color: var(--muted); font-style: italic; }
+  .count-big { font-size: 28px; font-weight: 700; color: var(--wonder-marine); line-height: 1; }
+  .guide { font-size: 13px; }
+  .guide ol { margin: 6px 0 0; padding-left: 20px; }
+  .guide li { margin-bottom: 3px; }
+
+  /* ---- Stale-module banner ---- */
+  .stale-module-banner {
+    border: 1px solid var(--poppy); border-left: 5px solid var(--poppy); background: var(--blush);
+    border-radius: 10px; padding: 14px 16px; font-size: 13px; color: var(--ink);
+  }
+  .stale-module-banner p { margin: 8px 0 0; line-height: 1.5; }
+  .stale-module-banner code { font-family: monospace; font-size: 12px; }
+  .stale-module-banner kbd {
+    font-family: monospace; font-size: 11px; border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 5px; background: var(--milk-white);
+  }
+  .stale-module-banner .stale-detail { font-size: 11px; color: var(--muted); font-family: monospace; }
+
+  /* ---- Dark mode ---- */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --border: #2b4247;
+      --field-mint: #10262a;
+      --milk-white: #0d1c20;
+      --ink: #e6f1f2;
+      --inkwell: #e6f1f2;
+      --muted: #93b0b4;
+      --navy-story: #9fc7ea;
+      --wonder-marine: #6fd3d3;
+      --blush: #3a2124;
+    }
+    body { background: #08171a; }
+    .strand-chip.state-covered-by-loop { background: #12242f; }
+    .strand-chip.state-in-loop-not-placed { background: #262214; }
+    .strand-chip.state-placed .chip-badge { background: #17301c; color: #a5dcae; }
+    .strand-chip.state-covered-by-loop .chip-badge { background: #16293a; color: #a8cdec; }
+    .strand-chip.state-in-loop-not-placed .chip-badge { background: #332d16; color: #e2cf94; }
+    .proto-badge { background: #6a5400; color: #ffe9a8; }
+    .setup-warning-banner { background: #262214; }
+  }
+</style>
+</head>
+<body>
+<div id="app-header"></div>
+
+<div class="page-wrap">
+
+<div class="banner">
+  <span class="proto-badge">PROTOTYPE — does not change your saved plan's cards, loops, or rhythm</span>
+  <details class="help-more">
+    <summary>What this prototype touches</summary>
+    <p class="proto-note">
+      This page records three separate things per strand: whether you are using it this year, who it is
+      for, and which loop (if any) holds it. Changing one never clears the others. It creates, edits and
+      deletes nothing else — cards, loops, sequences, resources and your Weekly Rhythm are untouched, and
+      everything else here is derived live on every render.
+    </p>
+  </details>
+</div>
+
+<div id="setup-banner"></div>
+
+<div id="save-bar"></div>
+
+<h1 class="page-title">Feast Planning Prototype</h1>
+<p class="sub">Decide each strand: use it this year, who it is for, and which loop (if any) holds it.</p>
+
+<div class="toolbar">
+  <a href="./setup-prototype.html">← Back to Setup</a>
+  <a href="./family-school-map.html">← Back to Family School Map</a>
+  <a href="./print-prototype.html?view=map">Print views</a>
+  <span class="build-label" title="Build identifier">build:feast-prototype</span>
+  <button type="button" id="reset-proto-btn" class="danger">Reset prototype choices</button>
+  <span style="font-size:11px;color:var(--muted);">Only clears choices made in this prototype. Assignments made elsewhere in the app are left alone.</span>
+</div>
+
+<div class="panel sort-panel" id="unsorted-panel"></div>
+<div class="panel sort-panel" id="buckets-panel"></div>
+<div class="panel sort-panel" id="archived-panel" style="display:none;"></div>
+<div class="panel sort-panel" id="loop-detail-panel" style="display:none;"></div>
+
+<div id="view-controls" class="view-controls"></div>
+<div id="feast-grid"></div>
+
+<div class="panel-grid">
+  <div class="panel" id="preview-panel"></div>
+  <div>
+    <div class="panel" id="still-panel"></div>
+    <div class="panel guide">
+      <h2 class="section-title">Try this</h2>
+      <ol>
+        <li>Find one suggested strand.</li>
+        <li>Turn it off and back on.</li>
+        <li>Assign it to Everyone.</li>
+        <li>Assign another to a custom group.</li>
+        <li>Assign another to a loop.</li>
+        <li>Confirm the derived-card preview changes.</li>
+        <li>Confirm "Still to place" changes without duplicated state.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script type="module">
+import * as A from '../../lib/familyMapAdapter.mjs';
+import * as M from '../../lib/familyMap.mjs';
+import { createSaveBar, loadInitialState } from './saveBar.mjs';
+import { appHeaderHTML } from './nav.mjs';
+
+document.getElementById('app-header').outerHTML = appHeaderHTML('feast');
+
+function normalize(s) {
+  if (!s || typeof s !== 'object') return s;
+  if (!s.strandAssignments) s.strandAssignments = [];
+  // Old saved state must keep loading: the same normalizer Setup runs.
+  if (typeof A.migrateSetupPrototypeState === 'function') {
+    var migrated = A.migrateSetupPrototypeState(s);
+    if (migrated && typeof migrated === 'object') {
+      s.setupPrototype = migrated.setupPrototype;
+      // Legacy records that stored a loop as an audience are rewritten once,
+      // keeping their loop and leaving the audience genuinely unresolved.
+      if (Array.isArray(migrated.strandAssignments)) s.strandAssignments = migrated.strandAssignments;
+    }
+  }
+  return s;
+}
+
+var initial = loadInitialState();
+var state = normalize(initial.state);
+
+var saveBar = createSaveBar({
+  onStateReplaced: function (newState, source) {
+    state = normalize(newState);
+    render();
+    saveBar.setStatus(source === 'sample' ? 'Using sample plan' : 'Saved in this browser', source === 'sample' ? 'sample' : 'saved');
+  }
+});
+saveBar.mountControls(document.getElementById('save-bar'));
+// commitTextOnInput: a half-typed loop name or note is committed to the plan
+// after a short pause, so closing the tab mid-sentence cannot lose it.
+saveBar.wire(function () { return state; }, { commitTextOnInput: true });
+if (initial.source === 'saved') {
+  // Show the real clock time of the last save when we know it.
+  if (!saveBar.adoptStoredSavedAt()) saveBar.setStatus('Loaded your saved plan', 'saved');
+} else {
+  saveBar.setStatus('Using sample plan', 'sample');
+}
+if (initial.source === 'reset-after-invalid') {
+  saveBar.saveNow(state);
+  window.alert('Your saved plan could not be opened, so the sample plan was loaded instead.');
+}
+function markDirtyAndSave() { saveBar.scheduleSave(state); }
+
+function escH(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+// ---------------------------------------------------------------------------
+// Module-shape guards.
+//
+// This page reads several exported constants from familyMap.mjs. If the browser
+// is holding a CACHED copy of familyMap.mjs from before FEAST_LIBRARY existed —
+// or the deployed/pulled lib/ is older than this page — those reads are
+// `undefined` and every array call on them throws at module scope, so the shell
+// paints and the grid never renders.
+//
+// arr() normalizes ANY expected-array export to a real array so no call site
+// can throw, and moduleIsStale() lets render() explain the problem instead of
+// silently drawing an empty grid.
+// ---------------------------------------------------------------------------
+function arr(value) { return Array.isArray(value) ? value : []; }
+
+var FEAST_LIBRARY = arr(M.FEAST_LIBRARY);
+var FEAST_FORMS = arr(M.FEAST_FORMS);
+var SUBJECT_COLUMNS = arr(M.DEFAULT_VISIBLE_SUBJECT_COLUMNS);
+
+// The required exports for this page, so the banner can name what is missing.
+var REQUIRED_EXPORTS = [
+  { name: 'FEAST_LIBRARY', ok: FEAST_LIBRARY.length > 0 },
+  { name: 'FEAST_FORMS', ok: FEAST_FORMS.length > 0 },
+  { name: 'DEFAULT_VISIBLE_SUBJECT_COLUMNS', ok: SUBJECT_COLUMNS.length > 0 },
+  { name: 'buildFeastRows', ok: typeof A.buildFeastRows === 'function' },
+  { name: 'buildDerivedCardPreview', ok: typeof A.buildDerivedCardPreview === 'function' },
+  { name: 'WORK_TYPES', ok: arr(M.WORK_TYPES).length > 0 },
+  { name: 'getLoopSortingProgress', ok: typeof A.getLoopSortingProgress === 'function' },
+  { name: 'getLoopBucketContents', ok: typeof A.getLoopBucketContents === 'function' },
+  { name: 'migrateSetupPrototypeState', ok: typeof A.migrateSetupPrototypeState === 'function' },
+  { name: 'createLoopBucket', ok: typeof A.createLoopBucket === 'function' },
+  { name: 'moveStrandLoopAssignment', ok: typeof A.moveStrandLoopAssignment === 'function' },
+  { name: 'getArchivedLoopStrandGroups', ok: typeof A.getArchivedLoopStrandGroups === 'function' },
+  { name: 'restoreLoopBucket', ok: typeof A.restoreLoopBucket === 'function' },
+  { name: 'buildFeastView', ok: typeof A.buildFeastView === 'function' },
+  { name: 'buildFeastStacks', ok: typeof M.buildFeastStacks === 'function' },
+  { name: 'applyStackBulkAction', ok: typeof A.applyStackBulkAction === 'function' },
+  { name: 'getLoopAudienceSummary', ok: typeof A.getLoopAudienceSummary === 'function' },
+  { name: 'getLoopFeasibility', ok: typeof A.getLoopFeasibility === 'function' },
+  { name: 'getRelatedUnsortedStrandsForLoop', ok: typeof A.getRelatedUnsortedStrandsForLoop === 'function' }
+];
+function missingExports() {
+  return REQUIRED_EXPORTS.filter(function (e) { return !e.ok; }).map(function (e) { return e.name; });
+}
+function moduleIsStale() { return missingExports().length > 0; }
+
+function staleModuleBannerHTML() {
+  return '<div class="stale-module-banner" role="alert">' +
+    '<strong>This page needs a newer copy of the planner library than your browser has.</strong>' +
+    '<p>Your browser is using a cached or older <code>lib/familyMap.mjs</code>, ' +
+    'so the feast grid cannot be built. Nothing in your saved plan has been changed or lost.</p>' +
+    '<p><strong>To fix:</strong> hard-refresh this page — ' +
+    '<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> (Windows/Linux) or ' +
+    '<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> (Mac). ' +
+    'If that does not help, make sure the latest <code>lib/</code> files are pulled/deployed alongside this page.</p>' +
+    '<p class="stale-detail">Not found: ' + escH(missingExports().join(', ')) + '</p>' +
+    '</div>';
+}
+
+// Subject columns used by the feast, in Family School Map column order.
+var FEAST_COLUMNS = SUBJECT_COLUMNS.filter(function (col) {
+  return FEAST_LIBRARY.some(function (s) { return s.column === col.id; });
+});
+
+// ---------------------------------------------------------------------------
+// Who / Group select — the ONE place audience is entered.
+// ---------------------------------------------------------------------------
+function whoValueForRow(row) {
+  var mode = row.assignmentMode;
+  if (mode === 'everyone') return 'everyone';
+  if (mode === 'custom-group') return 'group:' + (row.assignment.groupId || '');
+  if (mode === 'older-students') return 'group:older';
+  if (mode === 'littles') return 'group:littles';
+  if (mode === 'individual') return 'student:' + ((row.assignment.studentIds || [])[0] || '');
+  if (mode === 'coop-outside') return 'coop';
+  return '';
+}
+
+// Options come from ONE place: A.buildAudienceOptions(state) — the same source
+// the Setup page writes against. This page never re-derives audience itself.
+function whoSelectHTML(row) {
+  var current = whoValueForRow(row);
+  var options = arr(A.buildAudienceOptions(state));
+  var html = '<select data-role="who" data-strand="' + escH(row.strandId) + '" aria-label="Who is this for?">';
+  function opt(value, label) {
+    html += '<option value="' + escH(value) + '"' + (value === current ? ' selected' : '') + '>' + escH(label) + '</option>';
+  }
+  opt('', 'Not decided yet');
+  options.forEach(function (o) {
+    // Membership must be visible in the option itself — never re-entered.
+    var label = o.label;
+    if ((o.kind === 'group' || o.kind === 'everyone') && o.memberNames.length) {
+      label += ' — ' + o.memberNames.join(' + ');
+    }
+    opt(o.value, label);
+  });
+  // A stored value that is no longer offered (e.g. a deleted loop or group)
+  // still needs to show, or the select would silently lie about what is saved.
+  if (current && html.indexOf('value="' + escH(current) + '"') === -1) {
+    opt(current, row.whoLabel || current);
+  }
+  html += '</select>';
+  return html;
+}
+
+function audienceHelperHTML(row) {
+  var current = whoValueForRow(row);
+  if (!current) return '';
+  var out = '';
+  var opt = arr(A.buildAudienceOptions(state)).find(function (o) { return o.value === current; });
+  if (opt && opt.memberNames.length) {
+    out += '<div class="chip-members">' + escH(opt.memberNames.join(', ')) + '</div>';
+  }
+  var sentence = A.describeAudienceConsequence(state, current, row.label);
+  if (sentence) out += '<div class="chip-consequence">' + escH(sentence) + '</div>';
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+var WORK_TYPES = arr(M.WORK_TYPES);
+
+// Buckets in use this year. An archived bucket (active:false) is set aside, not
+// deleted — strands already sorted into it still resolve to it.
+function loops() { return arr(state.loops).filter(function (l) { return l && l.active !== false; }); }
+function loopById(id) { return arr(state.loops).find(function (l) { return l && l.id === id; }); }
+
+// One select shape everywhere a loop is chosen, so a new bucket is instantly
+// usable in every one of them.
+function loopSelectHTML(role, strandId, currentLoopId) {
+  var html = '<select data-role="' + escH(role) + '" data-strand="' + escH(strandId) + '" aria-label="Put in loop">';
+  html += '<option value=""' + (currentLoopId ? '' : ' selected') + '>Not in a loop</option>';
+  var listed = loops();
+  listed.forEach(function (l) {
+    html += '<option value="' + escH(l.id) + '"' + (l.id === currentLoopId ? ' selected' : '') + '>' +
+      escH(l.title || 'Untitled loop') + '</option>';
+  });
+  // A strand sorted into a bucket that has since been set aside still shows its
+  // real bucket — the select must never quietly misreport what is saved.
+  if (currentLoopId && !listed.some(function (l) { return l.id === currentLoopId; })) {
+    var archived = loopById(currentLoopId);
+    html += '<option value="' + escH(currentLoopId) + '" selected>' +
+      escH((archived && archived.title) || 'Untitled loop') + ' (set aside)</option>';
+  }
+  html += '</select>';
+  return html;
+}
+
+// Progressive disclosure — the work-type line is closed until asked for.
+function workTypeHTML(row) {
+  if (!row.assignment) return '';
+  var suggested = M.suggestWorkTypeForAssignment(row.assignment);
+  var current = row.assignment.workType || '';
+  var effective = current || suggested;
+  // The work type itself is technical detail: the closed summary names the
+  // question, never the answer.
+  var html = '<details class="chip-worktype"><summary>Kind of work and light days</summary>';
+  html += '<div class="chip-meta">Currently: ' +
+    escH(effective ? M.workTypeLabel(effective) : 'not set') + (current ? '' : ' (suggested)') + '</div>';
+  html += '<div class="wt-body">';
+  html += '<select data-role="work-type" data-strand="' + escH(row.strandId) + '" aria-label="Kind of work">';
+  html += '<option value=""' + (current ? '' : ' selected') + '>Suggested — ' +
+    escH(suggested ? M.workTypeLabel(suggested) : 'not enough decided yet') + '</option>';
+  WORK_TYPES.forEach(function (w) {
+    html += '<option value="' + escH(w.id) + '"' + (w.id === current ? ' selected' : '') + '>' + escH(w.label) + '</option>';
+  });
+  html += '</select>';
+  html += '<label class="chip-use"><input type="checkbox" data-role="light-days" data-strand="' + escH(row.strandId) + '"' +
+    (row.assignment.mayOccurOnLightDays === true ? ' checked' : '') + '> May occur on light independent days</label>';
+  html += '</div></details>';
+  return html;
+}
+
+// A compact chip shows FIVE things and nothing else: the strand name, its
+// Form/family level, its audience, its placement state, and its loop choice.
+// Work type, the light-day opt-in, the consequence sentence, warning detail and
+// every other technical line live behind a disclosure.
+function chipHTML(row) {
+  var html = '<div class="strand-chip state-' + escH(row.placementState) + '" data-strand="' + escH(row.strandId) +
+    '" data-strand-id="' + escH(row.strandId) + '">';
+  html += '<div class="chip-label">' + escH(row.label) +
+    (row.activeThisYear ? '' : '<span class="chip-off-tag">OFF</span>') + '</div>';
+  html += '<div class="chip-meta">' + escH(row.formLabel) + ' \u00b7 ' + escH(row.columnLabel) + '</div>';
+  if (row.whoLabel) html += '<div class="chip-who">Who: ' + escH(row.whoLabel) + '</div>';
+  // The loop line is always stated, so a strand that has just come back to
+  // Unsorted plainly reads "Not in a loop" beside the audience it kept.
+  html += '<div class="chip-meta">' + escH(row.loopTitle ? 'In ' + row.loopTitle : 'Not in a loop') + '</div>';
+  var badge = row.placementLabel || (row.activeThisYear ? 'Still to sort' : '');
+  if (badge) html += '<div><span class="chip-badge">' + escH(badge) + '</span></div>';
+  html += '<div class="chip-controls">';
+  html += whoSelectHTML(row);
+  html += '<div class="chip-loop-row"><label>Put in loop</label>' +
+    loopSelectHTML('chip-loop', row.strandId, row.loopId) + '</div>';
+  // Everything below is progressive disclosure.
+  html += '<details class="chip-more"><summary>More about this strand</summary>';
+  html += '<label class="chip-use"><input type="checkbox" data-role="use" data-strand="' + escH(row.strandId) + '"' +
+    (row.activeThisYear ? ' checked' : '') + '> Use this year</label>';
+  html += audienceHelperHTML(row);
+  (row.warnings || []).forEach(function (w) { html += '<div class="chip-warn">' + escH(w) + '</div>'; });
+  html += '</details>';
+  html += workTypeHTML(row);
+  html += '</div></div>';
+  return html;
+}
+
+// ---------------------------------------------------------------------------
+// Unsorted / Still to Sort — every active strand with no decision at all.
+// ---------------------------------------------------------------------------
+function renderUnsorted(rows) {
+  var sorting = A.getLoopSortingProgress(state);
+  // ONE source of truth: the printed Unresolved Decisions sheet and this panel
+  // both read the same report, so they can never disagree.
+  var report = A.getUnresolvedReport(state, rows);
+  var byId = {};
+  rows.forEach(function (r) { byId[r.strandId] = r; });
+  var unsorted = report.missingHandling.map(function (e) { return byId[e.strandId]; }).filter(Boolean);
+  var html = '<h2 class="section-title">Unsorted / Still to Sort' +
+    '<span class="count-pill' + (unsorted.length ? '' : ' is-zero') + '" id="unsorted-count">' + report.missingHandlingCount + '</span></h2>';
+  html += '<p class="sub" style="margin:0 0 6px;">Who it is for and how it happens are two separate decisions. ' +
+    '<span id="missing-audience-count">' + report.missingAudienceCount + '</span> still need an audience. ' +
+    '<a href="./print-prototype.html?view=unresolved">Print the unresolved list</a></p>';
+  if (!unsorted.length) {
+    html += '<p class="calm-empty">Everything has a home.</p>';
+  } else {
+    html += '<div class="unsorted-list">' + unsorted.map(function (r) {
+      return '<div class="unsorted-item" data-strand-id="' + escH(r.strandId) + '">' +
+        '<div class="u-label">' + escH(r.label) + '</div>' +
+        '<div class="u-meta">' + escH(r.formLabel) + ' · ' + escH(r.columnLabel) + '</div>' +
+        '<div class="u-actions"><span class="u-meta">Put in loop</span>' +
+        loopSelectHTML('unsorted-loop', r.strandId) +
+        '<button type="button" data-role="unsorted-off" data-strand="' + escH(r.strandId) + '">Not this year</button>' +
+        '</div></div>';
+    }).join('') + '</div>';
+  }
+  html += '<p class="sub" style="margin-top:8px;">' +
+    (sorting.sortingReviewed ? 'Strand sorting confirmed as it is now.' : 'Strand sorting not confirmed yet.') + '</p>';
+  document.getElementById('unsorted-panel').innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// Loop buckets — an empty bucket is legitimate and stays visible.
+// ---------------------------------------------------------------------------
+function renderBuckets() {
+  var sorting = A.getLoopSortingProgress(state);
+  var html = '<h2 class="section-title">Loop buckets <span class="hint">buckets come from Setup; what goes in them is decided here</span></h2>';
+  var list = loops();
+  if (!list.length) {
+    html += '<p class="sub" style="margin:0;">No loop buckets yet. Create one below — an empty bucket is fine.</p>';
+  }
+  list.forEach(function (l) {
+    var members = arr(A.getLoopBucketContents(state, l.id));
+    var loopSummary = A.getLoopAudienceSummary(state, l.id);
+    html += '<div class="loop-bucket is-clickable" data-loop-id="' + escH(l.id) + '" role="group">';
+    html += '<h3>' + escH(l.title || 'Untitled loop') + ' <span class="hint">' + members.length + ' strand' +
+      (members.length === 1 ? '' : 's') + ' \u00b7 ' + escH(loopSummary.label) +
+      (loopSummary.unresolvedCount ? ' \u00b7 ' + loopSummary.unresolvedCount + ' with no audience yet' : '') +
+      '</span></h3>';
+    // A prominent button, kept for keyboard and assistive-technology users even
+    // though the whole card opens the loop too.
+    html += '<div class="new-loop-row"><button type="button" class="loop-open-btn" data-role="open-loop" data-loop="' +
+      escH(l.id) + '">Open ' + escH(l.title || 'this loop') + '</button></div>';
+    if (!members.length) {
+      html += '<div class="bucket-empty">No strands sorted in here yet</div>';
+    } else {
+      members.forEach(function (r) {
+        html += '<div class="bucket-member" data-strand-id="' + escH(r.strandId) + '">' +
+          '<span class="bm-label">' + escH(r.label) + '</span>' +
+          '<span class="bm-meta">' + escH(r.formLabel) + ' · ' + escH(r.columnLabel) + '</span>' +
+          '<label class="bm-meta">Move to…</label>' +
+          '<select data-role="move-loop" data-strand="' + escH(r.strandId) + '" aria-label="Move to another loop">' +
+          '<option value="" selected>Move to…</option>' +
+          list.filter(function (o) { return o.id !== l.id; }).map(function (o) {
+            return '<option value="' + escH(o.id) + '">' + escH(o.title || 'Untitled loop') + '</option>';
+          }).join('') +
+          '<option value="__none__">Take out of loop</option></select>' +
+          '<button type="button" data-role="remove-from-loop" data-strand="' + escH(r.strandId) + '">Remove</button>' +
+          '</div>';
+      });
+    }
+    html += '</div>';
+  });
+  html += '<div class="new-loop-row">' +
+    '<input type="text" id="new-loop-title" placeholder="New loop name" aria-label="New loop name">' +
+    '<button type="button" class="accent" id="new-loop-btn">+ New loop</button>' +
+    '<span class="hint">Creating a bucket here makes it available in every loop picker straight away.</span></div>';
+  html += '<div class="new-loop-row">' +
+    '<button type="button" class="accent" id="sorting-reviewed-btn">Strand sorting looks right</button>' +
+    '<span class="hint">' + (sorting.sortingReviewed
+      ? 'Confirmed as they are now — any change to loop membership asks again.'
+      : 'Not confirmed yet.') + '</span></div>';
+  document.getElementById('buckets-panel').innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// One loop, opened.
+//
+// Shows what is in it WITH each strand's own audience beside it, the derived
+// audience summary and (advisory) feasibility, how many strands still have no
+// audience, per-strand move/remove, and suggested related unsorted strands.
+// ---------------------------------------------------------------------------
+var openLoopId = null;
+
+function renderLoopDetail(rows) {
+  var el = document.getElementById('loop-detail-panel');
+  if (!el) return;
+  var loop = openLoopId ? loopById(openLoopId) : null;
+  if (!loop) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = '';
+
+  var members = arr(A.getLoopBucketContents(state, loop.id));
+  var summary = A.getLoopAudienceSummary(state, loop.id);
+  var feas = A.getLoopFeasibility(state, loop.id);
+  var related = arr(A.getRelatedUnsortedStrandsForLoop(state, loop.id, rows));
+  var others = loops().filter(function (o) { return o.id !== loop.id; });
+
+  var html = '<h2 class="section-title">' + escH(loop.title || 'Untitled loop') +
+    '<span class="count-pill' + (summary.unresolvedCount ? '' : ' is-zero') + '">' +
+    summary.unresolvedCount + ' with no audience</span></h2>';
+  html += '<p class="sub" style="margin:0;">Who this loop is for is derived from the strands inside it: <strong>' +
+    escH(summary.label) + '</strong>.</p>';
+  html += '<div class="new-loop-row"><button type="button" data-role="close-loop">Close</button></div>';
+
+  if (!members.length) {
+    html += '<p class="bucket-empty">No strands sorted in here yet.</p>';
+  } else {
+    members.forEach(function (r) {
+      var per = feas.perStrand[r.strandId] || {};
+      html += '<div class="detail-row" data-strand-id="' + escH(r.strandId) + '">' +
+        '<span class="dr-label">' + escH(r.label) + '</span>' +
+        '<span class="dr-aud' + (r.whoLabel ? '' : ' dr-unresolved') + '">' +
+        escH(r.whoLabel || 'Audience not chosen yet') + '</span>' +
+        '<span class="bm-meta">' + escH(r.formLabel) + '</span>' +
+        '<select data-role="detail-move" data-strand="' + escH(r.strandId) + '" aria-label="Move to another loop">' +
+        '<option value="" selected>Move to\u2026</option>' +
+        others.map(function (o) {
+          return '<option value="' + escH(o.id) + '">' + escH(o.title || 'Untitled loop') + '</option>';
+        }).join('') + '</select>' +
+        '<button type="button" data-role="detail-remove" data-strand="' + escH(r.strandId) + '">Remove</button>' +
+        (per.eligibleDayIds && per.eligibleDayIds.length
+          ? '<span class="bm-meta">' + per.eligibleDayIds.length + ' possible days</span>'
+          : '') +
+        '</div>';
+    });
+  }
+
+  // Advisory only. Nothing here blocks anything, and rhythm placement is never
+  // demanded during Feast Planning.
+  html += '<details class="help-more"><summary>Which days could suit this loop? (advisory)</summary>' +
+    '<p>Days everyone in this loop could do their work: ' +
+    escH(feas.fullGroupDayIds.length ? feas.fullGroupDayIds.join(', ') : 'none in common yet') + '.</p>' +
+    '<p>Days only some could: ' + escH(feas.partialDayIds.length ? feas.partialDayIds.join(', ') : 'none') + '.</p>' +
+    (feas.conflicts.length
+      ? '<p>' + feas.conflicts.map(function (c) { return escH(c.label) + ' \u2014 ' + escH(c.reason); }).join('<br>') + '</p>'
+      : '') +
+    '<p>' + escH(feas.note) + '</p></details>';
+
+  if (related.length) {
+    html += '<h3 style="font-size:13px;margin:10px 0 4px;">Related strands not sorted yet</h3>';
+    related.slice(0, 12).forEach(function (r) {
+      html += '<div class="detail-row" data-strand-id="' + escH(r.strandId) + '">' +
+        '<span class="dr-label">' + escH(r.label) + '</span>' +
+        '<span class="bm-meta">' + escH(r.formLabel) + ' \u00b7 ' + escH(r.stackLabel || '') + '</span>' +
+        '<button type="button" data-role="detail-add" data-strand="' + escH(r.strandId) + '">Add to this loop</button>' +
+        '</div>';
+    });
+  }
+  el.innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// Strands in Set-Aside Loops.
+//
+// A bucket can be set aside while strands are still sorted into it. Those
+// strands must stay reachable — and moving one out must NOT require putting the
+// bucket back in use. Rendered only when at least one set-aside bucket still
+// holds a strand.
+// ---------------------------------------------------------------------------
+function renderArchivedGroups() {
+  var el = document.getElementById('archived-panel');
+  if (!el) return;
+  var groups = arr(A.getArchivedLoopStrandGroups(state));
+  if (!groups.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = '';
+
+  var active = loops();
+  var html = '<h2 class="section-title">Strands in Set-Aside Loops' +
+    '<span class="count-pill">' + groups.length + '</span></h2>';
+  html += '<p class="sub" style="margin:0;">These buckets were set aside, not deleted. Strands sorted into them ' +
+    'are still linked. You can move a strand somewhere else without restoring the bucket.</p>';
+
+  groups.forEach(function (g) {
+    html += '<div class="archived-group" id="archived-loop-' + escH(g.loopId) + '" data-loop-id="' + escH(g.loopId) + '">';
+    html += '<h3>' + escH(g.title) + ' <span class="hint">' + g.strands.length + ' strand' +
+      (g.strands.length === 1 ? '' : 's') + ' still in this set-aside loop</span></h3>';
+    g.strands.forEach(function (s) {
+      html += '<div class="archived-strand" data-strand-id="' + escH(s.strandId) + '">' +
+        '<span class="as-label">' + escH(s.label) + '</span>' +
+        '<span class="as-meta">' + escH(s.formLabel) + (s.columnLabel ? ' · ' + escH(s.columnLabel) : '') + '</span>' +
+        '<label class="as-meta">Move to an active loop</label>' +
+        '<select data-role="archived-move" data-strand="' + escH(s.strandId) + '" aria-label="Move to an active loop">' +
+        '<option value="" selected>Move to…</option>' +
+        active.map(function (o) {
+          return '<option value="' + escH(o.id) + '">' + escH(o.title || 'Untitled loop') + '</option>';
+        }).join('') +
+        '</select>' +
+        '<button type="button" data-role="archived-unsort" data-strand="' + escH(s.strandId) +
+        '">Return to Unsorted</button>' +
+        '</div>';
+    });
+    html += '<div class="new-loop-row"><button type="button" data-role="archived-restore" data-loop="' +
+      escH(g.loopId) + '">Restore this loop</button>' +
+      '<span class="hint">Brings the same bucket back into use. Moving a strand out does not need this.</span></div>';
+    html += '</div>';
+  });
+  el.innerHTML = html;
+}
+
+// Deep link by STABLE loop id: #loop=<loopId>. An archived loop that still has
+// strands focuses its group; an active loop scrolls to its bucket. An unknown
+// or missing id simply renders the page normally.
+function focusDeepLinkedLoop() {
+  var m = /^#loop=(.+)$/.exec(window.location.hash || '');
+  if (!m) return;
+  var loopId = decodeURIComponent(m[1]);
+  var target = document.querySelector('.archived-group[data-loop-id="' + (window.CSS && CSS.escape ? CSS.escape(loopId) : loopId) + '"]');
+  if (target) {
+    target.classList.add('is-focused');
+  } else {
+    target = document.querySelector('.loop-bucket[data-loop-id="' + (window.CSS && CSS.escape ? CSS.escape(loopId) : loopId) + '"]');
+  }
+  if (!target) return;
+  try { target.scrollIntoView({ block: 'center' }); } catch (e) { /* older browsers */ }
+}
+
+// The chosen view is a VIEW PREFERENCE, never part of the saved plan: it lives
+// in this module variable and is never written to state.
+var currentView = 'stacks';
+
+function renderViewControls() {
+  var el = document.getElementById('view-controls');
+  if (!el) return;
+  el.innerHTML = arr(A.FEAST_VIEWS).map(function (v) {
+    return '<button type="button" data-role="view" data-view="' + escH(v.id) + '"' +
+      (v.id === currentView ? ' class="is-current" aria-pressed="true"' : ' aria-pressed="false"') +
+      '>' + escH(v.label) + '</button>';
+  }).join('');
+}
+
+// Bulk actions apply to each strand in the stack INDIVIDUALLY, by stable id.
+// Nothing is merged, and any one strand may override afterwards on its chip.
+function stackActionsHTML(stackId) {
+  var html = '<div class="stack-actions" data-stack="' + escH(stackId) + '">';
+  html += '<button type="button" data-role="stack-use" data-stack="' + escH(stackId) + '">Use all this year</button>';
+  html += '<label>Assign a shared audience <select data-role="stack-audience" data-stack="' + escH(stackId) + '">' +
+    '<option value="" selected>Choose\u2026</option>' +
+    arr(A.buildAudienceOptions(state)).filter(function (o) { return o.kind !== 'loop'; }).map(function (o) {
+      return '<option value="' + escH(o.value) + '">' + escH(o.label) + '</option>';
+    }).join('') + '</select></label>';
+  // Same select shape as everywhere else, keyed to the stack rather than a strand.
+  html += '<label>Put all in a loop ' +
+    loopSelectHTML('stack-loop', stackId, null).replace('data-strand=', 'data-stack=') + '</label>';
+  html += '<button type="button" data-role="stack-unsorted" data-stack="' + escH(stackId) + '">Return all to Unsorted</button>';
+  html += '</div>';
+  return html;
+}
+
+function renderGrid(rows) {
+  var html = '';
+
+  if (currentView === 'stacks') {
+    var view = A.buildFeastView(state, 'stacks', rows);
+    html += '<p class="sub" style="margin:0 0 10px;">Decide a whole stack at once, or any one strand on its own.</p>' +
+      '<details class="help-more"><summary>How stacks work</summary><p>Suggested stacks group similar strands so you can decide once. ' +
+      'Every strand is in exactly one stack, records stay separate, and a later change to one strand always wins.</p></details>';
+    view.groups.forEach(function (g) {
+      html += '<details class="stack-section" data-stack-id="' + escH(g.id) + '" open>';
+      html += '<summary>' + escH(g.label) + ' <span class="hint">' + g.rows.length + ' strand' +
+        (g.rows.length === 1 ? '' : 's') + ' \u00b7 expand to edit individual strands</span></summary>';
+      html += '<div class="stack-body">' + stackActionsHTML(g.id) +
+        '<div class="cell-strands">' + g.rows.map(chipHTML).join('') + '</div></div>';
+      html += '</details>';
+    });
+    document.getElementById('feast-grid').innerHTML = html;
+    return;
+  }
+
+  if (currentView === 'unsorted') {
+    var unsortedView = A.buildFeastView(state, 'unsorted', rows);
+    html += '<p class="sub" style="margin:0 0 10px;">Only strands with no handling decision yet.</p>';
+    if (!unsortedView.rowCount) {
+      html += '<p class="calm-empty">Everything has a home.</p>';
+    } else {
+      unsortedView.groups.forEach(function (g) {
+        html += '<div class="form-section"><div class="cell-strands">' + g.rows.map(chipHTML).join('') + '</div></div>';
+      });
+    }
+    document.getElementById('feast-grid').innerHTML = html;
+    return;
+  }
+
+  if (currentView === 'subject') {
+    var subjectView = A.buildFeastView(state, 'subject', rows);
+    subjectView.groups.forEach(function (g) {
+      html += '<div class="form-section">';
+      html += '<h2 class="section-title">' + escH(g.label) +
+        ' <span class="hint">' + g.rows.length + ' strands</span></h2>';
+      html += '<div class="cell-strands">' + g.rows.map(chipHTML).join('') + '</div>';
+      html += '</div>';
+    });
+    document.getElementById('feast-grid').innerHTML = html;
+    return;
+  }
+
+  // By Form / All: the original Form x Subject grid. Every strand, exactly once.
+  FEAST_FORMS.forEach(function (form) {
+    var formRows = rows.filter(function (r) { return r.form === form.id; });
+    html += '<div class="form-section">';
+    html += '<h2 class="section-title">' + escH(form.label) +
+      ' <span class="hint">' + formRows.length + ' strands</span></h2>';
+    html += '<table class="feast"><tbody>';
+    FEAST_COLUMNS.forEach(function (col) {
+      var cellRows = formRows.filter(function (r) { return r.column === col.id; });
+      html += '<tr><th class="row-head">' + escH(col.label) + '</th>';
+      html += '<td class="strand-cell">';
+      if (!cellRows.length) {
+        html += '<span class="cell-empty">\u2014</span>';
+      } else {
+        html += '<div class="cell-strands">' + cellRows.map(chipHTML).join('') + '</div>';
+      }
+      html += '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  });
+  document.getElementById('feast-grid').innerHTML = html;
+}
+
+function listHTML(items, emptyText) {
+  if (!items.length) return '<p class="empty">' + escH(emptyText) + '</p>';
+  return '<ul>' + items.map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul>';
+}
+
+function renderPreview() {
+  var p = A.buildDerivedCardPreview(state);
+  var html = '<h2 class="section-title">Derived card preview <span class="hint">read-only</span></h2>';
+  html += '<p class="sub" style="margin:0 0 12px;">Preview only — these cards are not created yet.</p>';
+
+  html += '<div class="preview-group"><h3>Family cards</h3>' +
+    listHTML(p.familyCards.map(function (c) { return escH(c.title); }), 'Nothing assigned to Everyone yet.') + '</div>';
+
+  html += '<div class="preview-group"><h3>Group cards</h3>' +
+    listHTML(p.groupCards.map(function (c) { return escH(c.title) + ' <span style="color:var(--muted);">(' + escH(c.groupLabel) + ')</span>'; }), 'No group work assigned yet.') + '</div>';
+
+  html += '<div class="preview-group"><h3>Individual cards</h3>' +
+    listHTML(p.individualCards.map(function (c) { return escH(c.title) + ' <span style="color:var(--muted);">(' + escH(c.studentName) + ')</span>'; }), 'No individual work assigned yet.') + '</div>';
+
+  html += '<div class="preview-group"><h3>Covered by loops</h3>' +
+    listHTML(p.loopCovered.map(function (l) {
+      return escH(l.loopTitle) + ' <span style="color:var(--muted);">— ' + escH(l.strandLabels.join(', ')) + '</span>';
+    }), 'Nothing handed to a loop yet.') + '</div>';
+
+  html += '<div class="preview-group"><h3>Co-op / outside</h3>' +
+    listHTML(p.coopCards.map(function (c) { return escH(c.title); }), 'Nothing at co-op or outside yet.') + '</div>';
+
+  html += '<div class="preview-group"><h3>Not this year</h3>' +
+    listHTML(p.excluded.map(function (e) { return escH(e.label); }), 'Nothing turned off yet.') + '</div>';
+
+  document.getElementById('preview-panel').innerHTML = html;
+}
+
+function renderStillToPlace(rows) {
+  // Recomputed from buildFeastRows on every render — never cached in state.
+  var pending = rows.filter(function (r) { return r.placementState === 'still-to-place'; });
+  var html = '<h2 class="section-title">Still to place</h2>';
+  html += '<p><span class="count-big" id="still-count">' + pending.length + '</span> ' +
+    '<span style="font-size:12px;color:var(--muted);">strand' + (pending.length === 1 ? '' : 's') +
+    ' decided but not yet in the weekly rhythm</span></p>';
+  html += listHTML(pending.map(function (r) {
+    return escH(r.formLabel) + ' · ' + escH(r.label) + (r.whoLabel ? ' <span style="color:var(--muted);">(' + escH(r.whoLabel) + ')</span>' : '');
+  }), 'Nothing waiting — every decided strand is looped, placed, or set aside.');
+  document.getElementById('still-panel').innerHTML = html;
+}
+
+// Non-blocking: the grid always still renders underneath this.
+function renderSetupBanner() {
+  var el = document.getElementById('setup-banner');
+  if (!el) return;
+  var ready = false;
+  try { ready = A.getSetupProgress(state).readyForFeast === true; } catch (e) { ready = false; }
+  el.innerHTML = ready ? '' :
+    '<div class="setup-warning-banner">Setup is not finished — Who/Group choices may be incomplete. ' +
+    '<a href="./setup-prototype.html">Finish Setup</a></div>';
+}
+
+function render() {
+  renderSetupBanner();
+  // A stale/older lib/familyMap.mjs cannot build the feast. Say so plainly
+  // rather than painting an empty grid that looks like "you have no subjects".
+  if (moduleIsStale()) {
+    document.getElementById('feast-grid').innerHTML = staleModuleBannerHTML();
+    document.getElementById('unsorted-panel').innerHTML = '';
+    document.getElementById('buckets-panel').innerHTML = '';
+    document.getElementById('preview-panel').innerHTML = '';
+    document.getElementById('still-panel').innerHTML = '';
+    var ap = document.getElementById('archived-panel');
+    if (ap) { ap.innerHTML = ''; ap.style.display = 'none'; }
+    var ld = document.getElementById('loop-detail-panel');
+    if (ld) { ld.innerHTML = ''; ld.style.display = 'none'; }
+    var vc = document.getElementById('view-controls');
+    if (vc) vc.innerHTML = '';
+    return;
+  }
+  var rows = arr(A.buildFeastRows(state));
+  renderUnsorted(rows);
+  renderBuckets();
+  renderLoopDetail(rows);
+  renderArchivedGroups();
+  renderViewControls();
+  renderGrid(rows);
+  renderPreview();
+  renderStillToPlace(rows);
+  focusDeepLinkedLoop();
+}
+
+// ---------------------------------------------------------------------------
+// The only two decisions this page allows.
+// ---------------------------------------------------------------------------
+function strandLabelFor(strandId) {
+  var entry = FEAST_LIBRARY.find(function (s) { return s.id === strandId; });
+  return entry ? entry.label : strandId;
+}
+
+function applyDecision(strandId, fields) {
+  A.setStrandAssignmentForStrand(state, strandId, strandLabelFor(strandId), fields);
+  markDirtyAndSave();
+  render();
+}
+
+// Turning a strand on or off for this year. One entry point, and it never
+// touches any other decision.
+function setUseThisYear(strandId, useIt) {
+  if (!strandId) return;
+  A.setStrandUseThisYear(state, strandId, strandLabelFor(strandId), useIt !== false);
+  markDirtyAndSave();
+  render();
+}
+
+function setupPrototypeObj() {
+  if (!state.setupPrototype || typeof state.setupPrototype !== 'object') state.setupPrototype = {};
+  return state.setupPrototype;
+}
+
+// THE single entry point for changing loop membership. Every click handler on
+// this page goes through it, and a future drag-and-drop layer must call it too
+// (chips carry data-strand-id and buckets carry data-loop-id for exactly that).
+// Drag-and-drop itself is deliberately NOT implemented here.
+function moveStrandToLoop(strandId, loopId) {
+  if (!strandId) return;
+  // One mover for every loop move, including out of a loop entirely. It rewrites
+  // only the loop membership, so the work type, the light-day opt-in, and any
+  // notes already recorded for this strand survive the move.
+  A.moveStrandLoopAssignment(state, strandId, strandLabelFor(strandId), loopId || null);
+  // Reviewed means reviewed-as-it-is-now: any membership change asks again.
+  // This is SORTING only — loopBucketsReviewed (a Setup decision about bucket
+  // structure) is deliberately left untouched.
+  setupPrototypeObj().loopSortingReviewed = false;
+  markDirtyAndSave();
+  render();
+}
+
+// Moving a strand out of a set-aside bucket never restores that bucket — it
+// stays set aside, and simply holds one strand fewer.
+document.getElementById('archived-panel').addEventListener('change', function (ev) {
+  var el = ev.target;
+  var role = el.getAttribute && el.getAttribute('data-role');
+  if (role !== 'archived-move') return;
+  if (!el.value) return;
+  moveStrandToLoop(el.getAttribute('data-strand'), el.value);
+});
+
+document.getElementById('archived-panel').addEventListener('click', function (ev) {
+  var el = ev.target.closest('[data-role]');
+  if (!el) return;
+  var role = el.getAttribute('data-role');
+  if (role === 'archived-unsort') { moveStrandToLoop(el.getAttribute('data-strand'), null); return; }
+  if (role === 'archived-restore') {
+    // The same bucket comes back with the same id — nothing linked to it moves.
+    state = normalize(A.restoreLoopBucket(state, el.getAttribute('data-loop')));
+    markDirtyAndSave();
+    render();
+  }
+});
+
+// Panels are re-rendered wholesale, so listen on the containers, not the nodes.
+['unsorted-panel', 'buckets-panel'].forEach(function (panelId) {
+  var panel = document.getElementById(panelId);
+  if (!panel) return;
+
+  panel.addEventListener('change', function (ev) {
+    var el = ev.target;
+    var role = el.getAttribute && el.getAttribute('data-role');
+    var strandId = el.getAttribute && el.getAttribute('data-strand');
+    if (!role || !strandId) return;
+    if (role === 'unsorted-loop') { moveStrandToLoop(strandId, el.value || null); return; }
+    if (role === 'move-loop') {
+      if (!el.value) return;
+      moveStrandToLoop(strandId, el.value === '__none__' ? null : el.value);
+      return;
+    }
+  });
+
+  panel.addEventListener('click', function (ev) {
+    var el = ev.target.closest('[data-role]');
+    if (!el || !panel.contains(el)) return;
+    var role = el.getAttribute('data-role');
+    var strandId = el.getAttribute('data-strand');
+    if (role === 'remove-from-loop') { moveStrandToLoop(strandId, null); return; }
+    if (role === 'unsorted-off') { setUseThisYear(strandId, false); return; }
+  });
+});
+
+// Opening a loop. The whole card is clickable, but the inner controls (selects,
+// buttons, labels, inputs) must keep working without opening the card.
+document.getElementById('buckets-panel').addEventListener('click', function (ev) {
+  var interactive = ev.target.closest('select, button, input, label, a, option');
+  var opener = ev.target.closest('[data-role="open-loop"]');
+  if (opener) {
+    openLoopId = opener.getAttribute('data-loop');
+    render();
+    var panel = document.getElementById('loop-detail-panel');
+    if (panel) { try { panel.scrollIntoView({ block: 'center' }); } catch (e) { /* older browsers */ } }
+    return;
+  }
+  if (interactive) return;
+  var card = ev.target.closest('.loop-bucket[data-loop-id]');
+  if (card) {
+    openLoopId = card.getAttribute('data-loop-id');
+    render();
+    return;
+  }
+});
+
+document.getElementById('buckets-panel').addEventListener('click', function (ev) {
+  var el = ev.target;
+  if (el.id === 'new-loop-btn') {
+    var input = document.getElementById('new-loop-title');
+    var title = input && input.value.trim() ? input.value.trim() : 'New loop';
+    // Title only — everything else about a loop stays a Setup decision. The one
+    // shared creation path, so creating a bucket here also clears
+    // "no loops this year" instead of leaving the two answers contradicting.
+    state = A.createLoopBucket(state, title);
+    markDirtyAndSave();
+    render();
+    return;
+  }
+  if (el.id === 'sorting-reviewed-btn') {
+    setupPrototypeObj().loopSortingReviewed = true;
+    markDirtyAndSave();
+    render();
+  }
+});
+
+document.getElementById('feast-grid').addEventListener('change', function (ev) {
+  var el = ev.target;
+  var role = el.getAttribute('data-role');
+  var stackId = el.getAttribute('data-stack');
+
+  if (role === 'stack-audience' && stackId) {
+    var av = el.value;
+    if (!av) return;
+    if (av === 'everyone') runStackAction(stackId, 'audience', 'everyone');
+    else if (av === 'coop') runStackAction(stackId, 'audience', 'coop-outside');
+    else if (av.indexOf('group:') === 0) runStackAction(stackId, 'audience', 'custom-group', { groupId: av.slice(6) });
+    else if (av.indexOf('student:') === 0) runStackAction(stackId, 'audience', 'individual', { studentIds: [av.slice(8)] });
+    return;
+  }
+  if (role === 'stack-loop' && stackId) {
+    runStackAction(stackId, 'loop', el.value || null);
+    return;
+  }
+
+  var strandId = el.getAttribute('data-strand');
+  if (!strandId || !role) return;
+
+  if (role === 'use') {
+    // Use-this-year is ORTHOGONAL to audience. Switching a strand off records
+    // only that, so its audience, loop, work type, light-day opt-in and notes
+    // are all still there when it is switched back on.
+    setUseThisYear(strandId, el.checked);
+    return;
+  }
+
+  if (role === 'chip-loop') {
+    moveStrandToLoop(strandId, el.value || null);
+    return;
+  }
+
+  if (role === 'work-type') {
+    A.setStrandAssignmentForStrand(state, strandId, strandLabelFor(strandId), { workType: el.value || null });
+    markDirtyAndSave();
+    render();
+    return;
+  }
+
+  if (role === 'light-days') {
+    A.setStrandAssignmentForStrand(state, strandId, strandLabelFor(strandId), { mayOccurOnLightDays: el.checked });
+    markDirtyAndSave();
+    render();
+    return;
+  }
+
+  if (role === 'who') {
+    var v = el.value;
+    if (!v) { applyDecision(strandId, { assignmentMode: null }); return; }
+    if (v === 'everyone') { applyDecision(strandId, { assignmentMode: 'everyone' }); return; }
+    if (v === 'coop') { applyDecision(strandId, { assignmentMode: 'coop-outside' }); return; }
+    if (v.indexOf('group:') === 0) { applyDecision(strandId, { assignmentMode: 'custom-group', groupId: v.slice(6) }); return; }
+    if (v.indexOf('student:') === 0) { applyDecision(strandId, { assignmentMode: 'individual', studentIds: [v.slice(8)] }); return; }
+    // Choosing a loop here is a strand MOVE, so it goes through the mover too.
+    if (v.indexOf('loop:') === 0) { moveStrandToLoop(strandId, v.slice(5)); return; }
+  }
+});
+
+// The view is a preference, not plan state: switching it saves nothing.
+document.getElementById('view-controls').addEventListener('click', function (ev) {
+  var el = ev.target.closest('[data-role="view"]');
+  if (!el) return;
+  currentView = el.getAttribute('data-view');
+  render();
+});
+
+// Stack bulk actions. Each one applies to the stack's strands INDIVIDUALLY by
+// stable id — no merged record is ever created, and any strand may override
+// afterwards on its own chip.
+function runStackAction(stackId, kind, value, extras) {
+  A.applyStackBulkAction(state, stackId, kind, value, extras);
+  setupPrototypeObj().loopSortingReviewed = false;
+  markDirtyAndSave();
+  render();
+}
+
+document.getElementById('feast-grid').addEventListener('click', function (ev) {
+  var el = ev.target.closest('[data-role]');
+  if (!el) return;
+  var role = el.getAttribute('data-role');
+  var stackId = el.getAttribute('data-stack');
+  if (role === 'stack-use') { runStackAction(stackId, 'use-this-year'); return; }
+  if (role === 'stack-unsorted') { runStackAction(stackId, 'unsorted'); return; }
+});
+
+document.getElementById('loop-detail-panel').addEventListener('click', function (ev) {
+  var el = ev.target.closest('[data-role]');
+  if (!el) return;
+  var role = el.getAttribute('data-role');
+  if (role === 'close-loop') { openLoopId = null; render(); return; }
+  if (role === 'detail-remove') { moveStrandToLoop(el.getAttribute('data-strand'), null); return; }
+  if (role === 'detail-add') { moveStrandToLoop(el.getAttribute('data-strand'), openLoopId); return; }
+});
+
+document.getElementById('loop-detail-panel').addEventListener('change', function (ev) {
+  var el = ev.target;
+  if (!el.getAttribute || el.getAttribute('data-role') !== 'detail-move') return;
+  if (!el.value) return;
+  moveStrandToLoop(el.getAttribute('data-strand'), el.value);
+});
+
+document.getElementById('reset-proto-btn').addEventListener('click', function () {
+  var confirmed = window.confirm(
+    'Reset the choices you made in this prototype?\n\n' +
+    'This only clears strand assignments created here. Assignments made anywhere else in the app, ' +
+    'and all of your cards, loops, and weekly rhythm, are left exactly as they are.'
+  );
+  if (!confirmed) return;
+  state = A.resetPrototypeStrandAssignments(state);
+  saveBar.saveNow(state);
+  render();
+});
+
+render();
+</script>
+</body>
+</html>

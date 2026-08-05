@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Setup Prototype</title>
+<link rel="stylesheet" href="./shared.css">
+<style>
+  .proto-badge {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+    background: var(--sunshine); color: #5a4400; border-radius: 12px; padding: 5px 12px;
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+  .proto-note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  #save-bar #reset-btn { display: none; }
+  .build-label { font-size: 10px; color: var(--muted); font-family: monospace; }
+
+  /* ---- Progress bar ---- */
+  .setup-progress { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 18px; }
+  .setup-step-btn {
+    flex: 1 1 160px; text-align: left; border: 1px solid var(--border); border-left: 5px solid var(--border);
+    background: var(--milk-white); border-radius: 10px; padding: 8px 10px; cursor: pointer; font: inherit;
+    color: var(--ink);
+  }
+  .setup-step-btn .step-name { font-weight: 600; font-size: 13px; }
+  .setup-step-btn .step-detail { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .setup-step-btn.is-complete { border-left-color: #4a9b5e; }
+  .setup-step-btn.is-incomplete { border-left-color: var(--sunshine); }
+  .setup-step-btn.is-current { outline: 2px solid var(--lagoon-light); }
+  .step-mark { font-size: 11px; font-weight: 700; margin-left: 6px; }
+  .step-mark.done { color: #24632f; }
+  .step-mark.todo { color: var(--muted); }
+
+  /* ---- Tables / rows ---- */
+  table.setup { border-collapse: collapse; width: 100%; background: var(--milk-white); border-radius: 10px; overflow: hidden; }
+  table.setup th, table.setup td { border: 1px solid var(--border); padding: 6px 8px; font-size: 12px; vertical-align: top; text-align: left; }
+  table.setup th { background: var(--field-mint); color: var(--navy-story); font-weight: 600; }
+  .setup-scroll { overflow-x: auto; }
+  .day-cell-available { color: #24632f; }
+  .day-cell-blocked { color: var(--poppy); }
+  .day-cell-off { color: var(--muted); font-style: italic; }
+  .day-cell-partial { color: #6a5400; }
+
+  .suggest-tag { font-size: 11px; color: #6a5400; background: #f7f4ea; border: 1px solid var(--border); border-radius: 8px; padding: 1px 6px; }
+  .unconfirmed-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.3px; color: var(--poppy); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+  .member-line { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .group-card, .commit-card, .loop-card {
+    border: 1px solid var(--border); border-left: 4px solid var(--lagoon-light); border-radius: 10px;
+    background: var(--milk-white); padding: 10px 12px; margin-bottom: 10px;
+  }
+  .group-card.fixed-card { border-left-color: var(--navy-story); }
+  .daybox { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; margin-right: 8px; }
+  .capacity-box { flex-direction: column; align-items: flex-start; gap: 2px; margin-bottom: 4px; }
+  .capacity-day { font-weight: 600; }
+  .capacity-inherited { color: var(--muted); font-weight: 400; }
+  .capacity-suggestion {
+    font-size: 11px; color: #6a5400; background: #f7f4ea; border: 1px solid var(--border);
+    border-radius: 8px; padding: 3px 6px; margin-top: 4px;
+  }
+  .row-actions { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .hint { font-size: 11px; color: var(--muted); font-weight: 400; }
+  /* Calm and informational on purpose — never warning or error styling. */
+  .advisory-list { margin: 10px 0 0; }
+  .advisory {
+    font-size: 12px; color: var(--muted); background: var(--field-mint);
+    border: 1px solid var(--border); border-left: 3px solid var(--lagoon-light);
+    border-radius: 8px; padding: 7px 10px; margin: 0 0 6px;
+  }
+  .conflict-note {
+    font-size: 13px; color: var(--ink); background: var(--blush);
+    border: 1px solid var(--border); border-left: 4px solid var(--poppy);
+    border-radius: 8px; padding: 8px 11px; margin: 10px 0 0;
+  }
+  .set-aside-loops {
+    border: 1px solid var(--border); border-radius: 10px; background: var(--field-mint);
+    padding: 8px 12px; margin: 12px 0 0; font-size: 13px;
+  }
+  .set-aside-loops > summary { cursor: pointer; }
+  .set-aside-card {
+    border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 10px;
+    background: var(--milk-white); padding: 10px 12px; margin-bottom: 10px;
+  }
+  /* The one global loop answer, kept visually apart from the per-loop actions:
+     its own block, above the line, so it can never read as a card action. */
+  .global-loop-control {
+    border-top: 2px solid var(--border); margin: 16px 0 0; padding: 12px 12px 10px;
+    background: var(--field-mint); border-radius: 0 0 10px 10px;
+  }
+  .global-loop-control .global-label { font-size: 11px; font-weight: 700; letter-spacing: 0.4px; color: var(--muted); }
+  .loop-card-actions { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .loop-card-actions a.loop-link {
+    font-size: 12px; color: var(--navy-story); text-decoration: underline;
+  }
+  .loop-open-btn {
+    display: inline-block; font-size: 13px; font-weight: 600; text-decoration: none;
+    background: var(--wonder-marine); color: #fff; border-radius: 8px; padding: 6px 12px;
+  }
+  .help-more { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+  .help-more > summary { cursor: pointer; }
+  .help-more p { margin: 6px 0 0; }
+  .capacity-legend { font-size: 11px; color: var(--muted); margin: 4px 0 0; }
+  .guide ol { margin: 6px 0 0; padding-left: 20px; font-size: 13px; }
+  .guide li { margin-bottom: 3px; }
+  input[type="text"] { font: inherit; font-size: 12px; padding: 3px 5px; }
+  select { font: inherit; font-size: 12px; padding: 3px 5px; }
+
+  /* ---- Stale-module banner ---- */
+  .stale-module-banner {
+    border: 1px solid var(--poppy); border-left: 5px solid var(--poppy); background: var(--blush);
+    border-radius: 10px; padding: 14px 16px; font-size: 13px; color: var(--ink);
+  }
+  .stale-module-banner p { margin: 8px 0 0; line-height: 1.5; }
+  .stale-module-banner code { font-family: monospace; font-size: 12px; }
+  .stale-module-banner kbd {
+    font-family: monospace; font-size: 11px; border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 5px; background: var(--milk-white);
+  }
+  .stale-module-banner .stale-detail { font-size: 11px; color: var(--muted); font-family: monospace; }
+
+  /* ---- Dark mode ---- */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --border: #2b4247;
+      --field-mint: #10262a;
+      --milk-white: #0d1c20;
+      --ink: #e6f1f2;
+      --inkwell: #e6f1f2;
+      --muted: #93b0b4;
+      --navy-story: #9fc7ea;
+      --wonder-marine: #6fd3d3;
+      --blush: #3a2124;
+    }
+    body { background: #08171a; }
+    .proto-badge { background: #6a5400; color: #ffe9a8; }
+    .suggest-tag { background: #332d16; color: #e2cf94; }
+    .day-cell-available { color: #a5dcae; }
+    .day-cell-partial { color: #e2cf94; }
+    .capacity-suggestion { background: #332d16; color: #e2cf94; }
+  }
+</style>
+</head>
+<body>
+<div id="app-header"></div>
+
+<div class="page-wrap">
+
+<div class="banner">
+  <span class="proto-badge">PROTOTYPE — Setup only. Does not create cards or change your Weekly Rhythm.</span>
+  <details class="help-more">
+    <summary>What this page records</summary>
+    <p class="proto-note">
+      The few facts every other page should be able to read instead of re-asking:
+      who is in your family, which Forms they are in, which groups exist, which days they actually work,
+      and which loop buckets exist. Everyone, availability, and group availability are always
+      <em>derived</em> — they are never stored twice.
+    </p>
+  </details>
+</div>
+
+<div id="save-bar"></div>
+
+<h1 class="page-title">Setup Prototype</h1>
+<p class="sub">Five steps. Nothing here creates teaching cards — it only records the decisions the rest of the app keeps asking for.</p>
+
+<div class="toolbar">
+  <a href="./feast-prototype.html">Feast Planning →</a>
+  <span class="build-label" title="Build identifier">build:setup-prototype</span>
+</div>
+
+<div id="setup-progress" class="setup-progress"></div>
+<div id="step-body"></div>
+
+<div class="panel guide">
+  <h2 class="section-title">Testing guide</h2>
+  <ol>
+    <li>Enter two or more children.</li>
+    <li>Confirm their Forms.</li>
+    <li>Create a custom group.</li>
+    <li>Add children to it.</li>
+    <li>Give one child a light-independent day and another a full day.</li>
+    <li>Create one loop bucket and confirm the buckets look right.</li>
+    <li>Continue to Feast Planning.</li>
+    <li>Assign a strand to the custom group.</li>
+    <li>Confirm the group members and consequence text are visible.</li>
+  </ol>
+</div>
+
+</div>
+
+<script type="module">
+import * as A from '../../lib/familyMapAdapter.mjs';
+import * as M from '../../lib/familyMap.mjs';
+import { createSaveBar, loadInitialState } from './saveBar.mjs';
+import { appHeaderHTML } from './nav.mjs';
+
+document.getElementById('app-header').outerHTML = appHeaderHTML('setup');
+
+function escH(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function arr(value) { return Array.isArray(value) ? value : []; }
+
+// ---------------------------------------------------------------------------
+// Module-shape guards — same pattern as the feast prototype. A cached/older
+// lib/familyMap.mjs must explain itself, not paint an empty page.
+// ---------------------------------------------------------------------------
+var WEEKDAYS = arr(M.WEEKDAYS);
+var GRADE_BANDS = arr(M.GRADE_BANDS);
+var SETUP_STEPS = arr(M.SETUP_STEPS);
+
+var REQUIRED_EXPORTS = [
+  { name: 'WEEKDAYS', ok: WEEKDAYS.length > 0 },
+  { name: 'GRADE_BANDS', ok: GRADE_BANDS.length > 0 },
+  { name: 'SETUP_STEPS', ok: SETUP_STEPS.length > 0 },
+  { name: 'suggestGradeBandFromGrade', ok: typeof M.suggestGradeBandFromGrade === 'function' },
+  { name: 'makeOutsideCommitment', ok: typeof M.makeOutsideCommitment === 'function' },
+  { name: 'getSetupProgress', ok: typeof A.getSetupProgress === 'function' },
+  { name: 'buildSetupSummary', ok: typeof A.buildSetupSummary === 'function' },
+  { name: 'buildAudienceOptions', ok: typeof A.buildAudienceOptions === 'function' },
+  { name: 'DAY_CAPACITIES', ok: arr(M.DAY_CAPACITIES).length > 0 },
+  { name: 'WORK_TYPES', ok: arr(M.WORK_TYPES).length > 0 },
+  { name: 'resolveDayCapacity', ok: typeof M.resolveDayCapacity === 'function' },
+  { name: 'getGroupWorkAvailability', ok: typeof A.getGroupWorkAvailability === 'function' },
+  { name: 'getLoopSortingProgress', ok: typeof A.getLoopSortingProgress === 'function' },
+  { name: 'getStudentEffectiveCapacity', ok: typeof A.getStudentEffectiveCapacity === 'function' },
+  { name: 'loopBucketFingerprint', ok: typeof A.loopBucketFingerprint === 'function' },
+  { name: 'migrateSetupPrototypeState', ok: typeof A.migrateSetupPrototypeState === 'function' },
+  { name: 'getAvailabilityCompletion', ok: typeof A.getAvailabilityCompletion === 'function' },
+  { name: 'createLoopBucket', ok: typeof A.createLoopBucket === 'function' },
+  { name: 'setNoLoopsChosen', ok: typeof A.setNoLoopsChosen === 'function' },
+  { name: 'describeNoLoopsImpact', ok: typeof A.describeNoLoopsImpact === 'function' },
+  { name: 'getArchivedLoopBuckets', ok: typeof A.getArchivedLoopBuckets === 'function' },
+  { name: 'getLoopReferences', ok: typeof A.getLoopReferences === 'function' },
+  { name: 'restoreLoopBucket', ok: typeof A.restoreLoopBucket === 'function' },
+  { name: 'deleteLoopBucketPermanently', ok: typeof A.deleteLoopBucketPermanently === 'function' },
+  { name: 'describeLoopSetAsideImpact', ok: typeof A.describeLoopSetAsideImpact === 'function' },
+  { name: 'setAsideLoopBucket', ok: typeof A.setAsideLoopBucket === 'function' }
+];
+function missingExports() {
+  return REQUIRED_EXPORTS.filter(function (e) { return !e.ok; }).map(function (e) { return e.name; });
+}
+function moduleIsStale() { return missingExports().length > 0; }
+function staleModuleBannerHTML() {
+  return '<div class="stale-module-banner" role="alert">' +
+    '<strong>This page needs a newer copy of the planner library than your browser has.</strong>' +
+    '<p>Your browser is using a cached or older <code>lib/familyMap.mjs</code>, so Setup cannot be built. ' +
+    'Nothing in your saved plan has been changed or lost.</p>' +
+    '<p><strong>To fix:</strong> hard-refresh this page — <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> ' +
+    '(Windows/Linux) or <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> (Mac).</p>' +
+    '<p class="stale-detail">Not found: ' + escH(missingExports().join(', ')) + '</p>' +
+    '</div>';
+}
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+var initial = loadInitialState();
+var state = initial.state;
+
+function ensureShape(s) {
+  if (!s || typeof s !== 'object') return s;
+  if (!Array.isArray(s.students)) s.students = [];
+  if (!Array.isArray(s.groups)) s.groups = [];
+  if (!Array.isArray(s.loops)) s.loops = [];
+  if (!Array.isArray(s.strandAssignments)) s.strandAssignments = [];
+  if (!Array.isArray(s.outsideCommitments)) s.outsideCommitments = [];
+  if (!s.setupPrototype || typeof s.setupPrototype !== 'object') {
+    s.setupPrototype = {
+      groupsReviewed: false, loopBucketsReviewed: false,
+      loopSortingReviewed: false, noLoopsChosen: false,
+      availabilityReviewed: false
+    };
+  }
+  if (s.setupPrototype.availabilityReviewed !== true) s.setupPrototype.availabilityReviewed = false;
+  // Old saved state must keep loading: one normalizer, run on every load.
+  if (typeof A.migrateSetupPrototypeState === 'function') {
+    var migrated = A.migrateSetupPrototypeState(s);
+    if (migrated && typeof migrated === 'object') {
+      s.setupPrototype = migrated.setupPrototype;
+      // Legacy strand records that stored a loop as an audience are rewritten
+      // once, keeping their loop. Old saved state keeps loading either way.
+      if (Array.isArray(migrated.strandAssignments)) s.strandAssignments = migrated.strandAssignments;
+    }
+  }
+  return s;
+}
+ensureShape(state);
+
+var saveBar = createSaveBar({
+  onStateReplaced: function (newState, source) {
+    state = ensureShape(newState);
+    currentStep = firstIncompleteStep();
+    render();
+    saveBar.setStatus(source === 'sample' ? 'Using sample plan' : 'Saved in this browser', source === 'sample' ? 'sample' : 'saved');
+  }
+});
+saveBar.mountControls(document.getElementById('save-bar'));
+// commitTextOnInput: a half-typed loop name or note is committed to the plan
+// after a short pause, so closing the tab mid-sentence cannot lose it.
+saveBar.wire(function () { return state; }, { commitTextOnInput: true });
+if (initial.source === 'saved') {
+  // Show the real clock time of the last save when we know it.
+  if (!saveBar.adoptStoredSavedAt()) saveBar.setStatus('Loaded your saved plan', 'saved');
+} else {
+  saveBar.setStatus('Using sample plan', 'sample');
+}
+if (initial.source === 'reset-after-invalid') {
+  saveBar.saveNow(state);
+  window.alert('Your saved plan could not be opened, so the sample plan was loaded instead.');
+}
+function markDirtyAndSave() { saveBar.scheduleSave(state); }
+
+// ---------------------------------------------------------------------------
+// Step routing
+// ---------------------------------------------------------------------------
+function progress() { return A.getSetupProgress(state); }
+
+function firstIncompleteStep() {
+  if (moduleIsStale()) return 'family';
+  var p = progress();
+  var order = ['family', 'groups', 'availability', 'rhythm'];
+  for (var i = 0; i < order.length; i++) {
+    if (!p[order[i]].complete) return order[i];
+  }
+  return 'review';
+}
+var currentStep = firstIncompleteStep();
+// Purely a view choice for the derived group table — never stored in the plan.
+var groupWorkType = 'group-lesson';
+
+function renderProgress() {
+  var p = progress();
+  var html = '';
+  SETUP_STEPS.slice().sort(function (a, b) { return a.order - b.order; }).forEach(function (step) {
+    var info = p[step.id];
+    var complete = step.id === 'review' ? p.readyForFeast : (info ? info.complete : false);
+    var detail = step.id === 'review'
+      ? (p.readyForFeast ? 'Ready to plan the feast.' : 'Finish the earlier steps first.')
+      : (info ? info.detail : '');
+    html += '<button type="button" class="setup-step-btn ' + (complete ? 'is-complete' : 'is-incomplete') +
+      (step.id === currentStep ? ' is-current' : '') + '" data-action="goto-step" data-step="' + escH(step.id) + '">' +
+      '<div class="step-name">' + escH(step.label) +
+      '<span class="step-mark ' + (complete ? 'done' : 'todo') + '">' + (complete ? '✓' : '•') + '</span></div>' +
+      '<div class="step-detail">' + escH(detail) + '</div></button>';
+  });
+  document.getElementById('setup-progress').innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// Step 1 — Your Family
+// ---------------------------------------------------------------------------
+function weekdayChecksHTML(role, id, checkedIds) {
+  return WEEKDAYS.map(function (d) {
+    var on = checkedIds.indexOf(d.id) > -1;
+    return '<label class="daybox"><input type="checkbox" data-action="' + escH(role) + '" data-id="' + escH(id) +
+      '" data-day="' + escH(d.id) + '"' + (on ? ' checked' : '') + '> ' + escH(d.short) + '</label>';
+  }).join('');
+}
+
+var DAY_CAPACITIES = arr(M.DAY_CAPACITIES);
+var WORK_TYPES = arr(M.WORK_TYPES);
+
+// The FOUR parent-facing category names, used identically everywhere on this
+// page — capacity selects, the derived table, the Review step, helper text.
+// The word "available" is deliberately absent: it never said which kind of day
+// it meant.
+var CAPACITY_LABELS = {
+  'full': 'Full workdays',
+  'light-independent': 'Light independent days',
+  'outside-only': 'Outside / co-op only',
+  'off': 'Off'
+};
+function capLabel(id) {
+  return CAPACITY_LABELS[id] || (typeof M.dayCapacityLabel === 'function' ? M.dayCapacityLabel(id) : String(id == null ? '' : id));
+}
+
+// A weekday is not a yes/no question — each day gets a capacity.
+function capacitySelectsHTML(student) {
+  return WEEKDAYS.map(function (d) {
+    var cur = typeof M.resolveDayCapacity === 'function' ? M.resolveDayCapacity(student, d.id) : 'full';
+    var explicit = !!(student.dayCapacityExplicit && student.dayCapacityExplicit[d.id] === true);
+    return '<label class="daybox capacity-box"><span class="capacity-day">' + escH(d.short) +
+      (explicit ? '' : ' <span class="capacity-inherited" title="Not set by hand yet">·</span>') + '</span>' +
+      '<select data-action="student-capacity" data-id="' + escH(student.id) + '" data-day="' + escH(d.id) +
+      '" aria-label="' + escH(d.label) + ' capacity">' +
+      DAY_CAPACITIES.map(function (c) {
+        return '<option value="' + escH(c.id) + '"' + (c.id === cur ? ' selected' : '') + '>' + escH(capLabel(c.id)) + '</option>';
+      }).join('') + '</select></label>';
+  }).join('');
+}
+
+// Commitments never change a day on their own. They offer.
+function capacitySuggestionsHTML(student) {
+  var res;
+  try { res = A.getCommitmentCapacitySuggestions(state, student.id); } catch (e) { return ''; }
+  var sug = (res && res.suggestions) || {};
+  var rows = WEEKDAYS.filter(function (d) { return sug[d.id]; });
+  if (!rows.length) return '';
+  return rows.map(function (d) {
+    var s = sug[d.id];
+    return '<div class="capacity-suggestion">' +
+      escH(s.fromCommitmentLabel) + ' suggests ' + escH(d.label) + ' → ' +
+      escH(capLabel(s.capacity)) +
+      ' <button type="button" data-action="apply-capacity" data-id="' + escH(student.id) +
+      '" data-day="' + escH(d.id) + '" data-capacity="' + escH(s.capacity) + '">Apply</button></div>';
+  }).join('');
+}
+
+function renderFamilyStep() {
+  var html = '<div class="panel"><h2 class="section-title">Your Family <span class="hint">who is learning at home this year</span></h2>';
+  html += '<p class="sub" style="margin:0 0 10px;">Forms are only ever <em>suggested</em> from a grade. Nothing is confirmed until you say so.</p>';
+  html += '<div class="setup-scroll"><table class="setup"><thead><tr>' +
+    '<th>Name</th><th>Grade / age</th><th>Form</th><th>Color</th><th>Active</th><th>What each day can hold</th><th></th>' +
+    '</tr></thead><tbody>';
+
+  var students = arr(state.students);
+  if (!students.length) {
+    html += '<tr><td colspan="7" class="hint">No children yet — add one below.</td></tr>';
+  }
+  students.forEach(function (s) {
+    var suggestion = typeof M.suggestGradeBandFromGrade === 'function' ? M.suggestGradeBandFromGrade(s.grade) : null;
+    html += '<tr>';
+    html += '<td><input type="text" data-action="student-name" data-id="' + escH(s.id) + '" value="' + escH(s.name || '') + '" placeholder="Name"></td>';
+    html += '<td><input type="text" size="8" data-action="student-grade" data-id="' + escH(s.id) + '" value="' + escH(s.grade || '') + '" placeholder="e.g. 3rd"></td>';
+    html += '<td><select data-action="student-band" data-id="' + escH(s.id) + '">' +
+      GRADE_BANDS.map(function (b) {
+        return '<option value="' + escH(b.id) + '"' + (b.id === s.gradeBand ? ' selected' : '') + '>' + escH(b.label) + '</option>';
+      }).join('') + '</select>';
+    if (s.gradeBandConfirmed !== true) {
+      html += ' <span class="unconfirmed-tag">UNCONFIRMED</span>';
+      if (suggestion) {
+        html += '<div class="member-line"><span class="suggest-tag">Suggested: ' + escH(A.gradeBandLabel(suggestion)) + '</span> ' +
+          '<button type="button" data-action="confirm-band" data-id="' + escH(s.id) + '" data-band="' + escH(suggestion) + '">Confirm</button></div>';
+      } else {
+        html += '<div class="member-line"><button type="button" data-action="confirm-band" data-id="' + escH(s.id) + '" data-band="' + escH(s.gradeBand || 'form1') + '">Confirm this Form</button></div>';
+      }
+    }
+    html += '</td>';
+    html += '<td><input type="color" data-action="student-color" data-id="' + escH(s.id) + '" value="' + escH(s.color || '#888888') + '"></td>';
+    html += '<td><input type="checkbox" data-action="student-active" data-id="' + escH(s.id) + '"' + (s.active !== false ? ' checked' : '') + '></td>';
+    html += '<td>' + capacitySelectsHTML(s) + capacitySuggestionsHTML(s) + '</td>';
+    html += '<td><button type="button" class="danger" data-action="remove-student" data-id="' + escH(s.id) + '">Remove</button></td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '<div class="row-actions"><button type="button" class="accent" data-action="add-student">Add a child</button></div>';
+  html += '</div>';
+  return html;
+}
+
+// ---------------------------------------------------------------------------
+// Step 2 — Your Groups
+// ---------------------------------------------------------------------------
+function renderGroupsStep() {
+  var summary = A.buildSetupSummary(state);
+  var html = '<div class="panel"><h2 class="section-title">Your Groups <span class="hint">who usually works together</span></h2>';
+
+  html += '<div class="group-card fixed-card"><div><strong>Everyone</strong></div>' +
+    '<div class="member-line">' + escH(summary.everyone.memberNames.join(', ') || 'No active children yet') + '</div>' +
+    '<div class="member-line">Always everyone who is active — nothing to maintain.</div></div>';
+
+  var groups = arr(state.groups).filter(function (g) { return g.active !== false; });
+  if (!groups.length) {
+    html += '<div class="group-card"><div><strong>No groups yet</strong></div>' +
+      '<div class="member-line">Many families keep one group of older students and one of younger students. ' +
+      'Nothing is created until you ask for it.</div>' +
+      '<div class="row-actions"><button type="button" class="accent" data-action="add-suggested-groups">Add suggested groups</button>' +
+      '<button type="button" data-action="add-group">Create custom group</button></div></div>';
+  }
+
+  groups.forEach(function (g) {
+    var av = A.getGroupWorkAvailability(state, g.id, 'group-lesson');
+    var names = av.memberIds.map(function (id) {
+      var s = arr(state.students).find(function (x) { return x.id === id; });
+      return s ? s.name : id;
+    });
+    html += '<div class="group-card">';
+    html += '<div><input type="text" data-action="group-label" data-id="' + escH(g.id) + '" value="' + escH(g.label || '') + '" placeholder="Group name"></div>';
+    html += '<div class="member-line">Members: ' + escH(names.join(', ') || 'no members yet') + '</div>';
+    html += '<div style="margin-top:6px;">' + arr(state.students).filter(function (s) { return s.active !== false; }).map(function (s) {
+      var on = arr(g.studentIds).indexOf(s.id) > -1;
+      return '<label class="daybox"><input type="checkbox" data-action="group-member" data-id="' + escH(g.id) +
+        '" data-student="' + escH(s.id) + '"' + (on ? ' checked' : '') + '> ' + escH(s.name || s.id) + '</label>';
+    }).join('') + '</div>';
+    html += '<div class="row-actions"><button type="button" class="danger" data-action="delete-group" data-id="' + escH(g.id) + '">Delete group</button></div>';
+    html += '</div>';
+  });
+
+  if (groups.length) {
+    html += '<div class="row-actions"><button type="button" data-action="add-group">Create custom group</button></div>';
+  }
+
+  var reviewed = !!(state.setupPrototype && state.setupPrototype.groupsReviewed);
+  html += '<p class="sub" style="margin-top:12px;">Renaming a group is safe.</p>' +
+    '<details class="help-more"><summary>Why</summary><p>A group keeps its identity when you rename it, so every strand already assigned to it stays assigned.</p></details>';
+  html += '<div class="row-actions"><button type="button" class="accent" data-action="groups-reviewed">These look right</button>' +
+    '<span class="hint">' + (reviewed ? 'Confirmed.' : 'Not confirmed yet.') + '</span></div>';
+  html += '</div>';
+  return html;
+}
+
+// ---------------------------------------------------------------------------
+// Step 3 — Outside commitments + derived availability
+// ---------------------------------------------------------------------------
+// Which commitments say regular home lessons do not happen that day. Display
+// only — commitments never change capacity on their own.
+function commitmentLabelsOnDay(studentId, dayId) {
+  return arr(state.outsideCommitments).filter(function (c) {
+    if (!c || c.blocksRegularWork === false) return false;
+    if (arr(c.weekdays).indexOf(dayId) === -1) return false;
+    var ids = [];
+    try { ids = arr(A.getCommitmentParticipantIds(state, c)); } catch (e) { ids = []; }
+    return ids.indexOf(studentId) > -1;
+  }).map(function (c) { return c.label || 'Outside commitment'; });
+}
+
+function renderAvailabilityStep() {
+  var html = '<div class="panel"><h2 class="section-title">Outside Commitments <span class="hint">what already owns a day</span></h2>';
+
+  var commitments = arr(state.outsideCommitments);
+  if (!commitments.length) html += '<p class="hint">No outside commitments recorded.</p>';
+  commitments.forEach(function (c) {
+    html += '<div class="commit-card">';
+    html += '<div><input type="text" data-action="commit-label" data-id="' + escH(c.id) + '" value="' + escH(c.label || '') + '" placeholder="What is it called?"></div>';
+    html += '<div style="margin-top:6px;">Who: <select data-action="commit-who" data-id="' + escH(c.id) + '">';
+    var whoVal = c.participantMode === 'everyone' ? 'everyone'
+      : (c.participantMode === 'group' ? 'group:' + (c.groupId || '') : 'individual');
+    html += '<option value="everyone"' + (whoVal === 'everyone' ? ' selected' : '') + '>Everyone</option>';
+    arr(state.groups).filter(function (g) { return g.active !== false; }).forEach(function (g) {
+      html += '<option value="group:' + escH(g.id) + '"' + (whoVal === 'group:' + g.id ? ' selected' : '') + '>' + escH(g.label || 'Group') + '</option>';
+    });
+    html += '<option value="individual"' + (whoVal === 'individual' ? ' selected' : '') + '>Specific children</option>';
+    html += '</select></div>';
+    if (c.participantMode === 'individual') {
+      html += '<div style="margin-top:4px;">' + arr(state.students).filter(function (s) { return s.active !== false; }).map(function (s) {
+        var on = arr(c.studentIds).indexOf(s.id) > -1;
+        return '<label class="daybox"><input type="checkbox" data-action="commit-student" data-id="' + escH(c.id) +
+          '" data-student="' + escH(s.id) + '"' + (on ? ' checked' : '') + '> ' + escH(s.name || s.id) + '</label>';
+      }).join('') + '</div>';
+    }
+    html += '<div style="margin-top:6px;">Days: ' + weekdayChecksHTML('commit-day', c.id, arr(c.weekdays)) + '</div>';
+    html += '<div style="margin-top:6px;">' +
+      '<label class="daybox"><input type="checkbox" data-action="commit-blocks" data-id="' + escH(c.id) + '"' + (c.blocksRegularWork !== false ? ' checked' : '') + '> Regular home lessons do not happen that day</label>' +
+      '<label class="daybox"><input type="checkbox" data-action="commit-coop" data-id="' + escH(c.id) + '"' + (c.allowsCoopWork !== false ? ' checked' : '') + '> Co-op / outside work may still happen</label></div>';
+    html += '<div class="row-actions"><button type="button" class="danger" data-action="remove-commit" data-id="' + escH(c.id) + '">Remove</button></div>';
+    html += '</div>';
+  });
+  html += '<div class="row-actions"><button type="button" class="accent" data-action="add-commit">Add a commitment</button></div>';
+  html += '</div>';
+
+  // Derived student capacity
+  html += '<div class="panel"><h2 class="section-title">What each day can hold <span class="hint">derived — not editable here</span></h2>';
+  html += '<p class="sub" style="margin:0 0 10px;">Resolved from each child\'s own day settings.</p>' +
+    '<details class="help-more"><summary>Where these come from</summary><p>Outside commitments only ever <em>suggest</em> a change. Apply a suggestion on the Family step.</p></details>';
+  html += '<div class="setup-scroll"><table class="setup" id="student-availability"><thead><tr><th>Child</th>' +
+    WEEKDAYS.map(function (d) { return '<th>' + escH(d.short) + '</th>'; }).join('') + '</tr></thead><tbody>';
+  var actives = arr(state.students).filter(function (s) { return s.active !== false; });
+  if (!actives.length) html += '<tr><td colspan="' + (WEEKDAYS.length + 1) + '" class="hint">No active children yet.</td></tr>';
+  actives.forEach(function (s) {
+    // Effective capacity is the ONLY capacity this page plans against.
+    var eff = A.getStudentEffectiveCapacity(state, s.id);
+    html += '<tr><td>' + escH(s.name || s.id) + '</td>';
+    WEEKDAYS.forEach(function (d) {
+      var cap = eff.dayCapacity[d.id];
+      var cls = cap === 'full' ? 'day-cell-available' : (cap === 'off' ? 'day-cell-off' : 'day-cell-partial');
+      var cell = '<span class="' + cls + '">' + escH(capLabel(cap)) + '</span>';
+      var blockers = commitmentLabelsOnDay(s.id, d.id);
+      if (blockers.length) cell += '<div class="hint">' + escH(blockers.join(', ')) + '</div>';
+      html += '<td>' + cell + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+
+  // Calm, informational advisories. Never a warning, never blocking.
+  var completion = A.getAvailabilityCompletion(state);
+  if (arr(completion.advisories).length) {
+    html += '<div class="advisory-list">' + arr(completion.advisories).map(function (adv) {
+      return '<p class="advisory">' + escH(adv.message) + '</p>';
+    }).join('') + '</div>';
+  }
+  html += '<div class="row-actions"><button type="button" class="accent" data-action="availability-reviewed">These day capacities look right</button>' +
+    '<span class="hint">' + escH(completion.availabilityReviewed
+      ? 'Confirmed.'
+      : 'Not confirmed yet — a day left on the suggested setting still needs your nod.') + '</span></div>';
+  html += '<p class="sub" style="margin:6px 0 0;">Every weekday is one of four things: Full workdays, Light independent days, ' +
+    'Outside / co-op only, or Off. A week with no Full workdays is a real, valid week.</p>';
+
+  // Derived group availability, per kind of work
+  html += '<h2 class="section-title" style="margin-top:16px;">Group availability <span class="hint">computed from members</span></h2>';
+  html += '<p class="sub" style="margin:0 0 6px;">What a group can do depends on the kind of work.</p>' +
+    '<details class="help-more"><summary>Editing this</summary><p>This view is derived and cannot be edited directly — change each child\'s days or their commitments instead.</p></details>';
+  html += '<div class="row-actions"><label>Kind of work: <select id="group-work-type" data-action="group-work-type">' +
+    WORK_TYPES.map(function (w) {
+      return '<option value="' + escH(w.id) + '"' + (w.id === groupWorkType ? ' selected' : '') + '>' + escH(w.label) + '</option>';
+    }).join('') + '</select></label></div>';
+  var sharedMode = typeof M.isSharedWorkType === 'function' ? M.isSharedWorkType(groupWorkType) : false;
+  html += '<p class="sub" style="margin:6px 0 10px;">' + (sharedMode
+    ? 'Shared and group work needs everyone: a day only counts when every member can do it that day.'
+    : 'Independent work is judged per child — one child\'s lighter day never removes the day for the others.') + '</p>';
+  html += '<div class="setup-scroll"><table class="setup" id="group-availability"><thead><tr><th>Group</th>' +
+    WEEKDAYS.map(function (d) { return '<th>' + escH(d.short) + '</th>'; }).join('') + '</tr></thead><tbody>';
+  var groups = arr(state.groups).filter(function (g) { return g.active !== false; });
+  if (!groups.length) html += '<tr><td colspan="' + (WEEKDAYS.length + 1) + '" class="hint">No groups yet.</td></tr>';
+  groups.forEach(function (g) {
+    var av = A.getGroupWorkAvailability(state, g.id, groupWorkType);
+    html += '<tr><td>' + escH(g.label || g.id) + '</td>';
+    WEEKDAYS.forEach(function (d) {
+      var cell;
+      var blockers = arr(av.blockedBy[d.id]);
+      if (sharedMode) {
+        if (av.eligibleDayIds.indexOf(d.id) > -1) cell = '<span class="day-cell-available">everyone can</span>';
+        else cell = '<span class="day-cell-blocked">not this day</span>';
+        if (blockers.length) {
+          cell += '<div class="hint">Blocked by ' + escH(blockers.map(function (b) {
+            return b.name + ' (' + capLabel(b.capacity) + ')';
+          }).join(', ')) + '</div>';
+        }
+      } else {
+        var can = av.memberIds.filter(function (id) { return arr(av.perStudent[id]).indexOf(d.id) > -1; });
+        cell = can.length
+          ? '<span class="day-cell-available">' + escH(can.map(function (id) {
+              var s = arr(state.students).find(function (x) { return x.id === id; });
+              return s ? (s.name || s.id) : id;
+            }).join(', ')) + '</span>'
+          : '<span class="day-cell-off">no one</span>';
+        if (blockers.length) {
+          cell += '<div class="hint">Not ' + escH(blockers.map(function (b) { return b.name; }).join(', ')) + '</div>';
+        }
+      }
+      html += '<td>' + cell + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div></div>';
+  return html;
+}
+
+// ---------------------------------------------------------------------------
+// Step 4 — Broad rhythm & loops
+// ---------------------------------------------------------------------------
+// Set-aside buckets are recoverable, and this is the only place that says so.
+// The section is not rendered at all when nothing has been set aside — an
+// empty "Set Aside Loops" heading would be noise. It opens by itself the first
+// time the parent has just set buckets aside, so the way back is never hidden.
+var revealSetAsideLoops = false;
+
+function setAsideLoopsHTML() {
+  var archived = [];
+  try { archived = arr(A.getArchivedLoopBuckets(state)); } catch (e) { archived = []; }
+  if (!archived.length) return '';
+
+  var html = '<details class="set-aside-loops"' + (revealSetAsideLoops ? ' open' : '') + '>' +
+    '<summary><strong>Set Aside Loops</strong> <span class="hint">' + archived.length +
+    ' bucket' + (archived.length === 1 ? '' : 's') + ' you can bring back</span></summary>';
+  html += '<p class="sub" style="margin:8px 0 10px;">These buckets were set aside, not deleted. ' +
+    'Any strands sorted into them are still linked to them, exactly as they were. ' +
+    'Restoring one brings the same bucket back — not a copy.</p>';
+
+  archived.forEach(function (b) {
+    html += '<div class="set-aside-card" data-loop-id="' + escH(b.loopId) + '">';
+    html += '<div><strong>' + escH(b.title) + '</strong></div>';
+    var archivedLoop = findLoopLocal(b.loopId);
+    if (archivedLoop && archivedLoop.description) {
+      html += '<div class="member-line">' + escH(archivedLoop.description) + '</div>';
+    }
+    html += '<div class="member-line">' + b.strandCount + ' strand' +
+      (b.strandCount === 1 ? '' : 's') + ' still linked to it.</div>';
+    html += '<div class="row-actions">' +
+      '<button type="button" class="accent" data-action="restore-loop" data-id="' + escH(b.loopId) + '">Restore</button>';
+    // Only offered when there is actually something to move.
+    if (b.strandCount > 0) {
+      html += '<a class="loop-open-btn" data-action="review-loop-strands" data-id="' + escH(b.loopId) +
+        '" href="./feast-prototype.html#loop=' + encodeURIComponent(b.loopId) +
+        '">Open ' + escH(b.title) + '</a>';
+    }
+    if (b.canDeletePermanently) {
+      html += '<button type="button" class="danger" data-action="delete-loop-permanently" data-id="' +
+        escH(b.loopId) + '">Delete permanently</button>';
+    } else {
+      html += '<span class="hint">' + escH(b.blockedReason) + '</span>';
+    }
+    html += '</div></div>';
+  });
+
+  return html + '</details>';
+}
+
+function renderRhythmStep() {
+  var sorting = A.getLoopSortingProgress(state);
+  var html = '<div class="panel"><h2 class="section-title">Loop Buckets <span class="hint">buckets only — contents come later</span></h2>';
+  html += '<p class="sub" style="margin:0 0 10px;"><strong>Create the loop buckets you may use. You will sort strands into them during Feast Planning.</strong></p>';
+  // At most ONE visible instruction line per panel — the rest is behind this.
+  html += '<details class="help-more"><summary>What is a loop bucket?</summary>' +
+    '<p>A bucket needs only a name, and optionally a short description. Nothing about what goes ' +
+    '<em>inside</em> a loop is decided here — an empty bucket is a perfectly finished bucket.</p>' +
+    '<p><strong>Which days a loop actually happens on is decided in the Weekly Rhythm, not here.</strong></p>' +
+    '</details>';
+  // Archived buckets are set aside, never deleted — they are simply not listed
+  // among the buckets in use this year.
+  var loops = arr(state.loops).filter(function (l) { return l && l.active !== false; });
+  var archivedCount = arr(state.loops).length - loops.length;
+  if (sorting.noLoopsConflict) {
+    html += '<div class="conflict-note">' + escH(A.getSetupProgress(state).rhythm.detail) + '</div>';
+  }
+  if (!loops.length) html += '<p class="hint">No loop buckets yet.</p>';
+  loops.forEach(function (l) {
+    html += '<div class="loop-card" data-loop-id="' + escH(l.id) + '">';
+    html += '<div><input type="text" data-action="loop-title" data-id="' + escH(l.id) + '" value="' + escH(l.title || '') + '" placeholder="Loop name"></div>';
+    // Weekdays are NOT asked for here any more — day placement is a Weekly
+    // Rhythm decision. Any rhythmDayIds already saved are kept untouched.
+    html += '<div style="margin-top:6px;"><input type="text" style="width:100%;max-width:420px;" ' +
+      'data-action="loop-description" data-id="' + escH(l.id) + '" value="' + escH(l.description || '') +
+      '" placeholder="Short description (optional)" aria-label="Loop description"></div>';
+    // Per-loop actions. Renaming is the title input above — it re-opens bucket
+    // review by itself through the fingerprint, so it needs no button here.
+    var impact = A.describeLoopSetAsideImpact(state, l.id);
+    html += '<div class="loop-card-actions">' +
+      '<a class="loop-open-btn" data-action="review-loop-strands" data-id="' + escH(l.id) + '" href="./feast-prototype.html#loop=' +
+      encodeURIComponent(l.id) + '">Open ' + escH(l.title || 'this loop') + '</a>' +
+      '<button type="button" data-action="set-aside-loop" data-id="' + escH(l.id) + '">Set aside this loop</button>' +
+      '<span class="hint">' + impact.strandCount + ' strand' + (impact.strandCount === 1 ? '' : 's') +
+      ' sorted in · ' + impact.otherReferenceCount + ' other reference' +
+      (impact.otherReferenceCount === 1 ? '' : 's') + '</span>' +
+      '</div>';
+    html += '</div>';
+  });
+  html += '<div class="row-actions"><button type="button" class="accent" data-action="add-loop">Create a loop bucket</button></div>';
+  // "No loops this year" is a valid, explicit answer — not an empty state. It is
+  // the ONE global answer on this page, so it sits in its own block below the
+  // divider rather than among the per-loop actions.
+  html += '<div class="global-loop-control"><div class="global-label">FOR THE WHOLE YEAR</div>' +
+    '<label class="daybox">' +
+    '<input type="checkbox" data-action="no-loops-chosen"' + (sorting.noLoopsChosen ? ' checked' : '') + '> ' +
+    'Set aside all loop buckets for this year</label>' +
+    '<p class="hint" style="margin:4px 0 0;">This is a global answer — it sets aside every bucket at once. ' +
+    'To set aside just one, use "Set aside this loop" on that bucket.</p></div>';
+  if (archivedCount) {
+    html += '<p class="hint">' + archivedCount + ' loop bucket' + (archivedCount === 1 ? '' : 's') +
+      ' set aside. Nothing was deleted. Unticking the box above does not bring them back on its own — ' +
+      'open <strong>Set Aside Loops</strong> below and restore the one you want.</p>';
+  }
+  html += setAsideLoopsHTML();
+  html += '<div class="row-actions"><button type="button" class="accent" data-action="loop-buckets-reviewed">These buckets look right</button>' +
+    '<span class="hint">' + (sorting.bucketsReviewed
+      ? 'Confirmed as they are now.'
+      : (state.setupPrototype && state.setupPrototype.loopBucketsReviewed
+        ? 'The buckets changed since you confirmed them — please confirm again.'
+        : 'Not confirmed yet.')) + '</span></div>';
+  // Informational next step only. This never blocks the step or Continue.
+  html += '<p class="sub" style="margin-top:10px;">' + escH(sorting.unsortedNextStep) +
+    ' <a href="./feast-prototype.html">Go to Feast Planning →</a></p>';
+  html += '</div>';
+  return html;
+}
+
+// ---------------------------------------------------------------------------
+// Step 5 — Review
+// ---------------------------------------------------------------------------
+function dayLabels(ids) {
+  return WEEKDAYS.filter(function (d) { return arr(ids).indexOf(d.id) > -1; }).map(function (d) { return d.short; }).join(', ');
+}
+
+// The week, broken into the four categories — never one undifferentiated list.
+var CATEGORY_FIELDS = [
+  { key: 'fullWorkdayIds', label: 'Full workdays' },
+  { key: 'lightIndependentDayIds', label: 'Light independent days' },
+  { key: 'outsideOnlyDayIds', label: 'Outside / co-op only' },
+  { key: 'offDayIds', label: 'Off' }
+];
+
+function categoryBreakdownHTML(row) {
+  return '<div class="capacity-legend">' + CATEGORY_FIELDS.map(function (c) {
+    var ids = arr(row[c.key]);
+    return escH(c.label) + ': ' + escH(ids.length ? dayLabels(ids) : 'none');
+  }).join(' · ') + '</div>';
+}
+
+function renderReviewStep() {
+  var s = A.buildSetupSummary(state);
+  var p = progress();
+  var html = '<div class="panel"><h2 class="section-title">Review</h2>';
+
+  html += '<h3 class="section-title">Family</h3>';
+  html += s.family.length
+    ? '<ul>' + s.family.map(function (f) {
+        return '<li>' + escH(f.name || '(unnamed)') + ' — ' + escH(f.gradeBandLabel) +
+          (f.gradeBandConfirmed ? '' : ' <span class="unconfirmed-tag">UNCONFIRMED</span>') +
+          categoryBreakdownHTML(f) + '</li>';
+      }).join('') + '</ul>'
+    : '<p class="hint">No children yet.</p>';
+
+  html += '<h3 class="section-title">Groups</h3>';
+  html += '<p class="hint">Everyone: ' + escH(s.everyone.memberNames.join(', ') || 'nobody active yet') + '</p>';
+  html += s.groups.length
+    ? '<ul>' + s.groups.map(function (g) {
+        return '<li>' + escH(g.label) + ' — ' + escH(g.memberNames.join(', ') || 'no members') + '</li>';
+      }).join('') + '</ul>'
+    : '<p class="hint">No groups.</p>';
+
+  html += '<h3 class="section-title">Each child\'s week</h3>';
+  html += s.family.length
+    ? '<ul>' + s.family.map(function (f) {
+        return '<li>' + escH(f.name || '(unnamed)') + ':' + categoryBreakdownHTML(f) + '</li>';
+      }).join('') + '</ul>'
+    : '<p class="hint">Nothing to show yet.</p>';
+  var advisories = arr(p.availability.advisories);
+  if (advisories.length) {
+    html += '<div class="advisory-list">' + advisories.map(function (adv) {
+      return '<p class="advisory">' + escH(adv.message) + '</p>';
+    }).join('') + '</div>';
+  }
+
+  html += '<h3 class="section-title">Loops</h3>';
+  html += s.loops.length
+    ? '<ul>' + s.loops.map(function (l) {
+        return '<li>' + escH(l.title || '(untitled loop)') + ' <span class="hint">(' + escH(l.participantSummary) + ')</span></li>';
+      }).join('') + '</ul>'
+    : '<p class="hint">No loops.</p>';
+
+  var incomplete = [];
+  ['family', 'groups', 'availability', 'rhythm'].forEach(function (k) {
+    if (!p[k].complete) {
+      var step = SETUP_STEPS.find(function (x) { return x.id === k; });
+      incomplete.push((step ? step.label : k) + ' — ' + p[k].detail);
+    }
+  });
+
+  html += '<div class="row-actions" style="margin-top:14px;">';
+  if (p.readyForFeast) {
+    html += '<a class="accent" id="continue-to-feast" href="./feast-prototype.html" ' +
+      'style="display:inline-block;padding:8px 14px;border-radius:8px;background:var(--wonder-marine);color:#fff;text-decoration:none;font-weight:600;">Continue to Feast Planning</a>';
+  } else {
+    html += '<button type="button" id="continue-to-feast" disabled>Continue to Feast Planning</button>';
+  }
+  html += '</div>';
+  if (!p.readyForFeast) {
+    html += '<div class="notice" style="margin-top:10px;"><strong>Setup is not finished yet.</strong><ul>' +
+      incomplete.map(function (t) { return '<li>' + escH(t) + '</li>'; }).join('') + '</ul></div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
+function render() {
+  if (moduleIsStale()) {
+    document.getElementById('setup-progress').innerHTML = '';
+    document.getElementById('step-body').innerHTML = staleModuleBannerHTML();
+    return;
+  }
+  renderProgress();
+  var html = '';
+  if (currentStep === 'family') html = renderFamilyStep();
+  else if (currentStep === 'groups') html = renderGroupsStep();
+  else if (currentStep === 'availability') html = renderAvailabilityStep();
+  else if (currentStep === 'rhythm') html = renderRhythmStep();
+  else html = renderReviewStep();
+  document.getElementById('step-body').innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// Editing
+// ---------------------------------------------------------------------------
+function findStudentLocal(id) { return arr(state.students).find(function (s) { return s.id === id; }); }
+function findGroupLocal(id) { return arr(state.groups).find(function (g) { return g.id === id; }); }
+function findCommitLocal(id) { return arr(state.outsideCommitments).find(function (c) { return c.id === id; }); }
+function findLoopLocal(id) { return arr(state.loops).find(function (l) { return l.id === id; }); }
+
+function toggleInList(list, value, on) {
+  var i = list.indexOf(value);
+  if (on && i === -1) list.push(value);
+  if (!on && i > -1) list.splice(i, 1);
+  return list;
+}
+
+function commit() { markDirtyAndSave(); render(); }
+
+document.addEventListener('click', function (ev) {
+  var el = ev.target.closest('[data-action]');
+  if (!el) return;
+  var action = el.getAttribute('data-action');
+  var id = el.getAttribute('data-id');
+
+  if (action === 'goto-step') {
+    currentStep = el.getAttribute('data-step');
+    render();
+    return;
+  }
+
+  if (action === 'add-student') {
+    state.students.push(M.makeStudent({ sortOrder: arr(state.students).length }));
+    commit();
+    return;
+  }
+
+  if (action === 'remove-student') {
+    var impact = A.describeAudienceImpact(state, { kind: 'student-deactivate', studentId: id });
+    var stu = findStudentLocal(id);
+    if (!window.confirm('Remove ' + ((stu && stu.name) || 'this child') + '?\n\n' + impact.message)) return;
+    state.students = arr(state.students).filter(function (s) { return s.id !== id; });
+    arr(state.groups).forEach(function (g) {
+      g.studentIds = arr(g.studentIds).filter(function (sid) { return sid !== id; });
+    });
+    arr(state.outsideCommitments).forEach(function (c) {
+      c.studentIds = arr(c.studentIds).filter(function (sid) { return sid !== id; });
+    });
+    commit();
+    return;
+  }
+
+  if (action === 'confirm-band') {
+    var s2 = findStudentLocal(id);
+    if (s2) { s2.gradeBand = el.getAttribute('data-band') || s2.gradeBand; s2.gradeBandConfirmed = true; }
+    commit();
+    return;
+  }
+
+  if (action === 'add-suggested-groups') {
+    // Suggested only, and only on an explicit click. IDs are always generated.
+    state.groups.push(M.makeGroup({ label: 'Older Students', sortOrder: arr(state.groups).length }));
+    state.groups.push(M.makeGroup({ label: 'Younger Students', sortOrder: arr(state.groups).length }));
+    commit();
+    return;
+  }
+
+  if (action === 'add-group') {
+    state.groups.push(M.makeGroup({ label: 'New group', sortOrder: arr(state.groups).length }));
+    commit();
+    return;
+  }
+
+  if (action === 'delete-group') {
+    var impactG = A.describeAudienceImpact(state, { kind: 'group-delete', groupId: id });
+    var grp = findGroupLocal(id);
+    if (!window.confirm('Delete ' + ((grp && grp.label) || 'this group') + '?\n\n' + impactG.message)) return;
+    state.groups = arr(state.groups).filter(function (g) { return g.id !== id; });
+    commit();
+    return;
+  }
+
+  if (action === 'groups-reviewed') {
+    state.setupPrototype.groupsReviewed = true;
+    commit();
+    return;
+  }
+
+  if (action === 'loop-buckets-reviewed') {
+    // Buckets reviewed, and the STRUCTURE reviewed is stamped alongside it, so
+    // renaming a bucket or changing its days re-opens the review by itself.
+    // This says nothing about what is inside them — loop SORTING is
+    // acknowledged separately, in Feast Planning.
+    A.markLoopBucketsReviewed(state);
+    commit();
+    return;
+  }
+
+  if (action === 'apply-capacity') {
+    // Suggestions are only ever applied by an explicit click, and applying one
+    // makes that day an explicit choice from then on.
+    var sc = findStudentLocal(id);
+    var day = el.getAttribute('data-day');
+    if (sc && day) {
+      if (!sc.dayCapacity || typeof sc.dayCapacity !== 'object') sc.dayCapacity = {};
+      if (!sc.dayCapacityExplicit || typeof sc.dayCapacityExplicit !== 'object') sc.dayCapacityExplicit = {};
+      sc.dayCapacity[day] = el.getAttribute('data-capacity');
+      sc.dayCapacityExplicit[day] = true;
+    }
+    commit();
+    return;
+  }
+
+  if (action === 'add-commit') {
+    state.outsideCommitments.push(M.makeOutsideCommitment({ label: 'Outside commitment', participantMode: 'everyone' }));
+    commit();
+    return;
+  }
+
+  if (action === 'remove-commit') {
+    state.outsideCommitments = arr(state.outsideCommitments).filter(function (c) { return c.id !== id; });
+    commit();
+    return;
+  }
+
+  if (action === 'availability-reviewed') {
+    // "A valid backward-compatible default has been reviewed." Days still on the
+    // suggested capacity now count as resolved.
+    A.markAvailabilityReviewed(state);
+    commit();
+    return;
+  }
+
+  if (action === 'add-loop') {
+    // The ONE creation path. It also clears "no loops this year", so the two
+    // answers can never contradict each other.
+    state = ensureShape(A.createLoopBucket(state, 'New loop'));
+    commit();
+    return;
+  }
+
+  if (action === 'set-aside-loop') {
+    // One bucket only. The confirm names it, says how many strands and how many
+    // other references are involved, and states plainly that nothing is deleted.
+    var sImpact = A.describeLoopSetAsideImpact(state, id);
+    if (!window.confirm(sImpact.message)) return;
+    var setAside = A.setAsideLoopBucket(state, id, { confirmed: true });
+    if (setAside.loopSetAsideConfirmationRequired) return;
+    state = ensureShape(setAside);
+    revealSetAsideLoops = true;
+    commit();
+    return;
+  }
+
+  if (action === 'restore-loop') {
+    // Puts the SAME bucket back, keeping its id — so every strand, item, card,
+    // resource use, and rhythm placement still pointing at it lines up again.
+    var lp = findLoopLocal(id);
+    if (!window.confirm('Restore "' + ((lp && lp.title) || 'this loop bucket') + '"?\n\n' +
+      'It comes back as the same bucket, and anything still linked to it stays linked.')) return;
+    state = ensureShape(A.restoreLoopBucket(state, id));
+    revealSetAsideLoops = true;
+    commit();
+    return;
+  }
+
+  if (action === 'delete-loop-permanently') {
+    // Only ever offered when nothing references the bucket; the adapter checks
+    // again anyway and simply declines if that changed.
+    var dl = findLoopLocal(id);
+    if (!window.confirm('Delete "' + ((dl && dl.title) || 'this loop bucket') + '" permanently?\n\n' +
+      'This cannot be undone. Nothing is linked to it.')) return;
+    var next = A.deleteLoopBucketPermanently(state, id, { confirmed: true });
+    if (next.loopDeleteBlocked) {
+      window.alert(next.loopDeleteBlocked);
+      return;
+    }
+    state = ensureShape(next);
+    revealSetAsideLoops = true;
+    commit();
+    return;
+  }
+});
+
+document.addEventListener('change', function (ev) {
+  var el = ev.target.closest('[data-action]');
+  if (!el) return;
+  var action = el.getAttribute('data-action');
+  var id = el.getAttribute('data-id');
+  var stu, grp, c, loop;
+
+  switch (action) {
+    case 'student-name':
+      stu = findStudentLocal(id);
+      if (stu) { stu.name = el.value; stu.initials = M.autoInitials(el.value); }
+      break;
+    case 'student-grade':
+      stu = findStudentLocal(id);
+      if (stu) {
+        stu.grade = el.value;
+        // Suggestion only — a typed grade never confirms a Form.
+        if (stu.gradeBandConfirmed !== true) {
+          var sug = M.suggestGradeBandFromGrade(el.value);
+          if (sug) stu.gradeBand = sug;
+        }
+      }
+      break;
+    case 'student-band':
+      stu = findStudentLocal(id);
+      // Picking a Form by hand IS a confirmation.
+      if (stu) { stu.gradeBand = el.value; stu.gradeBandConfirmed = true; }
+      break;
+    case 'student-color':
+      stu = findStudentLocal(id);
+      if (stu) stu.color = el.value;
+      break;
+    case 'student-active':
+      stu = findStudentLocal(id);
+      if (stu) {
+        if (!el.checked) {
+          var impact = A.describeAudienceImpact(state, { kind: 'student-deactivate', studentId: id });
+          if (impact.affectedStrandCount > 0 && !window.confirm(impact.message + '\n\nMake this child inactive anyway?')) {
+            el.checked = true;
+            return;
+          }
+        }
+        stu.active = el.checked;
+      }
+      break;
+    case 'student-capacity':
+      stu = findStudentLocal(id);
+      if (stu) {
+        // Additive: the legacy workdays map is left exactly as it is.
+        if (!stu.dayCapacity || typeof stu.dayCapacity !== 'object') stu.dayCapacity = {};
+        if (!stu.dayCapacityExplicit || typeof stu.dayCapacityExplicit !== 'object') stu.dayCapacityExplicit = {};
+        stu.dayCapacity[el.getAttribute('data-day')] = el.value;
+        stu.dayCapacityExplicit[el.getAttribute('data-day')] = true;
+      }
+      break;
+    case 'no-loops-chosen': {
+      // An explicit answer, stored explicitly. It never creates or DELETES a
+      // loop. Ticking it while real buckets exist archives them — but only after
+      // a confirm that names them and says how many strand choices are involved.
+      // Unticking needs no confirmation and never restores archived buckets.
+      if (!el.checked) {
+        state = A.setNoLoopsChosen(state, false);
+        break;
+      }
+      var impactL = A.describeNoLoopsImpact(state);
+      if (impactL.activeBucketCount > 0) {
+        var ok = window.confirm(impactL.message + '\n\nSet these buckets aside and say you will not use loops this year?' +
+          '\n\nYou can restore any of them later from "Set Aside Loops".');
+        if (!ok) { el.checked = false; return; }
+        state = A.setNoLoopsChosen(state, true, { confirmed: true });
+        // Show the way back on this very render, not collapsed behind a click.
+        revealSetAsideLoops = true;
+      } else {
+        state = A.setNoLoopsChosen(state, true);
+      }
+      break;
+    }
+    case 'group-work-type':
+      groupWorkType = el.value;
+      break;
+    case 'group-label':
+      grp = findGroupLocal(id);
+      // Label only — the group's ID never changes, so assignments never break.
+      if (grp) grp.label = el.value;
+      break;
+    case 'group-member':
+      grp = findGroupLocal(id);
+      if (grp) {
+        var impactM = A.describeAudienceImpact(state, { kind: 'group-members', groupId: id });
+        if (impactM.affectedStrandCount > 0 && !window.confirm(impactM.message + '\n\nChange who is in this group?')) {
+          el.checked = !el.checked;
+          return;
+        }
+        grp.studentIds = toggleInList(arr(grp.studentIds).slice(), el.getAttribute('data-student'), el.checked);
+      }
+      break;
+    case 'commit-label':
+      c = findCommitLocal(id);
+      if (c) c.label = el.value;
+      break;
+    case 'commit-who':
+      c = findCommitLocal(id);
+      if (c) {
+        var v = el.value;
+        if (v === 'everyone') { c.participantMode = 'everyone'; c.groupId = null; }
+        else if (v === 'individual') { c.participantMode = 'individual'; c.groupId = null; }
+        else { c.participantMode = 'group'; c.groupId = v.slice('group:'.length); }
+      }
+      break;
+    case 'commit-student':
+      c = findCommitLocal(id);
+      if (c) c.studentIds = toggleInList(arr(c.studentIds).slice(), el.getAttribute('data-student'), el.checked);
+      break;
+    case 'commit-day':
+      c = findCommitLocal(id);
+      if (c) c.weekdays = toggleInList(arr(c.weekdays).slice(), el.getAttribute('data-day'), el.checked);
+      break;
+    case 'commit-blocks':
+      c = findCommitLocal(id);
+      if (c) c.blocksRegularWork = el.checked;
+      break;
+    case 'commit-coop':
+      c = findCommitLocal(id);
+      if (c) c.allowsCoopWork = el.checked;
+      break;
+    case 'loop-title':
+      loop = findLoopLocal(id);
+      if (loop) loop.title = el.value;
+      break;
+    case 'loop-description':
+      loop = findLoopLocal(id);
+      // Additive optional field. rhythmDayIds is deliberately untouched here —
+      // day placement belongs to the Weekly Rhythm.
+      if (loop) loop.description = el.value;
+      break;
+    default:
+      return;
+  }
+  commit();
+});
+
+render();
+</script>
+</body>
+</html>

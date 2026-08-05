@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Weekly Rhythm — Family School Map</title>
+<link rel="stylesheet" href="./shared.css">
+<style>
+  table.rhythm { border-collapse: collapse; width: 100%; background: var(--milk-white); table-layout: fixed; border-radius: 10px; overflow: hidden; }
+  table.rhythm th, table.rhythm td { border: 1px solid var(--border); vertical-align: top; padding: 10px; font-size: 12px; }
+  table.rhythm thead th { background: var(--navy-story); color: var(--milk-white); text-align: center; padding: 10px 6px; font-size: 13px; font-weight: 600; }
+  table.rhythm th.row-head { background: var(--field-mint); color: var(--navy-story); text-align: left; font-weight: 600; width: 150px; font-size: 13px; }
+  table.rhythm td.dim-cell .rasn { opacity: 0.28; }
+
+  .rasn { border-radius: 8px; padding: 7px 9px; margin-bottom: 6px; font-size: 12px; border-left: 4px solid var(--lagoon-light); background: var(--field-mint); cursor: pointer; box-shadow: 0 1px 2px rgba(9,69,78,0.04); }
+  .rasn:hover { background: #e6f3f3; }
+  .rasn:last-child { margin-bottom: 0; }
+  .rasn .tag { display: block; font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .rasn.allday { border-left-color: var(--navy-story); background: #eaf0f8; }
+  .rasn.flexible { border-style: dashed; }
+  .rasn.type-together { border-left-color: var(--navy-story); }
+  .rasn.type-student { border-left-color: var(--lagoon-light); }
+  .rasn.type-group { border-left-color: var(--wonder-marine); }
+  .rasn.type-coop { border-left-color: var(--poppy); }
+  .rasn.type-custom { border-left-color: var(--sunshine); }
+
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; margin-bottom: 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+
+  .add-cell-btn {
+    display: block; width: 100%; margin-top: 4px; font-size: 11px; padding: 6px;
+    border: 1px dashed var(--border); border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer;
+    opacity: 0.55; transition: opacity 0.15s;
+  }
+  .add-cell-btn:hover { opacity: 1; background: var(--field-mint); color: var(--wonder-marine); border-color: var(--lagoon-light); }
+
+  .ed-days-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 4px; }
+  .ed-day-row { display: flex; align-items: center; gap: 7px; font-size: 13px; cursor: pointer; }
+  .ed-day-row input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--wonder-marine); }
+  .ed-all-days-row { font-size: 12px; color: var(--muted); margin-top: 2px; display: flex; align-items: center; gap: 7px; cursor: pointer; }
+
+  .loop-covers-summary { font-size:0.78em; color:var(--muted,#777); margin-top:2px; }
+  .loop-covers-toggle { cursor:pointer; user-select:none; }
+  .loop-covers-list { display:none; }
+  .loop-covers-summary.open .loop-covers-list { display:inline; }
+
+  @media print {
+    .app-header, .banner, .toolbar, .save-area, .add-cell-btn, .legend { display: none !important; }
+    @page { size: landscape; margin: 0.4in; }
+  }
+</style>
+</head>
+<body>
+<div id="app-header"></div>
+
+<div class="page-wrap">
+
+<div class="banner">
+  Beta preview: your plan saves in this browser as you go. Use <strong>Export Backup</strong> to protect your work or move it
+  to another device. This is the broad "when do the big buckets happen" layer — not Today, not a minute-by-minute schedule.
+</div>
+
+<div id="save-bar"></div>
+
+<h1 class="page-title">Weekly Rhythm</h1>
+<p class="sub">Days across the top, rhythm blocks down the side. Each box can hold a few broad pieces of the day. Click an item to edit it, or "Add rhythm item" to add something new.</p>
+
+<div class="toolbar">
+  <label>View for
+    <select id="lens-select"></select>
+  </label>
+  <button class="accent" onclick="window.print();">Print weekly rhythm</button>
+</div>
+
+<div class="legend">
+  <span><span class="dot" style="background:var(--navy-story);"></span>Together</span>
+  <span><span class="dot" style="background:var(--lagoon-light);"></span>Student</span>
+  <span><span class="dot" style="background:var(--wonder-marine);"></span>Group</span>
+  <span><span class="dot" style="background:var(--poppy);"></span>Co-op / external</span>
+  <span><span class="dot" style="background:var(--sunshine);"></span>Custom label</span>
+</div>
+
+<table class="rhythm" id="rhythm-table">
+  <thead><tr id="rhythm-head-row"><th class="row-head"></th></tr></thead>
+  <tbody id="rhythm-body"></tbody>
+</table>
+
+<div id="review-panel" style="margin-top:18px;"></div>
+
+</div>
+
+<div id="editor-overlay" class="overlay" style="display:none;">
+  <div class="modal-card">
+    <h2 id="editor-title">Edit rhythm item</h2>
+
+    <label for="ed-label">Label</label>
+    <input type="text" id="ed-label" placeholder="e.g. Jeremiah independent">
+
+    <h3 style="margin:14px 0 6px;font-size:13px;color:var(--wonder-marine);">Day(s)</h3>
+    <div id="ed-days-list" class="ed-days-list"></div>
+    <label class="ed-all-days-row"><input type="checkbox" id="ed-all-days"> Every school day</label>
+
+    <label for="ed-block">Rhythm block</label>
+    <select id="ed-block"></select>
+
+    <h3 style="margin:14px 0 6px;font-size:13px;color:var(--wonder-marine);">What does this cover?</h3>
+    <label for="wr-cover-type">Kind</label>
+    <select id="wr-cover-type">
+      <option value="custom">Custom label</option>
+      <option value="card">A planned subject (card)</option>
+      <option value="loop">A loop</option>
+      <option value="sequence">A sequence</option>
+      <option value="student">Student block</option>
+      <option value="group">Group block</option>
+      <option value="together">Together block</option>
+      <option value="coop">Co-op / External</option>
+    </select>
+
+    <div id="wr-cover-picker" style="margin-top:6px;"></div>
+
+    <label for="ed-type" style="display:none;">Type (internal)</label>
+    <select id="ed-type" style="display:none;"></select>
+
+    <div id="ed-ref-wrap" style="display:none;">
+      <label for="ed-ref" id="ed-ref-label">Linked item</label>
+      <select id="ed-ref"></select>
+    </div>
+
+    <label for="ed-notes">Notes</label>
+    <textarea id="ed-notes"></textarea>
+
+    <div class="checkrow"><input type="checkbox" id="ed-allday"><label for="ed-allday" style="margin:0;font-weight:400;">This happens all day</label></div>
+    <div class="checkrow"><input type="checkbox" id="ed-flexible"><label for="ed-flexible" style="margin:0;font-weight:400;">Flexible</label></div>
+    <div class="checkrow"><input type="checkbox" id="ed-showprint" checked><label for="ed-showprint" style="margin:0;font-weight:400;">Show when printing</label></div>
+
+    <div class="modal-actions">
+      <button class="danger" id="ed-delete" style="display:none;">Delete</button>
+      <div class="right">
+        <button id="ed-cancel">Cancel</button>
+        <button class="accent" id="ed-save">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import * as R from '../../lib/weeklyRhythm.mjs';
+import * as A from '../../lib/familyMapAdapter.mjs';
+import { createSaveBar, loadInitialState } from './saveBar.mjs';
+import { appHeaderHTML } from './nav.mjs';
+
+document.getElementById('app-header').outerHTML = appHeaderHTML('rhythm');
+
+var initial = loadInitialState();
+var appState = initial.state;
+var rhythm = appState.weeklyRhythm;
+var context = A.rhythmContext(appState);
+var lens = { type: 'all' };
+
+window.onLensChange = onLensChange;
+
+var saveBar = createSaveBar({
+  onStateReplaced: function (newState, source) {
+    appState = newState;
+    rhythm = appState.weeklyRhythm;
+    context = A.rhythmContext(appState);
+    populateLensSelect();
+    render();
+    saveBar.setStatus(source === 'sample' ? 'Using sample plan' : 'Saved in this browser', source === 'sample' ? 'sample' : 'saved');
+  }
+});
+saveBar.mountControls(document.getElementById('save-bar'));
+saveBar.wire(function () { return appState; });
+saveBar.setStatus(initial.source === 'saved' ? 'Saved in this browser' : 'Using sample plan', initial.source === 'saved' ? 'saved' : 'sample');
+if (initial.source === 'reset-after-invalid') {
+  saveBar.saveNow(appState);
+  window.alert('Your saved plan could not be opened, so the sample plan was loaded instead.');
+}
+
+function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+
+// ---------------------------------------------------------------------------
+// Friendly type labels + reference picker config
+// ---------------------------------------------------------------------------
+var TYPE_LABELS = {
+  custom: 'Custom label',
+  student: 'Student',
+  group: 'Group',
+  together: 'Together',
+  coop: 'Co-op / External',
+  subject: 'Subject',
+  card: 'Subject / strand',
+  loop: 'Loop / rotation',
+  sequence: 'Reading order'
+};
+
+function refOptionsForType(type) {
+  if (type === 'student') return appState.students.filter(function (s) { return s.active; }).map(function (s) { return { id: s.id, label: s.name }; });
+  if (type === 'group') return appState.groups.map(function (g) { return { id: g.id, label: g.label }; });
+  if (type === 'subject') return appState.subjectColumns.map(function (s) { return { id: s.id, label: s.label || s.title || s.id }; });
+  if (type === 'card') return appState.cards.map(function (c) { return { id: c.id, label: c.title }; });
+  if (type === 'loop') return appState.loops.map(function (l) { return { id: l.id, label: l.title || l.id }; });
+  if (type === 'sequence') return appState.sequences.map(function (s) { return { id: s.id, label: s.title || s.id }; });
+  return null; // together / custom / coop — no reference list
+}
+
+var editingState = { dayId: null, blockId: null, assignmentId: null };
+
+function openEditor(dayId, blockId, assignment) {
+  editingState = { dayId: dayId, blockId: blockId, assignmentId: assignment ? assignment.id : null };
+
+  document.getElementById('editor-title').textContent = assignment ? 'Edit rhythm item' : 'Add rhythm item';
+  document.getElementById('ed-label').value = assignment ? assignment.label : '';
+  document.getElementById('ed-notes').value = assignment ? (assignment.notes || '') : '';
+  document.getElementById('ed-allday').checked = assignment ? !!assignment.isAllDay : false;
+  document.getElementById('ed-flexible').checked = assignment ? !!assignment.isFlexible : false;
+  document.getElementById('ed-showprint').checked = assignment ? assignment.showOnPrint !== false : true;
+  document.getElementById('ed-delete').style.display = assignment ? '' : 'none';
+
+  var sortedDays = rhythm.days.slice().sort(function (a, b) { return a.sortOrder - b.sortOrder; });
+  var daysList = document.getElementById('ed-days-list');
+  daysList.innerHTML = sortedDays.map(function (d) {
+    var checked = d.id === dayId ? ' checked' : '';
+    return '<label class="ed-day-row"><input type="checkbox" name="ed-day-cb" value="' + escapeHtml(d.id) + '"' + checked + '> ' + escapeHtml(d.label) + '</label>';
+  }).join('');
+  var allDaysCb = document.getElementById('ed-all-days');
+  allDaysCb.checked = false;
+  allDaysCb.onchange = function () {
+    daysList.querySelectorAll('input[name="ed-day-cb"]').forEach(function (cb) { cb.checked = allDaysCb.checked; });
+  };
+  daysList.addEventListener('change', function () {
+    var all = daysList.querySelectorAll('input[name="ed-day-cb"]');
+    allDaysCb.checked = Array.from(all).every(function (cb) { return cb.checked; });
+  });
+
+  var blockSel = document.getElementById('ed-block');
+  blockSel.innerHTML = rhythm.blocks.slice().sort(function (a, b) { return a.sortOrder - b.sortOrder; })
+    .map(function (b) { return '<option value="' + escapeHtml(b.id) + '">' + escapeHtml(b.label) + '</option>'; }).join('');
+  blockSel.value = blockId;
+
+  var typeSel = document.getElementById('ed-type');
+  typeSel.innerHTML = R.RHYTHM_ASSIGNMENT_TYPES.map(function (t) {
+    return '<option value="' + t + '">' + escapeHtml(TYPE_LABELS[t] || t) + '</option>';
+  }).join('');
+  typeSel.value = assignment ? assignment.assignmentType : 'custom';
+  document.getElementById('wr-cover-type').value = assignment ? assignment.assignmentType : 'custom';
+
+  populateCoverPicker(assignment ? assignment.referencedId : null);
+
+  document.getElementById('editor-overlay').style.display = 'flex';
+}
+
+function populateRefSelect(selectedId) {
+  var type = document.getElementById('ed-type').value;
+  var wrap = document.getElementById('ed-ref-wrap');
+  var sel = document.getElementById('ed-ref');
+  var opts = refOptionsForType(type);
+  if (!opts) {
+    wrap.style.display = 'none';
+    sel.innerHTML = '';
+    return;
+  }
+  wrap.style.display = '';
+  document.getElementById('ed-ref-label').textContent = TYPE_LABELS[type] || 'Linked item';
+  sel.innerHTML = '<option value="">(none)</option>' + opts.map(function (o) {
+    return '<option value="' + escapeHtml(o.id) + '">' + escapeHtml(o.label) + '</option>';
+  }).join('');
+  if (selectedId) sel.value = selectedId;
+}
+
+function closeEditor() {
+  document.getElementById('editor-overlay').style.display = 'none';
+}
+
+function saveEditor() {
+  // Sync visible cover picker into hidden ed-type/ed-ref before reading
+  var coverIdSel = document.getElementById('wr-cover-id');
+  if (coverIdSel) document.getElementById('ed-ref').value = coverIdSel.value;
+  var type = document.getElementById('wr-cover-type').value;
+  document.getElementById('ed-type').value = type;
+  var refOpts = refOptionsForType(type);
+  var refSel = document.getElementById('ed-ref').value;
+  var checkedDays = Array.from(
+    document.querySelectorAll('#ed-days-list input[name="ed-day-cb"]:checked')
+  ).map(function (cb) { return cb.value; });
+  if (!checkedDays.length) { window.alert('Please select at least one day.'); return; }
+
+  var baseFields = {
+    label: document.getElementById('ed-label').value.trim() || (TYPE_LABELS[type] || type),
+    assignmentType: type,
+    referencedId: refOpts && refSel ? refSel : null,
+    notes: document.getElementById('ed-notes').value,
+    isAllDay: document.getElementById('ed-allday').checked,
+    isFlexible: document.getElementById('ed-flexible').checked,
+    showOnPrint: document.getElementById('ed-showprint').checked,
+    blockId: document.getElementById('ed-block').value
+  };
+
+  if (editingState.assignmentId) {
+    // Update the existing item to the first checked day; create new items for any additional days
+    A.updateRhythmAssignmentInState(appState, editingState.assignmentId,
+      Object.assign({}, baseFields, { dayId: checkedDays[0] }));
+    checkedDays.slice(1).forEach(function (dayId) {
+      A.addRhythmAssignmentToState(appState, Object.assign({}, baseFields, { dayId: dayId }));
+    });
+  } else {
+    checkedDays.forEach(function (dayId) {
+      A.addRhythmAssignmentToState(appState, Object.assign({}, baseFields, { dayId: dayId }));
+    });
+  }
+  saveBar.scheduleSave(appState);
+  closeEditor();
+  render();
+}
+
+function deleteEditorAssignment() {
+  if (!editingState.assignmentId) return;
+  var a = rhythm.assignments.find(function (x) { return x.id === editingState.assignmentId; });
+  var dayLabel = a ? (rhythm.days.find(function (d) { return d.id === a.dayId; }) || {}).label || a.dayId : 'this day';
+  var confirmed = window.confirm('Remove this item from ' + dayLabel + ' only? (To remove from other days, open and delete each day separately.) This will not delete any linked card, loop, or sequence.');
+  if (!confirmed) return;
+  A.deleteRhythmAssignmentFromState(appState, editingState.assignmentId);
+  saveBar.scheduleSave(appState);
+  closeEditor();
+  render();
+}
+
+document.getElementById('wr-cover-type').addEventListener('change', function () {
+  syncCoverTypeToEdType();
+});
+
+function syncCoverTypeToEdType() {
+  var coverType = document.getElementById('wr-cover-type').value;
+  var typeSel = document.getElementById('ed-type');
+  typeSel.value = coverType;
+  populateCoverPicker(null);
+}
+
+function populateCoverPicker(selectedId) {
+  var coverType = document.getElementById('wr-cover-type').value;
+  var picker = document.getElementById('wr-cover-picker');
+  // Update the hidden ed-type select to match
+  document.getElementById('ed-type').value = coverType;
+  // Populate the hidden ed-ref via populateRefSelect, then mirror into the visible picker
+  populateRefSelect(selectedId);
+  var opts = refOptionsForType(coverType);
+  if (!opts) {
+    picker.innerHTML = '';
+    return;
+  }
+  var sel = document.getElementById('ed-ref');
+  // Render a visible select that mirrors ed-ref
+  picker.innerHTML = '<label for="wr-cover-id">' + escapeHtml(TYPE_LABELS[coverType] || 'Linked item') + '</label>' +
+    '<select id="wr-cover-id"></select>';
+  var coverIdSel = document.getElementById('wr-cover-id');
+  coverIdSel.innerHTML = sel.innerHTML;
+  if (selectedId) coverIdSel.value = selectedId;
+  else coverIdSel.value = sel.value;
+  coverIdSel.addEventListener('change', function () {
+    sel.value = coverIdSel.value;
+    // Auto-populate label from selected item
+    var selectedOpt = coverIdSel.options[coverIdSel.selectedIndex];
+    var labelInp = document.getElementById('ed-label');
+    if (selectedOpt && selectedOpt.value && (!labelInp.value || labelInp.dataset.autoSet === '1')) {
+      labelInp.value = selectedOpt.textContent.trim();
+      labelInp.dataset.autoSet = '1';
+    }
+  });
+}
+
+document.getElementById('ed-type').addEventListener('change', function () { populateRefSelect(null); });
+document.getElementById('ed-cancel').addEventListener('click', closeEditor);
+document.getElementById('ed-save').addEventListener('click', saveEditor);
+document.getElementById('ed-delete').addEventListener('click', deleteEditorAssignment);
+document.getElementById('editor-overlay').addEventListener('click', function (e) {
+  if (e.target.id === 'editor-overlay') closeEditor();
+});
+
+function populateLensSelect() {
+  var sel = document.getElementById('lens-select');
+  var html = '<option value="all">Everyone</option>';
+  appState.students.forEach(function (s) { html += '<option value="student:' + s.id + '">' + escapeHtml(s.name) + '</option>'; });
+  appState.groups.forEach(function (g) { html += '<option value="group:' + g.id + '">' + escapeHtml(g.label) + '</option>'; });
+  sel.innerHTML = html;
+}
+
+function onLensChange() {
+  var v = document.getElementById('lens-select').value;
+  if (v === 'all') lens = { type: 'all' };
+  else {
+    var parts = v.split(':');
+    lens = { type: parts[0], id: parts[1] };
+  }
+  render();
+}
+
+function assignmentMatchesLens(a) {
+  if (lens.type === 'all') return true;
+  var participants = R.resolveRhythmAssignmentParticipants(a, context);
+  if (lens.type === 'student') return participants.indexOf(lens.id) > -1;
+  if (lens.type === 'group') {
+    var group = appState.groups.find(function (g) { return g.id === lens.id; });
+    return group ? group.studentIds.some(function (id) { return participants.indexOf(id) > -1; }) : false;
+  }
+  return true;
+}
+
+function approxDurationTag(a) {
+  var ltc = null;
+  if (a.assignmentType === 'card') {
+    var card = appState.cards.find(function (c) { return c.id === a.referencedId; });
+    if (card) ltc = card.lessonTimeConfig;
+  } else if (a.assignmentType === 'loop') {
+    var loop = appState.loops.find(function (l) { return l.id === a.referencedId; });
+    if (loop) {
+      // derive lessonTimeConfig from the first card linked to this loop
+      var loopCard = appState.cards.find(function (c) { return c.loopId === loop.id; });
+      if (loopCard) ltc = loopCard.lessonTimeConfig;
+    }
+  } else if (a.assignmentType === 'sequence') {
+    var seqCard = appState.cards.find(function (c) { return c.sequenceId === a.referencedId; });
+    if (seqCard) ltc = seqCard.lessonTimeConfig;
+  }
+  if (!ltc) return '';
+  var min = ltc.minMinutes, tgt = ltc.targetMinutes;
+  if (min && tgt && min !== tgt) return 'about ' + min + '–' + tgt + ' min';
+  if (tgt) return 'about ' + tgt + ' min';
+  return '';
+}
+
+function assignmentHTML(a) {
+  var typeCls = ['together', 'student', 'group', 'coop', 'custom'].indexOf(a.assignmentType) > -1 ? ' type-' + a.assignmentType : ' type-custom';
+  var cls = 'rasn' + typeCls + (a.isAllDay ? ' allday' : '') + (a.isFlexible ? ' flexible' : '');
+  var tags = [];
+  if (a.isAllDay) tags.push('all day');
+  if (a.isFlexible) tags.push('flexible');
+  if (!a.isAllDay && a.assignmentType !== 'custom') tags.push(TYPE_LABELS[a.assignmentType] || a.assignmentType);
+  var dur = approxDurationTag(a);
+  if (dur) tags.push(dur);
+  var coversSummary = '';
+  if (a.assignmentType === 'loop') {
+    var loop = appState.loops.find(function(l) { return l.id === a.referencedId; });
+    if (loop) {
+      var loopItemsList = (appState.loopItems || []).filter(function(li) { return li.loopId === loop.id; })
+        .sort(function(x, y) { return x.sortOrder - y.sortOrder; });
+      if (loopItemsList.length) {
+        var itemTitles = loopItemsList.map(function(li) { return li.title; }).join(', ');
+        coversSummary = '<div class="loop-covers-summary"><span class="loop-covers-toggle" onclick="this.parentElement.classList.toggle(\'open\')" title="Toggle loop items">▸ Covers</span><span class="loop-covers-list"> ' + escapeHtml(itemTitles) + '</span></div>';
+      }
+    }
+  }
+  return '<div class="' + cls + '" data-asn-id="' + escapeHtml(a.id) + '">' + escapeHtml(a.label) +
+    (tags.length ? '<span class="tag">' + escapeHtml(tags.join(' · ')) + '</span>' : '') +
+    coversSummary + '</div>';
+}
+
+function render() {
+  var days = rhythm.days.slice().sort(function (a, b) { return a.sortOrder - b.sortOrder; });
+  var blocks = rhythm.blocks.slice().sort(function (a, b) { return a.sortOrder - b.sortOrder; });
+
+  var head = document.getElementById('rhythm-head-row');
+  var headHtml = '<th class="row-head"></th>';
+  days.forEach(function (d) { headHtml += '<th>' + escapeHtml(d.label) + '</th>'; });
+  head.innerHTML = headHtml;
+
+  var body = document.getElementById('rhythm-body');
+  var html = '';
+  blocks.forEach(function (block) {
+    html += '<tr><th class="row-head" style="border-left:4px solid ' + (block.color || 'var(--lagoon-light)') + ';">' + escapeHtml(block.label) + '</th>';
+    days.forEach(function (day) {
+      var cell = R.getAssignmentsForCell(rhythm, day.id, block.id);
+      var anyMatch = cell.some(assignmentMatchesLens);
+      var cellCls = (lens.type !== 'all' && !anyMatch) ? ' dim-cell' : '';
+      html += '<td class="' + cellCls + '" data-day-id="' + escapeHtml(day.id) + '" data-block-id="' + escapeHtml(block.id) + '">'
+        + cell.map(assignmentHTML).join('')
+        + '<button class="add-cell-btn" data-day-id="' + escapeHtml(day.id) + '" data-block-id="' + escapeHtml(block.id) + '">+ Add rhythm item</button>'
+        + '</td>';
+    });
+    html += '</tr>';
+  });
+  body.innerHTML = html;
+
+  body.querySelectorAll('.rasn').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var a = rhythm.assignments.find(function (x) { return x.id === el.getAttribute('data-asn-id'); });
+      if (a) openEditor(a.dayId, a.blockId, a);
+    });
+  });
+  body.querySelectorAll('.add-cell-btn').forEach(function (el) {
+    el.addEventListener('click', function () {
+      openEditor(el.getAttribute('data-day-id'), el.getAttribute('data-block-id'), null);
+    });
+  });
+
+  renderReviewPanel();
+}
+
+function renderReviewPanel() {
+  var panel = document.getElementById('review-panel');
+  var reviewItems = A.getRhythmReviewItems(appState);
+  var cardsNoPlacement = A.getCardsWithoutRhythmPlacement(appState);
+  var loopsNoPlacement = A.getLoopsWithoutRhythmPlacement(appState);
+  var seqNoPlacement = A.getSequencesWithoutRhythmPlacement(appState);
+
+  var html = '';
+  if (reviewItems.length) {
+    html += '<div class="notice"><strong>Worth a second look (' + reviewItems.length + ')</strong><ul>';
+    reviewItems.forEach(function (a) {
+      html += '<li>' + escapeHtml(a.label || a.id) + ' — ' + escapeHtml(a.rhythmReviewReason) + '</li>';
+    });
+    html += '</ul></div>';
+  }
+  var placement = cardsNoPlacement.length + loopsNoPlacement.length + seqNoPlacement.length;
+  if (placement) {
+    html += '<div class="notice"><strong>Not placed in weekly rhythm yet (' + placement + ')</strong><ul>';
+    cardsNoPlacement.forEach(function (c) { html += '<li>' + escapeHtml(c.title) + '</li>'; });
+    loopsNoPlacement.forEach(function (l) { html += '<li>' + escapeHtml(l.title || l.id) + ' (loop)</li>'; });
+    seqNoPlacement.forEach(function (s) { html += '<li>' + escapeHtml(s.title || s.id) + ' (sequence)</li>'; });
+    html += '</ul></div>';
+  }
+  panel.innerHTML = html;
+}
+
+populateLensSelect();
+document.getElementById('lens-select').addEventListener('change', onLensChange);
+render();
+</script>
+</body>
+</html>

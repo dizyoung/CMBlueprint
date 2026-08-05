@@ -1,0 +1,1677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Family School Map — Static Prototype (hardcoded data, not wired to app)</title>
+<style>
+  :root {
+    --bible: #b5404f; --la: #e0b23c; --lit: #c97b6a; --hist: #7a8fae;
+    --sci: #5c9e8f; --math: #3f7a82; --beauty: #8a6fae; --geo: #2f6b5e;
+    --art: #b5708a; --pe: #6b9bd1; --lang: #c98a4a;
+    --border: #d8d8d8; --ink: #2c2c2c; --muted: #777;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, sans-serif; margin: 0; padding: 20px; background: #f7f7f5; color: var(--ink); }
+  .proto-banner { background: #fff3cd; border: 1px solid #e0c25c; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+
+  .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .toggle-group { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .toggle-group button { border: none; background: #fff; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+  .toggle-group button.active { background: var(--ink); color: #fff; }
+  .util-btn-proto { font-size: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }
+  .util-btn-proto.accent { border-color: #3568b0; color: #3568b0; }
+  select.lens-select { font-size: 12px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; }
+  .filters-row { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .filter-chip { font-size: 11px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 14px; background: #fff; cursor: pointer; color: var(--muted); }
+  .filter-chip.active { background: #2c2c2c; color: #fff; border-color: #2c2c2c; }
+  .legend { display: flex; gap: 12px; font-size: 11px; color: var(--muted); flex-wrap: wrap; margin-left: auto; }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .dot.book { background: #4a9b5e; }
+  .dot.needbook { background: #d9534f; }
+  .dot.practice { background: #888; }
+  .dot.coop { background: #5c8fc9; }
+  .dot.optional { background: #c9a45c; }
+  .dot.unplaced { background: #d9534f; border: 1px dashed #a33; }
+
+  .sample-note { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+
+  table.map { border-collapse: collapse; width: 100%; background: #fff; table-layout: fixed; }
+  table.map th, table.map td { border: 1px solid var(--border); vertical-align: top; }
+  table.map thead th { padding: 8px 6px; font-size: 12px; color: #fff; text-align: center; }
+  table.map th.row-head { background: #eee; color: var(--ink); text-align: left; padding: 8px; font-size: 12px; font-weight: 600; width: 110px; }
+  table.map td { padding: 6px; min-height: 40px; transition: background 0.15s; }
+  table.map td.unplaced-row { background: #fff7f6; }
+  table.map td.empty-cell { background: #fafafa; }
+  table.map td.drag-target { background: #e9f3ff; outline: 2px dashed #5c8fc9; }
+  table.map tr.row-hidden, table.map col.col-hidden { display: none; }
+
+  th.col-bible { background: var(--bible); } th.col-la { background: var(--la); color:#3a2f00; }
+  th.col-lit { background: var(--lit); } th.col-hist { background: var(--hist); }
+  th.col-sci { background: var(--sci); } th.col-math { background: var(--math); }
+  th.col-beauty { background: var(--beauty); } th.col-geo { background: var(--geo); }
+  th.col-art { background: var(--art); } th.col-pe { background: var(--pe); }
+  th.col-lang { background: var(--lang); }
+
+  .chip { border-radius: 6px; padding: 4px 6px; margin-bottom: 4px; font-size: 11px; line-height: 1.3; cursor: grab; position: relative; transition: opacity 0.15s, box-shadow 0.15s; }
+  .chip:last-child { margin-bottom: 0; }
+  .chip.dragging { opacity: 0.4; }
+  .chip.filtered-out { display: none; }
+  .chip-bible { background: #f7e3e5; border-left: 3px solid var(--bible); }
+  .chip-la { background: #fbf3da; border-left: 3px solid var(--la); }
+  .chip-lit { background: #f7e7e2; border-left: 3px solid var(--lit); }
+  .chip-hist { background: #e9edf3; border-left: 3px solid var(--hist); }
+  .chip-sci { background: #e4f1ec; border-left: 3px solid var(--sci); }
+  .chip-math { background: #e1eef0; border-left: 3px solid var(--math); }
+  .chip-beauty { background: #ece6f5; border-left: 3px solid var(--beauty); }
+  .chip-geo { background: #e1ede8; border-left: 3px solid var(--geo); }
+  .chip-art { background: #f5e3ec; border-left: 3px solid var(--art); }
+  .chip-pe { background: #e3edf7; border-left: 3px solid var(--pe); }
+  .chip-lang { background: #f7ecdf; border-left: 3px solid var(--lang); }
+
+  body.lens-active .chip { opacity: 0.28; filter: grayscale(40%); }
+  body.lens-active .chip.lens-match { opacity: 1; filter: none; box-shadow: 0 0 0 2px var(--lens-color, #333) inset; }
+
+  .chip-title { font-weight: 600; display: flex; align-items: center; gap: 4px; }
+  .chip-sub { color: var(--muted); font-size: 10px; margin-top: 1px; }
+  .chip-tag { font-size: 9px; background: rgba(0,0,0,0.08); border-radius: 6px; padding: 0 5px; margin-left: auto; white-space: nowrap; }
+  .strand-badge { font-size: 9px; background: rgba(0,0,0,0.55); color: #fff; border-radius: 6px; padding: 0 5px; white-space: nowrap; }
+  .starter-badge { font-size: 8px; background: #eef4ff; color: #3568b0; border-radius: 6px; padding: 0 5px; margin-left: 4px; }
+
+  .chip-detail { display: none; margin-top: 4px; padding-top: 4px; border-top: 1px dashed rgba(0,0,0,0.15); font-size: 10px; }
+  .chip.expanded .chip-detail { display: block; }
+  .seq-item { display: flex; justify-content: space-between; gap: 6px; padding: 1px 0; }
+  .seq-item .marker { flex-shrink: 0; width: 14px; }
+  .seq-item.current { font-weight: 600; }
+  .seq-item.done { color: var(--muted); text-decoration: line-through; }
+  .seq-item.upnext { color: var(--muted); }
+
+  .participants-row { display: none; gap: 3px; margin-top: 3px; }
+  .detailed .participants-row { display: flex; }
+  .p-dot { width: 14px; height: 14px; border-radius: 50%; font-size: 8px; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
+
+  .compact .chip-sub.full-detail { display: none; }
+  .compact .chip { padding: 3px 5px; }
+
+  .add-cell { font-size: 11px; color: var(--muted); text-align: center; padding: 8px 4px; border: 1px dashed var(--border); border-radius: 6px; cursor: pointer; }
+  .add-cell:hover { background: #eef4ff; color: #3568b0; border-color: #3568b0; }
+  td:not(.empty-cell) .add-cell { margin-top: 4px; font-size: 9px; padding: 2px 4px; opacity: 0.6; }
+  td:not(.empty-cell) .add-cell:hover { opacity: 1; }
+
+  /* ---- card editor mockup: guided steps ---- */
+  .editor-mock { position: fixed; right: 20px; bottom: 20px; width: 320px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 14px; font-size: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); display: none; max-height: 88vh; overflow-y: auto; }
+  .editor-mock.show { display: block; }
+  .editor-mock h4 { margin: 0 0 10px; font-size: 13px; }
+  .editor-step { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #f0f0f0; }
+  .editor-step .step-q { font-size: 11px; font-weight: 600; margin-bottom: 5px; }
+  .editor-step .step-q .step-num { display: inline-flex; width: 16px; height: 16px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 9px; align-items: center; justify-content: center; margin-right: 5px; }
+  .editor-mock select, .editor-mock input { width: 100%; font-size: 11px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; margin-top: 4px; }
+  .editor-mock .close { position: absolute; top: 8px; right: 10px; cursor: pointer; color: var(--muted); font-size: 14px; }
+  .editor-mock .conditional { padding: 8px; background: #f5f8fc; border-radius: 6px; margin-top: 6px; }
+  .editor-mock .conditional.hidden { display: none; }
+  .day-picker { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+  .day-pick { font-size: 10px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 4px; background: #fff; cursor: pointer; }
+  .day-pick.on { background: var(--ink); color: #fff; }
+  .more-options-toggle { font-size: 10px; color: #3568b0; cursor: pointer; margin-top: 6px; display: inline-block; }
+  .more-options { display: none; margin-top: 6px; }
+  .more-options.show { display: block; }
+  .editor-note { font-size: 10px; color: var(--muted); margin-top: 10px; font-style: italic; border-top: 1px solid var(--border); padding-top: 8px; }
+  .seq-edit-row { display: flex; align-items: center; gap: 6px; font-size: 10px; padding: 3px 0; }
+  .seq-edit-row .grip { cursor: grab; color: var(--muted); }
+  .seq-edit-row.current-seq { font-weight: 600; }
+  .res-row { display: flex; gap: 6px; align-items: baseline; font-size: 10px; padding: 2px 0; }
+  .res-row .marker { width: 16px; flex-shrink: 0; }
+  .res-row .res-detail { color: var(--muted); }
+  .participant-checks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .pcheck { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; border: 1px solid var(--border); border-radius: 12px; padding: 2px 8px 2px 4px; }
+  .pcheck .p-dot { width: 14px; height: 14px; }
+
+  /* ---- side panels: customize family/subjects, starter cards, print options ---- */
+  .side-panel { position: fixed; left: 20px; bottom: 20px; width: 320px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 14px; font-size: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); display: none; max-height: 80vh; overflow-y: auto; }
+  .side-panel.show { display: block; }
+  .side-panel h4 { margin: 0 0 4px; font-size: 13px; }
+  .side-panel .panel-help { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+  .side-panel .close { position: absolute; top: 8px; right: 10px; cursor: pointer; color: var(--muted); font-size: 14px; }
+  .cust-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid #f0f0f0; }
+  .cust-row .swatch { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; cursor: pointer; }
+  .cust-row .name { flex: 1; font-size: 12px; }
+  .cust-row .members { font-size: 10px; color: var(--muted); }
+  .cust-row .actions { display: flex; gap: 4px; }
+  .cust-row .actions button { font-size: 10px; border: none; background: none; color: #3568b0; cursor: pointer; padding: 2px 4px; }
+  .cust-add { width: 100%; margin-top: 8px; padding: 6px; border: 1px dashed var(--border); border-radius: 6px; background: none; color: var(--muted); font-size: 11px; cursor: pointer; }
+  .cust-add:hover { background: #eef4ff; color: #3568b0; }
+  .cust-visible { margin-left: auto; font-size: 9px; color: var(--muted); }
+
+  .starter-subject-group { margin-bottom: 10px; }
+  .starter-subject-group h5 { font-size: 11px; margin: 0 0 4px; padding: 3px 6px; border-radius: 4px; color: #fff; }
+  .starter-card-row { display: flex; align-items: center; justify-content: space-between; padding: 3px 6px; font-size: 11px; border-radius: 4px; }
+  .starter-card-row:hover { background: #f5f8fc; }
+  .starter-card-row .meta { font-size: 9px; color: var(--muted); }
+  .starter-card-row button { font-size: 10px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 10px; background: #fff; cursor: pointer; }
+  .starter-card-row button:hover { background: #eef4ff; border-color: #3568b0; color: #3568b0; }
+
+  .print-opt-section { margin-bottom: 10px; }
+  .print-opt-section label { display: block; font-size: 11px; margin: 3px 0; }
+  .col-check-grid, .row-check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+  .col-check-grid label, .row-check-grid label { font-size: 10px; }
+
+  /* ---- print: top-level mode cards (calm first decision) ---- */
+  .print-mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 4px; }
+  .print-mode-card { border: 1px solid var(--border); border-radius: 8px; padding: 8px; cursor: pointer; }
+  .print-mode-card.selected { border-color: #3568b0; background: #f5f8fc; box-shadow: 0 0 0 1px #3568b0 inset; }
+  .print-mode-card .opt-title { font-weight: 600; font-size: 11px; }
+  .print-mode-card .opt-desc { font-size: 9.5px; color: var(--muted); margin-top: 3px; line-height: 1.3; }
+
+  .more-settings-toggle { font-size: 11px; color: #3568b0; cursor: pointer; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+  .more-settings-body { display: none; margin-top: 8px; }
+  .more-settings-body.show { display: block; }
+
+  /* ---- Book & Resource List ---- */
+  .res-group { margin-bottom: 12px; }
+  .res-group h5 { font-size: 11px; margin: 0 0 5px; padding: 3px 6px; border-radius: 4px; color: #fff; }
+  .res-group h5.status-head { background: #555; }
+  .res-card { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; font-size: 11px; }
+  .res-card-title { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .res-status-tag { font-size: 9px; border-radius: 6px; padding: 1px 6px; margin-left: auto; background: #eee; color: #555; white-space: nowrap; }
+  .res-status-tag.status-need-to-buy { background: #fde2e2; color: #a33; }
+  .res-status-tag.status-have-it { background: #e3f3e6; color: #2f7a3d; }
+  .res-status-tag.status-coop-provided { background: #e3edf7; color: #33588f; }
+  .res-status-tag.status-undecided { background: #fff3cd; color: #8a6d1f; }
+  .res-use-line { font-size: 10px; color: var(--muted); padding: 1px 0; }
+  .res-use-who { color: #999; }
+  .res-status-tag.status-need-to-choose { background: #f3d9c4; color: #8a4a1f; }
+  #resource-list-panel { width: 360px; }
+  .res-tab-row { margin-bottom: 10px; }
+
+  /* ---- printed resource checklist (portrait) ---- */
+  .res-print-header { margin-bottom: 16px; }
+  .res-print-h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .res-print-header div { font-size: 11px; color: var(--muted); }
+  .res-print-sub { margin-top: 4px; font-style: italic; }
+  .res-print-row { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid #eee; }
+  .res-checkbox { font-size: 14px; line-height: 1.2; flex-shrink: 0; }
+  .res-print-fields { font-size: 11px; line-height: 1.5; }
+  .res-print-title { font-weight: 700; font-size: 12px; }
+
+  /* ---- model notes panel ---- */
+  .mn-section { margin-bottom: 16px; }
+  .mn-section h5 { font-size: 12px; margin: 0 0 6px; }
+  .mn-section p { font-size: 11px; color: var(--muted); margin: 0 0 6px; }
+  table.mn-table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin-bottom: 4px; }
+  table.mn-table th, table.mn-table td { border: 1px solid var(--border); padding: 4px 6px; text-align: left; vertical-align: top; }
+  table.mn-table th { background: #f0f0f0; font-size: 10px; }
+  .mn-warning { font-size: 11px; padding: 5px 8px; border-radius: 6px; background: #fff7e6; border: 1px solid #e0c25c; margin-bottom: 5px; }
+  .mn-status-tag { font-size: 9px; border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
+  .mn-status-supported { background: #e3f3e6; color: #2f7a3d; }
+  .mn-status-change { background: #fde2e2; color: #a33; }
+  .mn-status-deferred { background: #eee; color: #666; }
+  .mn-workload-row { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0; border-bottom: 1px dashed #eee; }
+
+  /* ===================== PRINT ===================== */
+  @media print {
+    body { background: #fff; padding: 0; }
+    /* Map prints landscape (it's a wide grid); the Book & Resource List
+       prints portrait (it's a vertical checklist) via a named page below. */
+    @page { size: landscape; margin: 0.4in; }
+    @page resource-page { size: portrait; margin: 0.5in; }
+    body.print-resources #resource-print-render { page: resource-page; }
+    .proto-banner, .toolbar, .filters-row, .editor-mock, .side-panel, .add-cell, .sample-note { display: none !important; }
+    body.lens-active .chip { opacity: 1 !important; filter: none !important; box-shadow: none !important; }
+    table.map { font-size: 10px; }
+    .chip { cursor: default; }
+
+    /* Detailed map print (default): expand everything */
+    .chip-detail { display: block !important; }
+    .chip-sub.full-detail { display: block !important; }
+    .participants-row { display: flex !important; }
+
+    /* One-page overview print mode: collapse back down to summary-only */
+    body.print-overview table.map { font-size: 8.5px; }
+    body.print-overview .chip-detail { display: none !important; }
+    body.print-overview .chip-sub.full-detail { display: none !important; }
+    body.print-overview .participants-row { display: none !important; }
+    body.print-overview .chip { padding: 2px 4px; margin-bottom: 2px; }
+    body.print-overview .strand-badge, body.print-overview .starter-badge { display: none; }
+
+    /* Student view print: hide non-matching cards entirely instead of dimming */
+    body.print-student-only .chip:not(.lens-match) { display: none !important; }
+
+    /* Hidden rows/cols/optional row per print options (also used for student "Include" categories) */
+    body.print-hide-optional tr[data-row-id="optional"] { display: none !important; }
+    .row-hidden-print, .col-hidden-print { display: none !important; }
+
+    /* Book & Resource List print: hide the map entirely, show the rolled-up resource render */
+    #resource-print-render { display: none; }
+    body.print-resources table.map { display: none !important; }
+    body.print-resources #resource-print-render { display: block !important; }
+    body.print-resources .res-card { font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="proto-banner">
+  <strong>Static prototype — hardcoded sample data only.</strong> Nothing here is wired to real app state, localStorage, or logic.mjs.
+  Visual checkpoint for Charlotte Mason starter cards, plain-language scheduling, a guided card editor, a calm Print screen, and a Book &amp; Resource List rolled up from the plan — before any data-model migration.
+</div>
+<div id="resource-print-render" style="display:none;"></div>
+
+<h1>Family School Map</h1>
+<p class="sub">Rows show who it's for. Columns show subjects. Cards show what your family has chosen.</p>
+
+<div class="toolbar">
+  <div class="toggle-group" id="density-toggle">
+    <button class="active" data-mode="compact">Compact</button>
+    <button data-mode="detailed">Detailed</button>
+  </div>
+  <div class="toggle-group" id="sample-toggle">
+    <button class="active" data-sample="simple">Simple sample</button>
+    <button data-sample="full">Full family sample</button>
+  </div>
+  <label style="font-size:12px;display:flex;align-items:center;gap:6px;">Lens
+    <select class="lens-select" id="lens-select" onchange="onLensChange()"></select>
+  </label>
+  <button class="util-btn-proto accent" onclick="openStarterCards()">Add from Charlotte Mason starter cards</button>
+  <button class="util-btn-proto" onclick="openCustomize('family')">Customize family</button>
+  <button class="util-btn-proto" onclick="openCustomize('subjects')">Customize subjects</button>
+  <button class="util-btn-proto" onclick="openResourceList('subject')">Book &amp; Resource List</button>
+  <button class="util-btn-proto" onclick="openPrintOptions()">Print…</button>
+  <button class="util-btn-proto" onclick="openModelNotes()">Model notes &amp; Phase 0 readiness</button>
+  <div class="legend">
+    <span><span class="dot book"></span> has resource</span>
+    <span><span class="dot needbook"></span> needs resource</span>
+    <span><span class="dot practice"></span> practice</span>
+    <span><span class="dot coop"></span> outside/co-op</span>
+    <span><span class="dot optional"></span> optional</span>
+    <span><span class="dot unplaced"></span> needs placement</span>
+  </div>
+</div>
+
+<div class="filters-row" id="filters-row"></div>
+
+<p class="sample-note" id="sample-note"></p>
+
+<table class="map" id="map-table">
+  <thead><tr id="map-head-row"><th class="row-head" style="background:#fff;"></th></tr></thead>
+  <tbody id="map-body"></tbody>
+</table>
+
+<!-- ===================== Card editor mockup — guided steps ===================== -->
+<div class="editor-mock" id="editor-mock">
+  <span class="close" onclick="closeEditor()">✕</span>
+  <h4 id="editor-title">Card details</h4>
+
+  <div class="editor-step">
+    <div class="step-q"><span class="step-num">1</span>Who is this for?</div>
+    <select id="ed-audience" onchange="renderEditorConditionals()">
+      <option value="together">Together</option>
+      <option value="group">A group (e.g. Older Students)</option>
+      <option value="form">A Form</option>
+      <option value="child">One child</option>
+      <option value="coop">Handled outside home</option>
+      <option value="optional">Optional / not this year</option>
+    </select>
+    <div class="participant-checks" id="ed-participants"></div>
+  </div>
+
+  <div class="editor-step">
+    <div class="step-q"><span class="step-num">2</span>What subject does it belong to?</div>
+    <select id="ed-subject"><option>Bible</option><option>Language Arts</option><option>Literature</option><option>History</option><option>Science / Natural History</option><option>Math</option><option>Beauty</option><option>Geography / Citizenship</option><option>Arts / Handicrafts</option><option>PE / Health</option><option>Languages</option><option>+ Custom subject…</option></select>
+  </div>
+
+  <div class="editor-step">
+    <div class="step-q"><span class="step-num">3</span>What resources are you using?</div>
+    <div id="ed-res-standalone"><input type="text" id="ed-res-title" placeholder="Resource title, e.g. Math-U-See Delta">
+      <select id="ed-res-type" style="margin-top:4px;"><option>Book</option><option>Lesson book</option><option>Practice</option><option>Website</option><option>External</option><option>No resource needed</option></select>
+    </div>
+    <div id="ed-res-sequence" class="conditional hidden"><div id="ed-res-seq-list"></div>
+      <button class="cust-add" style="margin-top:6px;" onclick="alert('Mockup only: would add another resource to this sequence.')">+ Add another resource</button></div>
+    <div id="ed-res-loop" class="conditional hidden"><div id="ed-res-loop-list"></div></div>
+  </div>
+
+  <div class="editor-step" style="border-bottom:none;margin-bottom:0;">
+    <div class="step-q"><span class="step-num">4</span>How should this show up in your week?</div>
+    <select id="ed-schedule" onchange="renderEditorConditionals()">
+      <option value="weekly">A few times each week</option>
+      <option value="fixed">On certain days</option>
+      <option value="loop">As part of a loop</option>
+      <option value="sequence">One after another</option>
+      <option value="practice">Practice habit</option>
+      <option value="coop">Handled outside home</option>
+      <option value="manual">Keep on the map only</option>
+    </select>
+
+    <div class="conditional hidden" id="sched-weekly">
+      <label style="font-size:10px;color:var(--muted);">How many times each week?</label>
+      <input type="number" value="3" min="1" max="7">
+      <label style="font-size:10px;margin-top:6px;"><input type="checkbox" checked style="width:auto;display:inline;"> Show on the daily checklist</label>
+      <div class="more-options-toggle" onclick="this.nextElementSibling.classList.toggle('show')">More options ▾
+        <div class="more-options"><label style="font-size:10px;"><input type="checkbox" style="width:auto;display:inline;"> Spread evenly through the week</label>
+          <label style="font-size:10px;">Avoid certain days<div class="day-picker">M T W Th F Sa Su</div></label></div>
+      </div>
+    </div>
+
+    <div class="conditional hidden" id="sched-fixed">
+      <label style="font-size:10px;color:var(--muted);">Choose days</label>
+      <div class="day-picker" id="ed-day-picker"></div>
+      <label style="font-size:10px;margin-top:6px;"><input type="checkbox" checked style="width:auto;display:inline;"> Show on the daily checklist</label>
+    </div>
+
+    <div class="conditional hidden" id="sched-loop">
+      <label style="font-size:10px;color:var(--muted);">Which loop?</label>
+      <select><option>Bible Loop</option><option>Beauty Loop</option><option>Writing Loop</option><option>Reading Loop</option><option>+ Create new loop…</option></select>
+      <label style="font-size:10px;margin-top:6px;">Turns per week (for this loop, not this item)</label>
+      <input type="number" value="4" min="1" max="7">
+      <div class="more-options-toggle" onclick="this.nextElementSibling.classList.toggle('show')">More options — loop order &amp; advance rule ▾
+        <div class="more-options">
+          <label style="font-size:10px;">Loop order &amp; items</label>
+          <div id="ed-loop-order"></div>
+          <label style="font-size:10px;margin-top:6px;">Advance when…</label>
+          <select><option>Checked off on Today</option><option>Manually, by parent</option><option>On its scheduled day</option></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="conditional hidden" id="sched-sequence">
+      <label style="font-size:10px;color:var(--muted);">Order of items</label>
+      <div id="ed-seq-list"></div>
+      <label style="font-size:10px;margin-top:6px;"><input type="checkbox" checked style="width:auto;display:inline;"> Show next item on the daily checklist</label>
+    </div>
+
+    <div class="conditional hidden" id="sched-practice">
+      <label style="font-size:10px;color:var(--muted);">How often?</label>
+      <input type="text" placeholder="e.g. daily, 3x/week">
+      <label style="font-size:10px;margin-top:6px;"><input type="checkbox" style="width:auto;display:inline;"> Needs a resource</label>
+      <label style="font-size:10px;margin-top:4px;"><input type="checkbox" checked style="width:auto;display:inline;"> Track as a checkoff only</label>
+    </div>
+
+    <div class="conditional hidden" id="sched-coop">
+      <label style="font-size:10px;color:var(--muted);">Who participates?</label>
+      <div class="participant-checks" id="ed-coop-participants"></div>
+      <label style="font-size:10px;margin-top:6px;">Provider / location <span style="color:#aaa;">(optional)</span></label>
+      <input type="text" placeholder="e.g. Tuesday co-op">
+      <label style="font-size:10px;margin-top:4px;">Day / time <span style="color:#aaa;">(optional)</span></label>
+      <input type="text" placeholder="e.g. Wednesdays 1pm">
+      <label style="font-size:10px;margin-top:6px;"><input type="checkbox" style="width:auto;display:inline;"> Include on Today</label>
+    </div>
+
+    <div class="conditional hidden" id="sched-manual">
+      <label style="font-size:10px;color:var(--muted);">Notes</label>
+      <input type="text" placeholder="Reference / not on Today unless you choose">
+    </div>
+  </div>
+
+  <div class="editor-note">Mockup only — fields are not functional in this prototype. Advanced loop/sequence detail stays behind "More options," never shown by default in the main grid.</div>
+</div>
+
+<!-- ===================== Charlotte Mason starter cards picker ===================== -->
+<div class="side-panel" id="starter-panel">
+  <span class="close" onclick="closePanels()">✕</span>
+  <h4>Add from Charlotte Mason starter cards</h4>
+  <p class="panel-help">These are suggested starting points, not required curriculum. Add any you want, then rename, move, loop, sequence, hide, or delete them freely.</p>
+  <div id="starter-card-list"></div>
+</div>
+
+<!-- ===================== Customize family mockup ===================== -->
+<div class="side-panel" id="customize-family">
+  <span class="close" onclick="closePanels()">✕</span>
+  <h4>Customize family</h4>
+  <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Students</div>
+  <div id="cust-students"></div>
+  <button class="cust-add" onclick="alert('Mockup only: would add a new student.')">+ Add student</button>
+
+  <div style="font-size:11px;color:var(--muted);margin:14px 0 6px;">Groups</div>
+  <div id="cust-groups"></div>
+  <button class="cust-add" onclick="alert('Mockup only: would add a new custom group.')">+ Add group</button>
+</div>
+
+<!-- ===================== Customize subjects mockup ===================== -->
+<div class="side-panel" id="customize-subjects">
+  <span class="close" onclick="closePanels()">✕</span>
+  <h4>Customize subjects</h4>
+  <div id="cust-subjects"></div>
+  <button class="cust-add" onclick="alert('Mockup only: would add a new subject column.')">+ Add subject column</button>
+</div>
+
+<!-- ===================== Print mockup — calm top-level choice first ===================== -->
+<div class="side-panel" id="print-options-panel">
+  <span class="close" onclick="closePanels()">✕</span>
+  <h4>Print</h4>
+  <p class="panel-help">Choose what you'd like to print.</p>
+
+  <div class="print-mode-grid">
+    <div class="print-mode-card" data-mode="overview" onclick="selectPrintMode('overview')">
+      <div class="opt-title">One-page family overview</div>
+      <div class="opt-desc">Best for seeing the whole family plan at a glance.</div>
+    </div>
+    <div class="print-mode-card" data-mode="student" onclick="selectPrintMode('student')">
+      <div class="opt-title">Student overview</div>
+      <div class="opt-desc">Best for seeing everything one child is doing.</div>
+    </div>
+    <div class="print-mode-card" data-mode="detailed" onclick="selectPrintMode('detailed')">
+      <div class="opt-title">Detailed planning map</div>
+      <div class="opt-desc">Best for binder/reference pages.</div>
+    </div>
+    <div class="print-mode-card" data-mode="resources" onclick="selectPrintMode('resources')">
+      <div class="opt-title">Book &amp; Resource List</div>
+      <div class="opt-desc">Best for gathering books, ordering, library holds, and checking what each child needs.</div>
+    </div>
+  </div>
+
+  <!-- Student overview: include/exclude, not just "apply the lens" -->
+  <div class="print-opt-section" id="print-student-block" style="display:none;">
+    <label style="font-size:11px;font-weight:600;">Choose student</label>
+    <select id="print-student-pick"></select>
+    <label style="font-size:11px;font-weight:600;margin-top:8px;">Include</label>
+    <label style="font-size:11px;"><input type="checkbox" class="pinc" data-key="together" checked style="width:auto;display:inline;"> Together work</label>
+    <label style="font-size:11px;"><input type="checkbox" class="pinc" data-key="group" checked style="width:auto;display:inline;"> Group work</label>
+    <label style="font-size:11px;"><input type="checkbox" class="pinc" data-key="coop" checked style="width:auto;display:inline;"> Co-op / outside work</label>
+    <label style="font-size:11px;"><input type="checkbox" class="pinc" data-key="individual" checked style="width:auto;display:inline;"> Individual work</label>
+    <label style="font-size:11px;"><input type="checkbox" class="pinc" data-key="optional" style="width:auto;display:inline;"> Optional / not this year</label>
+  </div>
+
+  <!-- Book & Resource List: its own simple choices, hidden until selected -->
+  <div class="print-opt-section" id="print-resource-block" style="display:none;">
+    <label style="font-size:11px;font-weight:600;">Group by</label>
+    <select id="print-res-groupby">
+      <option value="subject">Subject</option>
+      <option value="student">Student</option>
+      <option value="status">Status</option>
+    </select>
+    <label style="font-size:11px;font-weight:600;margin-top:8px;">Include</label>
+    <label style="font-size:11px;"><input type="checkbox" class="rinc" data-key="together" checked style="width:auto;display:inline;"> Together work</label>
+    <label style="font-size:11px;"><input type="checkbox" class="rinc" data-key="group" checked style="width:auto;display:inline;"> Group work</label>
+    <label style="font-size:11px;"><input type="checkbox" class="rinc" data-key="coop" checked style="width:auto;display:inline;"> Co-op / outside work</label>
+    <label style="font-size:11px;"><input type="checkbox" class="rinc" data-key="individual" checked style="width:auto;display:inline;"> Individual work</label>
+    <label style="font-size:11px;"><input type="checkbox" class="rinc" data-key="optional" style="width:auto;display:inline;"> Optional / not this year</label>
+    <label style="font-size:11px;"><input type="checkbox" class="rinc" data-key="unplaced" checked style="width:auto;display:inline;"> Needs Placement</label>
+    <label style="font-size:11px;font-weight:600;margin-top:8px;">Filter</label>
+    <select id="print-res-filter">
+      <option value="all">All statuses</option>
+      <option value="need">Only things I need to get</option>
+      <option value="missing">Only missing/undecided resources</option>
+      <option value="student">Only one student…</option>
+      <option value="subject">Only one subject…</option>
+    </select>
+  </div>
+
+  <!-- Everything else stays tucked away until asked for -->
+  <div class="more-settings-toggle" id="more-settings-toggle" onclick="toggleMoreSettings()">More print settings ▾</div>
+  <div class="more-settings-body" id="more-settings-body">
+    <div class="print-opt-section">
+      <label style="font-size:11px;font-weight:600;">Choose rows</label>
+      <div class="row-check-grid" id="print-row-checks"></div>
+    </div>
+    <div class="print-opt-section">
+      <label style="font-size:11px;font-weight:600;">Choose subjects</label>
+      <div class="col-check-grid" id="print-col-checks"></div>
+    </div>
+    <div class="print-opt-section">
+      <label style="font-size:11px;"><input type="checkbox" id="print-hide-optional" style="width:auto;display:inline;" checked> Hide "Optional / not this year" row</label>
+      <label style="font-size:11px;"><input type="checkbox" id="print-hide-empty" style="width:auto;display:inline;" checked> Hide empty rows/columns</label>
+      <label style="font-size:11px;"><input type="checkbox" id="print-compact" style="width:auto;display:inline;" checked> Compact cards (collapse loops/sequences to summary)</label>
+    </div>
+  </div>
+
+  <button class="util-btn-proto accent" style="width:100%;margin-top:10px;" id="print-apply-btn" onclick="applyPrintOptionsAndPrint()">Print preview</button>
+  <div class="editor-note">For large or dense plans, an exact one-page fit can't always be guaranteed — rows, subjects, and compact mode (under "More print settings") are the levers for getting close.</div>
+</div>
+
+<!-- ===================== Book & Resource List — rolled up from the plan ===================== -->
+<div class="side-panel" id="resource-list-panel">
+  <span class="close" onclick="closePanels()">✕</span>
+  <h4>Book &amp; Resource List</h4>
+  <p class="panel-help">Rolled up automatically from every standalone card, loop item, and sequence item in your plan — nothing here is re-entered by hand.</p>
+  <div class="toggle-group res-tab-row" id="res-group-tabs">
+    <button class="active" data-group="subject">By subject</button>
+    <button data-group="student">By student</button>
+    <button data-group="status">By status</button>
+  </div>
+  <div id="resource-list-body"></div>
+</div>
+
+<!-- ===================== Model notes & Phase 0 readiness ===================== -->
+<!-- Static, read-only prototype content. No scheduling math, warnings, or
+     workload computation is wired up yet — these are model/planning notes
+     per the explicit instruction to defer that build until Phase 0+. -->
+<div class="side-panel" id="model-notes-panel" style="width:420px;">
+  <span class="close" onclick="closePanels()">✕</span>
+  <h4>Model notes &amp; Phase 0 readiness</h4>
+  <p class="panel-help">Planning notes only — nothing on this panel is computed or enforced in this prototype.</p>
+  <div id="model-notes-body"></div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// HARDCODED SAMPLE DATA — internal shape mirrors PlanItem / PlanStrand /
+// Student / Group / Subject / Resource / StarterCardTemplate, but all
+// visible UI text uses parent-facing language only. Not parsed from or
+// written to real app state.
+// ---------------------------------------------------------------------------
+
+// gradeBand: 'form1' (Grades 1-3), 'form2' (Grades 4-6), 'form3' (Grades 7-9).
+// Used only for age-stage time guardrails and mixed-age group lesson-length
+// suggestions in this prototype — not wired to any real scheduling math yet.
+var STUDENTS = [
+  { id: 'charis', name: 'Charis', color: '#e08a3c', initials: 'C', gradeBand: 'form1', gradeLabel: 'Grade 2 / Form I' },
+  { id: 'kayla', name: 'Kayla', color: '#5c9e8f', initials: 'K', gradeBand: 'form1', gradeLabel: 'Grade 3 / Form I' },
+  { id: 'lucy', name: 'Lucy', color: '#b5708a', initials: 'L', gradeBand: 'form2', gradeLabel: 'Grade 5 / Form II' },
+  { id: 'jeremiah', name: 'Jeremiah', color: '#3f7a82', initials: 'J', gradeBand: 'form3', gradeLabel: 'Grade 7 / Form III' }
+];
+function studentsById(id) { return STUDENTS.find(function (s) { return s.id === id; }); }
+function allStudentIds() { return STUDENTS.map(function (s) { return s.id; }); }
+
+var GROUPS = [
+  { id: 'littles', label: 'Littles Together', studentIds: ['charis', 'kayla'] },
+  { id: 'older', label: 'Older Students', studentIds: ['lucy', 'jeremiah'] }
+];
+function groupById(id) { return GROUPS.find(function (g) { return g.id === id; }); }
+
+var COLS_SIMPLE = [
+  { id: 'bible', label: 'Bible', visible: true },
+  { id: 'la', label: 'Language Arts', visible: true },
+  { id: 'lit', label: 'Literature', visible: true },
+  { id: 'hist', label: 'History', visible: true },
+  { id: 'sci', label: 'Science / Nat. History', visible: true },
+  { id: 'math', label: 'Math', visible: true },
+  { id: 'beauty', label: 'Beauty', visible: true },
+  { id: 'geo', label: 'Geography / Citizenship', visible: true }
+];
+var COLS_FULL = COLS_SIMPLE.concat([
+  { id: 'art', label: 'Arts / Handicrafts', visible: true },
+  { id: 'pe', label: 'PE / Health', visible: true },
+  { id: 'lang', label: 'Languages', visible: true }
+]);
+
+var ROWS = [
+  { id: 'together', label: 'Together' },
+  { id: 'littles', label: 'Littles Together' },
+  { id: 'older', label: 'Older Students' },
+  { id: 'lucy', label: 'Lucy' },
+  { id: 'jeremiah', label: 'Jeremiah' },
+  { id: 'coop', label: 'Co-op / External' },
+  { id: 'optional', label: 'Optional / Not this year' },
+  { id: 'unplaced', label: 'Needs Placement' }
+];
+
+// ---------------------------------------------------------------------------
+// Charlotte Mason starter card templates — suggestions only, not mandatory.
+// Grouped by subject column. Each has a likely audience/schedule hint shown
+// in the picker; accepting one would create an editable card, same as any
+// other card the family builds from scratch.
+// ---------------------------------------------------------------------------
+var STARTER_TEMPLATES = {
+  bible: [
+    { label: 'Old Testament', hint: 'Often part of a Bible loop', resource: true, loopish: true },
+    { label: 'New Testament / Gospels', hint: 'Often part of a Bible loop', resource: true, loopish: true },
+    { label: 'Psalms + Proverbs', hint: 'Often part of a Bible loop', resource: true, loopish: true },
+    { label: 'Theology / Doctrine', hint: 'A few times each week', resource: true },
+    { label: 'Catechism', hint: 'Practice habit', practiceable: true },
+    { label: 'Scripture Memory', hint: 'Practice habit', practiceable: true },
+    { label: 'Devotional / Private Reading', hint: 'A few times each week, individual', resource: true }
+  ],
+  hist: [
+    { label: 'Own-Country History', hint: 'A few times each week, or part of a history loop', resource: true, loopish: true },
+    { label: 'Neighboring-Country History', hint: 'Often paired with own-country in a loop', resource: true, loopish: true },
+    { label: 'Ancient History', hint: 'One after another, by era', resource: true, sequenceish: true },
+    { label: 'General / World History', hint: 'A few times each week', resource: true },
+    { label: 'Church History', hint: 'A few times each week', resource: true },
+    { label: 'Historical Biography', hint: 'One after another', resource: true, sequenceish: true },
+    { label: 'Historical Fiction', hint: 'One after another', resource: true, sequenceish: true },
+    { label: 'Book of Centuries', hint: 'Practice habit, pairs with history', practiceable: true },
+    { label: 'Timeline / History Chart', hint: 'Practice habit', practiceable: true },
+    { label: 'Map Work tied to History', hint: 'Practice habit', practiceable: true }
+  ],
+  geo: [
+    { label: 'Geography Reader', hint: 'A few times each week', resource: true },
+    { label: 'Map Questions', hint: 'Practice habit', practiceable: true },
+    { label: 'Map Drawing', hint: 'Practice habit', practiceable: true },
+    { label: 'Physical Geography', hint: 'A few times each week', resource: true },
+    { label: 'Local Geography', hint: 'A few times each week', resource: true },
+    { label: 'World Geography', hint: 'A few times each week', resource: true },
+    { label: 'Neighboring Lands', hint: 'A few times each week', resource: true },
+    { label: 'Travel / Peoples / Cultures', hint: 'A few times each week', resource: true },
+    { label: 'Plutarch', hint: 'One after another', resource: true, sequenceish: true },
+    { label: 'Civics / Government', hint: 'A few times each week', resource: true },
+    { label: 'Character / Moral Philosophy', hint: 'A few times each week', resource: true },
+    { label: 'Current Events', hint: 'A few times each week', resource: false },
+    { label: 'Economics', hint: 'A few times each week', resource: true }
+  ],
+  sci: [
+    { label: 'Nature Study', hint: 'Practice habit, often part of a loop', practiceable: true, loopish: true },
+    { label: 'Nature Notebook', hint: 'Practice habit', practiceable: true },
+    { label: 'Natural History / Nature Lore', hint: 'A few times each week', resource: true },
+    { label: 'Object Lessons', hint: 'A few times each week', resource: false },
+    { label: 'Special Studies', hint: 'A few times each week', resource: true },
+    { label: 'Botany', hint: 'One after another with other sciences', resource: true, sequenceish: true },
+    { label: 'Zoology', hint: 'One after another with other sciences', resource: true, sequenceish: true },
+    { label: 'Geology', hint: 'One after another with other sciences', resource: true, sequenceish: true },
+    { label: 'Astronomy', hint: 'One after another with other sciences', resource: true, sequenceish: true },
+    { label: 'Physiology / Health', hint: 'One after another with other sciences', resource: true, sequenceish: true },
+    { label: 'General Science', hint: 'A few times each week', resource: true },
+    { label: 'Science Biography', hint: 'One after another', resource: true, sequenceish: true },
+    { label: 'Experiment / Demonstration', hint: 'A few times each week', resource: false }
+  ],
+  lit: [
+    { label: 'Family Read-Aloud', hint: 'One after another, together', resource: true, sequenceish: true },
+    { label: 'Independent Literature', hint: 'One after another, individual', resource: true, sequenceish: true },
+    { label: 'Poetry', hint: 'Practice habit / loop', practiceable: true, loopish: true },
+    { label: 'Shakespeare', hint: 'A few times each week', resource: true },
+    { label: 'Mythology', hint: 'A few times each week', resource: true },
+    { label: 'Fables', hint: 'Practice habit / loop', practiceable: true, loopish: true },
+    { label: 'Fairy Tales', hint: 'Practice habit / loop', practiceable: true, loopish: true },
+    { label: 'Pilgrim\'s Progress', hint: 'One after another', resource: true, sequenceish: true },
+    { label: 'Historical Literature', hint: 'One after another', resource: true, sequenceish: true },
+    { label: 'Free Reading', hint: 'Keep on the map only', resource: false }
+  ],
+  la: [
+    { label: 'Narration', hint: 'Practice habit', practiceable: true },
+    { label: 'Reading Practice', hint: 'A few times each week', resource: true },
+    { label: 'Copywork / Transcription', hint: 'Practice habit', practiceable: true },
+    { label: 'Prepared Dictation', hint: 'A few times each week', resource: true },
+    { label: 'Handwriting', hint: 'Practice habit', practiceable: true },
+    { label: 'Composition', hint: 'A few times each week', resource: false },
+    { label: 'Written Narration', hint: 'A few times each week', resource: false },
+    { label: 'Grammar', hint: 'A few times each week', resource: true },
+    { label: 'Parsing / Analysis', hint: 'A few times each week', resource: true },
+    { label: 'Spelling', hint: 'Practice habit', practiceable: true },
+    { label: 'Recitation', hint: 'Practice habit', practiceable: true },
+    { label: 'Commonplace', hint: 'Practice habit', practiceable: true }
+  ],
+  beauty: [
+    { label: 'Picture Study', hint: 'Often part of a Beauty loop', practiceable: true, loopish: true },
+    { label: 'Composer Study', hint: 'Often part of a Beauty loop', practiceable: true, loopish: true },
+    { label: 'Hymn Study', hint: 'Often part of a Beauty loop', practiceable: true, loopish: true },
+    { label: 'Folk Songs', hint: 'Often part of a Beauty loop', practiceable: true, loopish: true },
+    { label: 'Sol-fa / Sight Singing', hint: 'Practice habit', practiceable: true },
+    { label: 'Poetry Recitation', hint: 'Practice habit', practiceable: true },
+    { label: 'Art Appreciation', hint: 'A few times each week', resource: true },
+    { label: 'Music Practice', hint: 'Practice habit, individual', practiceable: true }
+  ],
+  art: [
+    { label: 'Drawing', hint: 'Practice habit', practiceable: true },
+    { label: 'Brush Drawing', hint: 'Practice habit', practiceable: true },
+    { label: 'Drawing from Nature', hint: 'Practice habit', practiceable: true },
+    { label: 'Handicrafts', hint: 'Practice habit', practiceable: true },
+    { label: 'Sloyd', hint: 'Practice habit', practiceable: true },
+    { label: 'House Work', hint: 'Practice habit', practiceable: true },
+    { label: 'Garden Work', hint: 'Practice habit', practiceable: true },
+    { label: 'Cooking', hint: 'Practice habit', practiceable: true },
+    { label: 'Sewing', hint: 'Practice habit', practiceable: true },
+    { label: 'Projects', hint: 'One after another', practiceable: true, sequenceish: true }
+  ],
+  pe: [
+    { label: 'Drill', hint: 'Practice habit', practiceable: true },
+    { label: 'Swedish Drill', hint: 'Practice habit', practiceable: true },
+    { label: 'Folk Dancing', hint: 'Practice habit', practiceable: true },
+    { label: 'Games', hint: 'Practice habit', practiceable: true },
+    { label: 'Outdoor Play', hint: 'Practice habit', practiceable: true },
+    { label: 'Walking / Nature Walk', hint: 'Practice habit', practiceable: true },
+    { label: 'Health / Hygiene', hint: 'A few times each week', resource: false },
+    { label: 'Scouting / Skills', hint: 'Handled outside home', external: true }
+  ],
+  lang: [
+    { label: 'Modern Language 1', hint: 'A few times each week', resource: true },
+    { label: 'Modern Language 2', hint: 'A few times each week', resource: true },
+    { label: 'Latin', hint: 'A few times each week', resource: true },
+    { label: 'Greek', hint: 'A few times each week', resource: true },
+    { label: 'Songs in Foreign Language', hint: 'Practice habit', practiceable: true },
+    { label: 'Reading in Foreign Language', hint: 'A few times each week', resource: true },
+    { label: 'Copywork / Dictation in Foreign Language', hint: 'Practice habit', practiceable: true }
+  ],
+  math: [
+    { label: 'Arithmetic', hint: 'A few times each week', resource: true },
+    { label: 'Mental Math', hint: 'Practice habit', practiceable: true },
+    { label: 'Math Facts', hint: 'Practice habit', practiceable: true },
+    { label: 'Geometry', hint: 'A few times each week', resource: true },
+    { label: 'Algebra', hint: 'A few times each week', resource: true },
+    { label: 'Math Games', hint: 'Practice habit', practiceable: true },
+    { label: 'Problem Solving', hint: 'A few times each week', resource: false },
+    { label: 'Manipulatives / Oral Work', hint: 'Practice habit', practiceable: true }
+  ]
+};
+
+// Resolve participants for a card: explicit list wins, otherwise inferred from audience row.
+function resolveParticipants(card) {
+  if (card.participants) return card.participants;
+  if (card.audience === 'together') return allStudentIds();
+  if (card.audience === 'littles') return groupById('littles').studentIds;
+  if (card.audience === 'older') return groupById('older').studentIds;
+  if (card.audience === 'lucy') return ['lucy'];
+  if (card.audience === 'jeremiah') return ['jeremiah'];
+  return [];
+}
+
+// ---- loops: turns/week belongs to the loop; each item has its own resource + next assignment ----
+var LOOPS_SIMPLE = [
+  {
+    id: 'loop-bible', subjectFamilyId: 'bible', audience: 'together',
+    label: 'Bible Loop', turnsPerWeek: 4, fromStarter: true,
+    items: [
+      { label: 'Matthew', next: 'ch. 1', current: true, hasBook: true, resource: 'Bible' },
+      { label: 'Psalms + Proverbs', next: 'Psalm 1', hasBook: true, resource: 'Bible' },
+      { label: 'Theology', next: 'lesson 1', hasBook: true, resource: 'Theology book' },
+      { label: 'Old Testament', next: 'Genesis 1', hasBook: true, resource: 'Bible' }
+    ]
+  },
+  {
+    id: 'loop-beauty', subjectFamilyId: 'beauty', audience: 'together',
+    label: 'Beauty Loop', turnsPerWeek: 2, fromStarter: true,
+    items: [
+      { label: 'Picture Study', next: 'this week\'s painting', current: true, practice: true, resource: 'no resource needed' },
+      { label: 'Hymn Study', next: 'verse 2', practice: true, resource: 'no resource needed' },
+      { label: 'Handicraft', next: 'continue project', practice: true, resource: 'no resource needed' }
+    ]
+  }
+];
+
+var SEQUENCES_SIMPLE = [
+  {
+    id: 'seq-readaloud', subjectFamilyId: 'lit', audience: 'together',
+    label: 'Family Read-Alouds', frequencyLabel: '3x/week', fromStarter: true,
+    items: [
+      { label: 'The Hobbit', status: 'done', hasBook: true },
+      { label: 'Charlotte\'s Web', status: 'current', hasBook: true, current: true },
+      { label: 'My Side of the Mountain', status: 'upnext', hasBook: true }
+    ]
+  },
+  {
+    id: 'seq-lucy-lit', subjectFamilyId: 'lit', audience: 'lucy',
+    label: 'Lucy\'s Independent Literature', frequencyLabel: '4x/week',
+    items: [
+      { label: 'Anne of Green Gables', status: 'done', hasBook: true },
+      { label: 'The Secret Garden', status: 'current', hasBook: true, current: true },
+      { label: 'Little Women', status: 'upnext', needsBook: true }
+    ]
+  },
+  {
+    id: 'seq-jeremiah-sci', subjectFamilyId: 'sci', audience: 'jeremiah',
+    label: 'Jeremiah\'s Science', frequencyLabel: '3x/week',
+    items: [
+      { label: 'Botany', status: 'done', hasBook: true },
+      { label: 'Geology', status: 'current', hasBook: true, current: true },
+      { label: 'Physiology', status: 'upnext', needsBook: true }
+    ]
+  }
+];
+
+var ITEMS_SIMPLE = [
+  { subjectFamilyId: 'math', audience: 'lucy', label: 'Math', status: 'active', hasBook: true, frequencyLabel: '5x/week', resource: 'Math-U-See Epsilon' },
+  { subjectFamilyId: 'math', audience: 'jeremiah', label: 'Math (with Mom)', status: 'active', hasBook: true, frequencyLabel: '5x/week', resource: 'Math-U-See Delta' },
+  { subjectFamilyId: 'la', audience: 'littles', label: 'Handwriting', status: 'active', practice: true, frequencyLabel: '3x/week', resource: 'Handwriting Without Tears', fromStarter: true },
+  { subjectFamilyId: 'la', audience: 'littles', label: 'Phonics', status: 'active', hasBook: true, frequencyLabel: '4x/week', resource: 'All About Reading' },
+  { subjectFamilyId: 'sci', audience: 'coop', label: 'Co-op Science Class', status: 'coop', frequencyLabel: 'weekly', participants: ['jeremiah'], resource: 'co-op provided', fromStarter: true },
+  {
+    subjectFamilyId: 'hist', audience: 'older', label: 'American History Spine', status: 'active', hasBook: true,
+    frequencyLabel: '2x/week', resource: 'This Country of Ours',
+    // ---- mixed-age group lesson-length demo: shared reading sized to the
+    // youngest participant (Lucy, Form II), with extension work for Jeremiah
+    // rather than stretching the shared lesson to his Form III max ----
+    sharedLessonMinutes: 25, sharedLessonRule: 'youngest',
+    extension: { jeremiah: { label: 'Independent reading + written narration', minutes: 15, resource: 'This Country of Ours (extension chapters)' } }
+  },
+  { subjectFamilyId: 'geo', audience: 'optional', label: 'Map Quizzing', status: 'optional', frequencyLabel: '—' },
+  { subjectFamilyId: 'hist', audience: 'unplaced', label: 'Neighboring Lands Spine', status: 'active', needsBook: true, frequencyLabel: 'not set' },
+  // "Need to choose resource" is distinct from "need to buy" — the family hasn't
+  // picked a spine yet, so there's nothing to buy or reserve until they decide.
+  { subjectFamilyId: 'hist', audience: 'older', label: 'Ancient History Spine', status: 'active', needsChoice: true, frequencyLabel: '2x/week' }
+];
+
+// ---- Full family sample: denser, more cards per cell, more columns ----
+var LOOPS_FULL = LOOPS_SIMPLE.concat([
+  {
+    id: 'loop-writing', subjectFamilyId: 'la', audience: 'older',
+    label: 'Writing Loop', turnsPerWeek: 3,
+    items: [
+      { label: 'Copywork', next: 'passage 4', current: true, hasBook: true, resource: 'Copywork book' },
+      { label: 'Dictation', next: 'passage 2', hasBook: true, resource: 'Dictation passages' },
+      { label: 'Composition', next: 'essay draft', practice: true, resource: 'no resource needed' }
+    ]
+  },
+  {
+    id: 'loop-reading', subjectFamilyId: 'la', audience: 'littles',
+    label: 'Reading Loop', turnsPerWeek: 4,
+    items: [
+      { label: 'Phonics readers', next: 'lesson 9', current: true, hasBook: true, resource: 'All About Reading' },
+      { label: 'Fairy Tales', next: 'next story', hasBook: true, resource: 'Favorite Fairy Tales' },
+      { label: 'Picture book read-aloud', next: 'continue book', hasBook: true, resource: 'rotating picture books' },
+      { label: 'Sight words', next: 'set 3', practice: true, resource: 'no resource needed' }
+    ]
+  },
+  {
+    id: 'loop-histnat', subjectFamilyId: 'hist', audience: 'together',
+    label: 'History + Natural History Loop', turnsPerWeek: 2,
+    items: [
+      { label: 'American History', next: 'ch. 6', current: true, hasBook: true, resource: 'This Country of Ours' },
+      { label: 'Nature Study', next: 'this week\'s walk', practice: true, resource: 'no resource needed' }
+    ]
+  }
+]);
+
+var SEQUENCES_FULL = SEQUENCES_SIMPLE.concat([
+  {
+    id: 'seq-older-sci', subjectFamilyId: 'sci', audience: 'older',
+    label: 'Older Students\' Science', frequencyLabel: '3x/week', participants: ['lucy', 'jeremiah'],
+    items: [
+      { label: 'Astronomy', status: 'done', hasBook: true },
+      { label: 'Chemistry', status: 'current', hasBook: true, current: true },
+      { label: 'Physics', status: 'upnext', needsBook: true }
+    ]
+  }
+]);
+
+var ITEMS_FULL = ITEMS_SIMPLE.concat([
+  { subjectFamilyId: 'bible', audience: 'littles', label: 'Bible Memory Verses', status: 'active', practice: true, frequencyLabel: '2x/week' },
+  { subjectFamilyId: 'bible', audience: 'jeremiah', label: 'Personal Spiritual Reading', status: 'active', hasBook: true, frequencyLabel: '2x/week', resource: 'Devotional' },
+  { subjectFamilyId: 'bible', audience: 'lucy', label: 'Catechism', status: 'active', practice: true, frequencyLabel: '1x/week' },
+  { subjectFamilyId: 'art', audience: 'together', label: 'Art History', status: 'active', hasBook: true, frequencyLabel: '1x/week', resource: 'Picture Study cards' },
+  { subjectFamilyId: 'art', audience: 'lucy', label: 'Personal Instrument Practice', status: 'optional', practice: true, frequencyLabel: 'daily' },
+  { subjectFamilyId: 'pe', audience: 'together', label: 'Outdoor Free Play', status: 'active', practice: true, frequencyLabel: 'daily' },
+  { subjectFamilyId: 'pe', audience: 'coop', label: 'Co-op PE Class', status: 'coop', frequencyLabel: 'weekly', participants: ['lucy', 'kayla'] },
+  { subjectFamilyId: 'geo', audience: 'older', label: 'Mapping Notebook', status: 'active', hasBook: true, frequencyLabel: '1x/week', resource: 'Blank maps' },
+  { subjectFamilyId: 'math', audience: 'littles', label: 'Family Math Games', status: 'active', practice: true, frequencyLabel: '3x/week' },
+  { subjectFamilyId: 'lang', audience: 'older', label: 'Latin', status: 'active', hasBook: true, frequencyLabel: '3x/week', resource: 'Latin for Children' },
+  { subjectFamilyId: 'geo', audience: 'unplaced', label: 'Citizenship Spine', status: 'active', needsBook: true, frequencyLabel: 'not set' },
+  { subjectFamilyId: 'sci', audience: 'unplaced', label: 'Lucy\'s Health/Botany unit', status: 'active', needsBook: true, frequencyLabel: 'not set' },
+  { subjectFamilyId: 'art', audience: 'unplaced', label: 'Handicraft (TBD)', status: 'active', needsBook: false, frequencyLabel: 'not set' }
+]);
+
+var state = { density: 'compact', sample: 'simple', lens: 'all', filters: [], printMode: 'overview' };
+
+function cols() { return (state.sample === 'full' ? COLS_FULL : COLS_SIMPLE).filter(function (c) { return c.visible; }); }
+function loops() { return state.sample === 'full' ? LOOPS_FULL : LOOPS_SIMPLE; }
+function sequences() { return state.sample === 'full' ? SEQUENCES_FULL : SEQUENCES_SIMPLE; }
+function items() { return state.sample === 'full' ? ITEMS_FULL : ITEMS_SIMPLE; }
+
+function chipClass(id) { return 'chip-' + id; }
+function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/'/g, '&#39;'); }
+
+function statusDot(it) {
+  if (it.status === 'coop') return 'coop';
+  if (it.status === 'optional') return 'optional';
+  if (it.needsChoice) return 'needbook';
+  if (it.practice) return 'practice';
+  if (it.needsBook) return 'needbook';
+  if (it.hasBook) return 'book';
+  if (it.audience === 'unplaced') return 'unplaced';
+  return 'needbook';
+}
+function participantsRowHTML(card) {
+  var ids = resolveParticipants(card);
+  if (!ids.length) return '';
+  var dots = ids.map(function (id) {
+    var s = studentsById(id); if (!s) return '';
+    return '<span class="p-dot" style="background:' + s.color + ';" title="' + escapeHtml(s.name) + '">' + s.initials + '</span>';
+  }).join('');
+  return '<div class="participants-row">' + dots + '</div>';
+}
+function cardMatchesLens(card) {
+  if (state.lens === 'all') return true;
+  if (state.lens.indexOf('student:') === 0) return resolveParticipants(card).indexOf(state.lens.slice(8)) !== -1;
+  if (state.lens.indexOf('group:') === 0) return card.audience === state.lens.slice(6);
+  if (state.lens.indexOf('subject:') === 0) return card.subjectFamilyId === state.lens.slice(8);
+  return true;
+}
+function cardMatchesFilters(card) {
+  if (!state.filters.length) return true;
+  return state.filters.every(function (f) {
+    if (f === 'needs-resource') return !!card.needsBook;
+    if (f === 'needs-placement') return card.audience === 'unplaced';
+    if (f === 'coop') return card.status === 'coop';
+    if (f === 'optional') return card.status === 'optional';
+    return true;
+  });
+}
+
+function loopChipHTML(loop) {
+  var current = loop.items.find(function (i) { return i.current; }) || loop.items[0];
+  var dot = statusDot(current);
+  var seqHTML = loop.items.map(function (i) {
+    var marker = i.current ? '▶' : '&nbsp;&nbsp;';
+    var cls = i.current ? 'current' : '';
+    return '<div class="seq-item ' + cls + '"><span><span class="marker">' + marker + '</span>' + escapeHtml(i.label) +
+      ' — next: ' + escapeHtml(i.next) + '</span></div>';
+  }).join('');
+  var lensCls = cardMatchesLens(loop) ? ' lens-match' : '';
+  var filterCls = cardMatchesFilters(loop) ? '' : ' filtered-out';
+  return (
+    '<div class="chip ' + chipClass(loop.subjectFamilyId) + lensCls + filterCls + '" draggable="true" ' +
+      'ondragstart="onDragStart(event)" onclick="toggleExpand(this)" ' +
+      'ondblclick="openEditor(\'' + escapeHtml(loop.label) + '\',\'loop\',' + JSON.stringify(loop).replace(/"/g, '&quot;') + ')">' +
+      '<div class="chip-title"><span class="dot ' + dot + '"></span>' + escapeHtml(loop.label) +
+        '<span class="strand-badge">Loop</span>' + (loop.fromStarter ? '<span class="starter-badge">CM starter</span>' : '') + '</div>' +
+      '<div class="chip-sub">' + loop.turnsPerWeek + ' turns/week · next: ' + escapeHtml(current.label) + ' — ' + escapeHtml(current.next) + '</div>' +
+      participantsRowHTML(loop) +
+      '<div class="chip-detail">' +
+        '<div style="margin-bottom:3px;font-weight:600;">' + escapeHtml(loop.label) + ' · ' + loop.turnsPerWeek + ' turns/week</div>' +
+        seqHTML +
+      '</div>' +
+    '</div>'
+  );
+}
+
+function seqChipHTML(seq) {
+  var current = seq.items.find(function (i) { return i.current; }) || seq.items[0];
+  var dot = statusDot(current);
+  var seqHTML = seq.items.map(function (i, idx) {
+    var cls = i.status === 'done' ? 'done' : (i.current ? 'current' : 'upnext');
+    var marker = i.status === 'done' ? '✓' : (i.current ? '▶' : (idx + 1) + '.');
+    return '<div class="seq-item ' + cls + '"><span><span class="marker">' + marker + '</span>' + escapeHtml(i.label) + '</span></div>';
+  }).join('');
+  var lensCls = cardMatchesLens(seq) ? ' lens-match' : '';
+  var filterCls = cardMatchesFilters(seq) ? '' : ' filtered-out';
+  return (
+    '<div class="chip ' + chipClass(seq.subjectFamilyId) + lensCls + filterCls + '" draggable="true" ' +
+      'ondragstart="onDragStart(event)" onclick="toggleExpand(this)" ' +
+      'ondblclick="openEditor(\'' + escapeHtml(seq.label) + '\',\'sequence\',' + JSON.stringify(seq).replace(/"/g, '&quot;') + ')">' +
+      '<div class="chip-title"><span class="dot ' + dot + '"></span>' + escapeHtml(seq.label) +
+        '<span class="strand-badge">Sequence</span>' + (seq.fromStarter ? '<span class="starter-badge">CM starter</span>' : '') + '</div>' +
+      '<div class="chip-sub">Current: ' + escapeHtml(current.label) + '</div>' +
+      '<div class="chip-sub full-detail">' + seq.frequencyLabel + '</div>' +
+      participantsRowHTML(seq) +
+      '<div class="chip-detail">' + seqHTML + '</div>' +
+    '</div>'
+  );
+}
+
+function itemChipHTML(it) {
+  var dot = statusDot(it);
+  var tag = it.status === 'coop' ? 'Co-op' : (it.status === 'optional' ? 'Optional' : (it.needsChoice ? 'Needs resource choice' : (it.audience === 'unplaced' ? 'Needs placement' : (it.practice ? 'Practice' : ''))));
+  var lensCls = cardMatchesLens(it) ? ' lens-match' : '';
+  var filterCls = cardMatchesFilters(it) ? '' : ' filtered-out';
+  var extensionHTML = '';
+  if (it.extension) {
+    extensionHTML = Object.keys(it.extension).map(function (sid) {
+      var s = studentsById(sid), ext = it.extension[sid];
+      return '<div style="margin-top:3px;">Extension — ' + escapeHtml(s.name) + ': ' + escapeHtml(ext.label) + ' (+' + ext.minutes + ' min)</div>';
+    }).join('');
+  }
+  var sharedHTML = it.sharedLessonMinutes
+    ? '<div>Shared lesson length: ~' + it.sharedLessonMinutes + ' min (sized to youngest participant)</div>' : '';
+  return (
+    '<div class="chip ' + chipClass(it.subjectFamilyId) + lensCls + filterCls + '" draggable="true" ' +
+      'ondragstart="onDragStart(event)" onclick="toggleExpand(this)" ' +
+      'ondblclick="openEditor(\'' + escapeHtml(it.label) + '\',\'standalone\',' + JSON.stringify(it).replace(/"/g, '&quot;') + ')">' +
+      '<div class="chip-title"><span class="dot ' + dot + '"></span>' + escapeHtml(it.label) + (tag ? '<span class="chip-tag">' + tag + '</span>' : '') +
+        (it.fromStarter ? '<span class="starter-badge">CM starter</span>' : '') + '</div>' +
+      '<div class="chip-sub full-detail">' + escapeHtml(it.frequencyLabel || '') + (it.sharedLessonMinutes ? ' · ~' + it.sharedLessonMinutes + ' min shared' : '') + '</div>' +
+      participantsRowHTML(it) +
+      '<div class="chip-detail">Single card — not part of a loop or sequence.' + (it.resource ? ' Resource: ' + escapeHtml(it.resource) : '') +
+        sharedHTML + extensionHTML +
+      '</div>' +
+    '</div>'
+  );
+}
+
+function addCellHTML(rowId, colId) {
+  return '<div class="add-cell" onclick="onAddCard(\'' + rowId + '\',\'' + colId + '\')">+ Add</div>';
+}
+
+function buildHead() {
+  var head = document.getElementById('map-head-row');
+  var html = '<th class="row-head" style="background:#fff;"></th>';
+  cols().forEach(function (col) {
+    html += '<th class="col-' + col.id + '">' + escapeHtml(col.label) + '</th>';
+  });
+  head.innerHTML = html;
+}
+
+function buildGrid() {
+  buildHead();
+  var body = document.getElementById('map-body');
+  var html = '';
+  ROWS.forEach(function (row) {
+    html += '<tr data-row-id="' + row.id + '"><th class="row-head">' + escapeHtml(row.label) + '</th>';
+    cols().forEach(function (col) {
+      var cellChips = '';
+      loops().filter(function (l) { return l.subjectFamilyId === col.id && l.audience === row.id; })
+        .forEach(function (l) { cellChips += loopChipHTML(l); });
+      sequences().filter(function (s) { return s.subjectFamilyId === col.id && s.audience === row.id; })
+        .forEach(function (s) { cellChips += seqChipHTML(s); });
+      items().filter(function (i) { return i.subjectFamilyId === col.id && i.audience === row.id; })
+        .forEach(function (i) { cellChips += itemChipHTML(i); });
+      var rowCls = row.id === 'unplaced' ? ' unplaced-row' : '';
+      var emptyCls = !cellChips ? ' empty-cell' : '';
+      html += '<td class="' + rowCls + emptyCls + '" data-row="' + row.id + '" data-col="' + col.id + '" ' +
+        'ondragover="onDragOver(event)" ondrop="onDrop(event)" ondragleave="onDragLeave(event)">' +
+        cellChips + addCellHTML(row.id, col.id) + '</td>';
+    });
+    html += '</tr>';
+  });
+  body.innerHTML = html;
+  document.getElementById('sample-note').textContent = state.sample === 'full'
+    ? 'Full family sample — denser, with practice items, optional items, co-op, and several Needs Placement cards.'
+    : 'Simple sample — a lighter plan to show the basic shapes (loop, sequence, single card).';
+}
+
+// ---- drag and drop mockup (visual only — does not persist a move) ----
+window.onDragStart = function (e) { e.target.classList.add('dragging'); };
+window.onDragOver = function (e) { e.preventDefault(); e.currentTarget.classList.add('drag-target'); };
+window.onDragLeave = function (e) { e.currentTarget.classList.remove('drag-target'); };
+window.onDrop = function (e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-target');
+  var row = e.currentTarget.dataset.row, col = e.currentTarget.dataset.col;
+  document.querySelectorAll('.chip.dragging').forEach(function (c) { c.classList.remove('dragging'); });
+  alert('Mockup only: this would move the card to "' + row + '" / "' + col + '".\nNo data actually moves in this prototype.');
+};
+
+window.toggleExpand = function (el) { el.classList.toggle('expanded'); };
+
+// ---- Lens (student / group / subject) ----
+function populateLensSelect() {
+  var sel = document.getElementById('lens-select');
+  var html = '<option value="all">View all</option><optgroup label="Students">';
+  STUDENTS.forEach(function (s) { html += '<option value="student:' + s.id + '">' + escapeHtml(s.name) + '</option>'; });
+  html += '</optgroup><optgroup label="Groups">';
+  GROUPS.forEach(function (g) { html += '<option value="group:' + g.id + '">' + escapeHtml(g.label) + '</option>'; });
+  html += '</optgroup><optgroup label="Subjects">';
+  COLS_FULL.forEach(function (c) { html += '<option value="subject:' + c.id + '">' + escapeHtml(c.label) + '</option>'; });
+  html += '</optgroup>';
+  sel.innerHTML = html;
+}
+window.onLensChange = function () {
+  state.lens = document.getElementById('lens-select').value;
+  document.body.classList.toggle('lens-active', state.lens !== 'all');
+  if (state.lens.indexOf('student:') === 0) {
+    document.body.style.setProperty('--lens-color', studentsById(state.lens.slice(8)).color);
+  } else {
+    document.body.style.setProperty('--lens-color', '#333');
+  }
+  buildGrid();
+};
+
+// ---- Quick filters ----
+var FILTER_DEFS = [
+  { id: 'needs-resource', label: 'Needs resources' },
+  { id: 'needs-placement', label: 'Needs placement' },
+  { id: 'coop', label: 'Outside/co-op' },
+  { id: 'optional', label: 'Optional/not this year' }
+];
+function buildFilters() {
+  document.getElementById('filters-row').innerHTML = FILTER_DEFS.map(function (f) {
+    return '<span class="filter-chip" data-filter="' + f.id + '" onclick="toggleFilter(\'' + f.id + '\')">' + f.label + '</span>';
+  }).join('');
+}
+window.toggleFilter = function (id) {
+  var idx = state.filters.indexOf(id);
+  if (idx === -1) state.filters.push(id); else state.filters.splice(idx, 1);
+  document.querySelectorAll('.filter-chip').forEach(function (el) {
+    el.classList.toggle('active', state.filters.indexOf(el.dataset.filter) !== -1);
+  });
+  buildGrid();
+};
+
+// ---- card editor mockup ----
+var DAYS = ['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su'];
+window.openEditor = function (title, kind, data) {
+  document.getElementById('editor-title').textContent = title;
+  document.getElementById('ed-schedule').value = kind === 'loop' ? 'loop' : (kind === 'sequence' ? 'sequence' : (data && data.status === 'coop' ? 'coop' : 'weekly'));
+  document.getElementById('ed-day-picker').innerHTML = DAYS.map(function (d) { return '<span class="day-pick" onclick="this.classList.toggle(\'on\')">' + d + '</span>'; }).join('');
+  renderParticipantChecks('ed-participants', data ? resolveParticipants(data) : []);
+  renderParticipantChecks('ed-coop-participants', data ? resolveParticipants(data) : []);
+  renderEditorConditionals(kind, data);
+  document.getElementById('editor-mock').classList.add('show');
+};
+window.closeEditor = function () { document.getElementById('editor-mock').classList.remove('show'); };
+
+function renderParticipantChecks(targetId, activeIds) {
+  var html = STUDENTS.map(function (s) {
+    var checked = activeIds.indexOf(s.id) !== -1 ? 'checked' : '';
+    return '<label class="pcheck"><input type="checkbox" ' + checked + ' disabled><span class="p-dot" style="background:' + s.color + ';">' + s.initials + '</span>' + escapeHtml(s.name) + '</label>';
+  }).join('');
+  document.getElementById(targetId).innerHTML = html;
+}
+
+window.renderEditorConditionals = function (kind, data) {
+  var scheduleVal = document.getElementById('ed-schedule').value;
+  ['weekly', 'fixed', 'loop', 'sequence', 'practice', 'coop', 'manual'].forEach(function (key) {
+    document.getElementById('sched-' + key).classList.toggle('hidden', scheduleVal !== key);
+  });
+
+  var isLoop = scheduleVal === 'loop';
+  var isSeq = scheduleVal === 'sequence';
+  var isStandalone = !isLoop && !isSeq;
+  document.getElementById('ed-res-loop').classList.toggle('hidden', !isLoop);
+  document.getElementById('ed-res-sequence').classList.toggle('hidden', !isSeq);
+  document.getElementById('ed-res-standalone').classList.toggle('hidden', !isStandalone);
+
+  if (isSeq && data && data.items) {
+    var listHTML = data.items.map(function (i, idx) {
+      var cls = i.status === 'done' ? '' : (i.current ? 'current-seq' : '');
+      var marker = i.status === 'done' ? '✓' : (i.current ? '▶' : (idx + 1) + '.');
+      return '<div class="seq-edit-row ' + cls + '"><span class="grip">⠿</span> ' + marker + ' ' + escapeHtml(i.label) + (i.current ? ' (current)' : '') + '</div>';
+    }).join('') + '<div class="seq-edit-row"><span class="grip">⠿</span> + Add another item…</div>';
+    document.getElementById('ed-seq-list').innerHTML = listHTML;
+    document.getElementById('ed-res-seq-list').innerHTML =
+      '<div style="font-weight:600;margin-bottom:4px;">' + escapeHtml(data.label) + '</div>' +
+      data.items.map(function (i, idx) { return '<div class="res-row"><span class="marker">' + (idx + 1) + '.</span><span>' + escapeHtml(i.label) + '</span></div>'; }).join('');
+  }
+  if (isLoop && data && data.items) {
+    document.getElementById('ed-loop-order').innerHTML = data.items.map(function (i, idx) {
+      return '<div class="seq-edit-row ' + (i.current ? 'current-seq' : '') + '"><span class="grip">⠿</span> ' + (i.current ? '▶' : (idx + 1) + '.') + ' ' + escapeHtml(i.label) + '</div>';
+    }).join('');
+    document.getElementById('ed-res-loop-list').innerHTML =
+      '<div style="font-weight:600;margin-bottom:4px;">' + escapeHtml(data.label) + ' · ' + data.turnsPerWeek + ' turns/week</div>' +
+      data.items.map(function (i, idx) {
+        return '<div class="res-row"><span class="marker">' + (idx + 1) + '.</span><span>' + escapeHtml(i.label) + ' → <span class="res-detail">' +
+          escapeHtml(i.resource || 'no resource set') + ', next: ' + escapeHtml(i.next) + '</span></span></div>';
+      }).join('');
+  }
+  if (isStandalone && data && data.resource) {
+    document.getElementById('ed-res-title').value = data.resource;
+  }
+};
+
+window.onAddCard = function (rowId, colId) {
+  openEditor('New card — ' + rowId + ' / ' + colId, 'standalone', null);
+};
+
+// ---- panel helpers ----
+window.closePanels = function () {
+  document.querySelectorAll('.side-panel').forEach(function (p) { p.classList.remove('show'); });
+};
+
+// ---- Charlotte Mason starter cards picker ----
+var SUBJECT_LOOKUP = {};
+COLS_FULL.forEach(function (c) { SUBJECT_LOOKUP[c.id] = c.label; });
+var SUBJECT_COLOR_VAR = { bible: '--bible', la: '--la', lit: '--lit', hist: '--hist', sci: '--sci', math: '--math', beauty: '--beauty', geo: '--geo', art: '--art', pe: '--pe', lang: '--lang' };
+
+window.openStarterCards = function () {
+  closePanels();
+  var html = Object.keys(STARTER_TEMPLATES).map(function (subjId) {
+    var rows = STARTER_TEMPLATES[subjId].map(function (t) {
+      var tags = [];
+      if (t.loopish) tags.push('often a loop');
+      if (t.sequenceish) tags.push('often a sequence');
+      if (t.practiceable) tags.push('often practice/no-book');
+      if (t.external) tags.push('often outside/co-op');
+      return '<div class="starter-card-row"><span><strong>' + escapeHtml(t.label) + '</strong><br><span class="meta">' + escapeHtml(t.hint) + (tags.length ? ' · ' + tags.join(', ') : '') + '</span></span>' +
+        '<button onclick="alert(\'Mockup only: would add \\\'' + escapeHtml(t.label) + '\\\' as a new editable card under ' + escapeHtml(SUBJECT_LOOKUP[subjId]) + '.\')">+ Add</button></div>';
+    }).join('');
+    return '<div class="starter-subject-group"><h5 style="background:var(' + SUBJECT_COLOR_VAR[subjId] + ');">' + escapeHtml(SUBJECT_LOOKUP[subjId]) + '</h5>' + rows + '</div>';
+  }).join('');
+  document.getElementById('starter-card-list').innerHTML = html;
+  document.getElementById('starter-panel').classList.add('show');
+};
+
+// ---- Customize family / subjects mockups ----
+window.openCustomize = function (which) {
+  closePanels();
+  if (which === 'family') {
+    document.getElementById('cust-students').innerHTML = STUDENTS.map(function (s) {
+      return '<div class="cust-row"><span class="swatch" style="background:' + s.color + ';" onclick="alert(\'Mockup only: would open a color picker for ' + escapeHtml(s.name) + '.\')"></span>' +
+        '<span class="name">' + escapeHtml(s.name) + '</span>' +
+        '<span class="actions"><button onclick="alert(\'Mockup only: rename.\')">Rename</button><button onclick="alert(\'Mockup only: archive.\')">Archive</button></span></div>';
+    }).join('');
+    document.getElementById('cust-groups').innerHTML = GROUPS.map(function (g) {
+      var members = g.studentIds.map(function (id) { return studentsById(id).name; }).join(', ');
+      return '<div class="cust-row"><span class="swatch" style="background:linear-gradient(90deg,' +
+        g.studentIds.map(function (id) { return studentsById(id).color; }).join(',') + ');"></span>' +
+        '<span class="name">' + escapeHtml(g.label) + '<br><span class="members">' + escapeHtml(members) + '</span></span>' +
+        '<span class="actions"><button onclick="alert(\'Mockup only: edit members.\')">Edit</button><button onclick="alert(\'Mockup only: archive.\')">Archive</button></span></div>';
+    }).join('');
+    document.getElementById('customize-family').classList.add('show');
+  } else {
+    var allCols = state.sample === 'full' ? COLS_FULL : COLS_SIMPLE;
+    document.getElementById('cust-subjects').innerHTML = allCols.map(function (c) {
+      return '<div class="cust-row"><span class="swatch" style="background:var(' + SUBJECT_COLOR_VAR[c.id] + ', #ccc);"></span>' +
+        '<span class="name">' + escapeHtml(c.label) + '</span>' +
+        '<span class="cust-visible">' + (c.visible ? 'Visible' : 'Hidden') + '</span>' +
+        '<span class="actions"><button onclick="alert(\'Mockup only: rename.\')">Rename</button><button onclick="alert(\'Mockup only: toggle visibility.\')">' + (c.visible ? 'Hide' : 'Show') + '</button></span></div>';
+    }).join('');
+    document.getElementById('customize-subjects').classList.add('show');
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Resource vs. Resource Use (model notes — prototype derives both from the
+// same sample data already on each card/loop-item/sequence-item, but a real
+// Resource is the book/material itself; a real ResourceUse is one place it
+// shows up — who uses it, in what card/loop/sequence, with what schedule.
+// A single Resource may have many ResourceUses. Phase 0 will model these as
+// first-class records; here they're rolled up read-only for the prototype.
+//
+// Resource fields:   title, author?, type, status, notes?
+// ResourceUse fields: usedBy (participants), usedIn (card/loop/sequence name),
+//                     type (standalone/loop-item/sequence-item/coop/optional),
+//                     subjectFamilyId, loopItemLabel?, next?, position?,
+//                     audience, scheduleSummary
+// ---------------------------------------------------------------------------
+// "Need to choose resource" is intentionally distinct from "Need to buy" — a
+// parent can't buy or reserve a book until they've decided what it is.
+var STATUS_LABELS = {
+  'have-it': 'Have it', 'need-to-choose': 'Need to choose resource', 'need-to-buy': 'Need to buy',
+  'need-library': 'Need to reserve at library', 'reserved-library': 'Reserved at library',
+  'ordered': 'Ordered, not arrived', 'borrowed': 'Borrowed', 'digital': 'Digital / online',
+  'coop-provided': 'Provided by co-op', 'no-resource': 'No resource needed', 'undecided': 'Maybe / undecided'
+};
+function statusPriority(s) {
+  return { 'need-to-choose': 4, 'need-to-buy': 3, 'undecided': 2, 'coop-provided': 1, 'have-it': 0 }[s] || 0;
+}
+
+function buildResourceRollup() {
+  var resources = {};
+  function addUse(title, status, use) {
+    if (!title) return;
+    var key = title.toLowerCase();
+    if (!resources[key]) resources[key] = { title: title, status: status, uses: [] };
+    else if (statusPriority(status) > statusPriority(resources[key].status)) resources[key].status = status;
+    resources[key].uses.push(use);
+  }
+
+  items().forEach(function (it) {
+    if (it.needsChoice) {
+      addUse(it.label, 'need-to-choose', {
+        type: 'standalone', usedIn: it.label, subjectFamilyId: it.subjectFamilyId, audience: it.audience,
+        participants: resolveParticipants(it), scheduleSummary: it.frequencyLabel
+      });
+      return;
+    }
+    var title = it.resource || (it.needsBook ? it.label : null);
+    if (!title) return;
+    var status = it.status === 'coop' ? 'coop-provided' : (it.needsBook ? 'need-to-buy' : (it.hasBook ? 'have-it' : 'undecided'));
+    addUse(title, status, {
+      type: 'standalone', usedIn: it.label, subjectFamilyId: it.subjectFamilyId, audience: it.audience,
+      participants: resolveParticipants(it), scheduleSummary: it.frequencyLabel
+    });
+  });
+
+  loops().forEach(function (loop) {
+    loop.items.forEach(function (li) {
+      if (!li.resource || li.resource === 'no resource needed') return;
+      var status = li.needsBook ? 'need-to-buy' : 'have-it';
+      addUse(li.resource, status, {
+        type: 'loop-item', usedIn: loop.label, loopItemLabel: li.label, next: li.next,
+        subjectFamilyId: loop.subjectFamilyId, audience: loop.audience, participants: resolveParticipants(loop),
+        scheduleSummary: loop.turnsPerWeek + ' turns/week'
+      });
+    });
+  });
+
+  sequences().forEach(function (seq) {
+    seq.items.forEach(function (si, idx) {
+      if (!si.hasBook && !si.needsBook) return;
+      var status = si.needsBook ? 'need-to-buy' : 'have-it';
+      addUse(si.label, status, {
+        type: 'sequence-item', usedIn: seq.label, position: idx + 1, current: !!si.current,
+        subjectFamilyId: seq.subjectFamilyId, audience: seq.audience, participants: resolveParticipants(seq),
+        scheduleSummary: seq.frequencyLabel
+      });
+    });
+  });
+
+  return Object.keys(resources).map(function (k) { return resources[k]; }).sort(function (a, b) { return a.title.localeCompare(b.title); });
+}
+
+function audienceCategory(rowId) {
+  if (rowId === 'together') return 'together';
+  if (rowId === 'littles' || rowId === 'older') return 'group';
+  if (rowId === 'coop') return 'coop';
+  if (rowId === 'optional') return 'optional';
+  if (rowId === 'unplaced') return 'unplaced';
+  return 'individual';
+}
+
+function resourceUseMatchesInclude(use, includeMap) {
+  var cat = audienceCategory(use.audience);
+  return includeMap[cat] !== false;
+}
+function resourceMatchesFilter(r, filter) {
+  // "no resource needed" / practice-only items never produce a rollup entry
+  // (see buildResourceRollup), so shopping-style filters stay free of clutter
+  // by default without any extra exclusion logic here.
+  if (filter === 'need') return r.status === 'need-to-buy';
+  if (filter === 'missing') return r.status === 'need-to-buy' || r.status === 'need-to-choose' || r.status === 'undecided';
+  return true;
+}
+
+function resourceUseLine(u) {
+  var bits = [];
+  if (u.type === 'loop-item') bits.push('Loop: ' + u.usedIn + (u.loopItemLabel ? ' — ' + u.loopItemLabel : '') + (u.next ? ', next: ' + u.next : ''));
+  else if (u.type === 'sequence-item') bits.push('Sequence: ' + u.usedIn + (u.current ? ' (current)' : ' (#' + u.position + ')'));
+  else bits.push('Used in: ' + u.usedIn);
+  if (u.scheduleSummary) bits.push(u.scheduleSummary);
+  return bits.join(' · ');
+}
+
+function resourceWhoLabel(u) {
+  return (u.participants && u.participants.length) ? u.participants.map(function (id) { var s = studentsById(id); return s ? s.name : id; }).join(', ') : 'Everyone';
+}
+
+// Screen view: compact cards, all uses rolled into one card.
+function resourceCardHTML(r) {
+  var usesHTML = r.uses.map(function (u) {
+    return '<div class="res-use-line">' + escapeHtml(resourceUseLine(u)) + ' <span class="res-use-who">(' + escapeHtml(resourceWhoLabel(u)) + ')</span></div>';
+  }).join('');
+  return '<div class="res-card"><div class="res-card-title">' + escapeHtml(r.title) +
+    '<span class="res-status-tag status-' + r.status + '">' + STATUS_LABELS[r.status] + '</span></div>' +
+    usesHTML + '</div>';
+}
+
+// Print view: a checklist a parent can mark up while gathering, ordering, or
+// placing library holds — one blank checkbox per resource, one row per use
+// when a resource has more than one (so "Used in" context stays specific).
+function resourceChecklistRowHTML(r) {
+  return r.uses.map(function (u, idx) {
+    var titleLine = idx === 0 ? escapeHtml(r.title) : escapeHtml(r.title) + ' (also used elsewhere)';
+    return '<div class="res-print-row">' +
+      '<span class="res-checkbox">&#9633;</span>' +
+      '<div class="res-print-fields">' +
+        '<div class="res-print-title">' + titleLine + '</div>' +
+        '<div>Status: ' + escapeHtml(STATUS_LABELS[r.status]) + '</div>' +
+        '<div>Used by: ' + escapeHtml(resourceWhoLabel(u)) + '</div>' +
+        '<div>Used in: ' + escapeHtml(u.usedIn) + '</div>' +
+        (u.type === 'loop-item' || u.type === 'sequence-item' ? '<div>Context: ' + escapeHtml(resourceUseLine(u)) + '</div>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function filterRollup(resources, includeMap, filter) {
+  return resources.map(function (r) {
+    var uses = r.uses.filter(function (u) { return resourceUseMatchesInclude(u, includeMap); });
+    if (!uses.length) return null;
+    return { title: r.title, status: r.status, uses: uses };
+  }).filter(Boolean).filter(function (r) { return resourceMatchesFilter(r, filter); });
+}
+
+function groupResourcesBySubject(resources) {
+  var groups = {};
+  resources.forEach(function (r) {
+    r.uses.forEach(function (u) {
+      var subj = u.subjectFamilyId || 'other';
+      if (!groups[subj]) groups[subj] = [];
+      if (groups[subj].indexOf(r) === -1) groups[subj].push(r);
+    });
+  });
+  return groups;
+}
+function groupResourcesByStudent(resources) {
+  var groups = {};
+  STUDENTS.forEach(function (s) { groups[s.id] = []; });
+  resources.forEach(function (r) {
+    var seen = {};
+    r.uses.forEach(function (u) { (u.participants || []).forEach(function (id) { seen[id] = true; }); });
+    Object.keys(seen).forEach(function (id) { if (groups[id] && groups[id].indexOf(r) === -1) groups[id].push(r); });
+  });
+  return groups;
+}
+function groupResourcesByStatus(resources) {
+  var groups = {};
+  resources.forEach(function (r) {
+    if (!groups[r.status]) groups[r.status] = [];
+    groups[r.status].push(r);
+  });
+  return groups;
+}
+
+var GROUP_BY_LABELS = { subject: 'Subject', student: 'Student', status: 'Status' };
+var FILTER_LABELS = {
+  all: 'All statuses', need: 'Need to buy', missing: 'Need to buy / reserve / undecided',
+  student: 'One student', subject: 'One subject'
+};
+function resourcePrintHeaderHTML(groupBy, filter) {
+  return '<div class="res-print-header">' +
+    '<div class="res-print-h1">Book &amp; Resource List</div>' +
+    '<div>Grouped by: ' + escapeHtml(GROUP_BY_LABELS[groupBy] || groupBy) + '</div>' +
+    '<div>Filter: ' + escapeHtml(FILTER_LABELS[filter] || filter) + '</div>' +
+    '<div class="res-print-sub">Generated from Family School Map</div>' +
+  '</div>';
+}
+
+function renderResourceList(groupBy, includeMap, filter, checklist) {
+  includeMap = includeMap || {};
+  filter = filter || 'all';
+  var renderRow = checklist ? resourceChecklistRowHTML : resourceCardHTML;
+  var resources = filterRollup(buildResourceRollup(), includeMap, filter);
+  var html = '';
+  if (groupBy === 'student') {
+    var byStudent = groupResourcesByStudent(resources);
+    STUDENTS.forEach(function (s) {
+      var list = byStudent[s.id] || [];
+      if (!list.length) return;
+      html += '<div class="res-group"><h5 style="background:' + s.color + ';">' + escapeHtml(s.name) + '</h5>' + list.map(renderRow).join('') + '</div>';
+    });
+  } else if (groupBy === 'status') {
+    var byStatus = groupResourcesByStatus(resources);
+    Object.keys(STATUS_LABELS).forEach(function (st) {
+      var list = byStatus[st]; if (!list || !list.length) return;
+      html += '<div class="res-group"><h5 class="status-head">' + STATUS_LABELS[st] + '</h5>' + list.map(renderRow).join('') + '</div>';
+    });
+  } else {
+    var bySubj = groupResourcesBySubject(resources);
+    cols().forEach(function (c) {
+      var list = bySubj[c.id] || [];
+      if (!list.length) return;
+      html += '<div class="res-group"><h5 style="background:var(' + SUBJECT_COLOR_VAR[c.id] + ');">' + escapeHtml(c.label) + '</h5>' + list.map(renderRow).join('') + '</div>';
+    });
+  }
+  return html || '<p style="font-size:11px;color:var(--muted);">No resources match this view.</p>';
+}
+
+// ---- Book & Resource List panel (interactive tabs — by subject / student / status) ----
+window.openResourceList = function (groupBy) {
+  closePanels();
+  groupBy = groupBy || 'subject';
+  document.querySelectorAll('#res-group-tabs button').forEach(function (b) { b.classList.toggle('active', b.dataset.group === groupBy); });
+  document.getElementById('resource-list-body').innerHTML = renderResourceList(groupBy, {}, 'all');
+  document.getElementById('resource-list-panel').classList.add('show');
+};
+document.getElementById('res-group-tabs').addEventListener('click', function (e) {
+  var btn = e.target.closest('button'); if (!btn) return;
+  openResourceList(btn.dataset.group);
+});
+
+// ---- Print mockup: calm top-level choice, everything else tucked under "More print settings" ----
+window.openPrintOptions = function () {
+  closePanels();
+  var studentSel = document.getElementById('print-student-pick');
+  studentSel.innerHTML = STUDENTS.map(function (s) { return '<option value="' + s.id + '">' + escapeHtml(s.name) + '</option>'; }).join('');
+  document.getElementById('print-row-checks').innerHTML = ROWS.map(function (r) {
+    return '<label><input type="checkbox" checked style="width:auto;display:inline;"> ' + escapeHtml(r.label) + '</label>';
+  }).join('');
+  document.getElementById('print-col-checks').innerHTML = cols().map(function (c) {
+    return '<label><input type="checkbox" checked style="width:auto;display:inline;"> ' + escapeHtml(c.label) + '</label>';
+  }).join('');
+  document.getElementById('more-settings-body').classList.remove('show');
+  selectPrintMode(state.printMode || 'overview');
+  document.getElementById('print-options-panel').classList.add('show');
+};
+window.toggleMoreSettings = function () {
+  document.getElementById('more-settings-body').classList.toggle('show');
+};
+window.selectPrintMode = function (mode) {
+  state.printMode = mode;
+  document.querySelectorAll('.print-mode-card').forEach(function (c) { c.classList.toggle('selected', c.dataset.mode === mode); });
+  document.getElementById('print-student-block').style.display = mode === 'student' ? '' : 'none';
+  document.getElementById('print-resource-block').style.display = mode === 'resources' ? '' : 'none';
+  document.getElementById('more-settings-toggle').style.display = mode === 'resources' ? 'none' : '';
+  if (mode === 'resources') document.getElementById('more-settings-body').classList.remove('show');
+  document.getElementById('print-apply-btn').textContent = mode === 'resources' ? 'Print Book & Resource List' : 'Print preview';
+};
+window.applyPrintOptionsAndPrint = function () {
+  document.body.classList.remove('print-overview', 'print-student-only', 'print-resources');
+  document.querySelectorAll('#map-body tr').forEach(function (tr) { tr.classList.remove('row-hidden-print'); });
+
+  if (state.printMode === 'overview') {
+    document.getElementById('lens-select').value = 'all';
+    onLensChange();
+    document.body.classList.add('print-overview');
+  } else if (state.printMode === 'student') {
+    var pick = document.getElementById('print-student-pick').value;
+    document.getElementById('lens-select').value = 'student:' + pick;
+    onLensChange();
+    document.body.classList.add('print-student-only');
+    var includeMap = {};
+    document.querySelectorAll('.pinc').forEach(function (c) { includeMap[c.dataset.key] = c.checked; });
+    document.querySelectorAll('#map-body tr').forEach(function (tr) {
+      var cat = audienceCategory(tr.dataset.rowId);
+      if (includeMap[cat] === false) tr.classList.add('row-hidden-print');
+    });
+  } else if (state.printMode === 'resources') {
+    var groupBy = document.getElementById('print-res-groupby').value;
+    var resInclude = {};
+    document.querySelectorAll('.rinc').forEach(function (c) { resInclude[c.dataset.key] = c.checked; });
+    var filter = document.getElementById('print-res-filter').value;
+    document.getElementById('resource-print-render').innerHTML =
+      resourcePrintHeaderHTML(groupBy, filter) + renderResourceList(groupBy, resInclude, filter, true);
+    document.body.classList.add('print-resources');
+  }
+
+  if (state.printMode !== 'resources') {
+    if (document.getElementById('print-hide-optional').checked) document.body.classList.add('print-hide-optional');
+    else document.body.classList.remove('print-hide-optional');
+  }
+  closePanels();
+  window.print();
+};
+
+// ---------------------------------------------------------------------------
+// Age-stage timetable guardrails (model notes only — not enforced anywhere
+// in this prototype). Literal minutes, inspired loosely by Charlotte Mason
+// Form I/II/III scheduling patterns (see AmblesideOnline's scheduling tips
+// and Juniper Pines' Form I/II/III timetable articles) but not copied
+// wholesale from any one provider. These are wise starting parameters that
+// a parent can override per card or per age-stage template.
+// ---------------------------------------------------------------------------
+var AGE_STAGE_GUARDRAILS = [
+  { band: 'form1', label: 'Grades 1–3 / Form I', min: 15, target: 18, max: 20 },
+  { band: 'form2', label: 'Grades 4–6 / Form II', min: 20, target: 25, max: 30 },
+  { band: 'form3', label: 'Grades 7–9 / Form III', min: 30, target: 38, max: 45 }
+];
+var AGE_STAGE_SAMPLE_MINUTES = {
+  form1: [
+    ['Reading practice', '10–15 min'], ['Copywork / handwriting', '5–10 min'], ['Math', '15–20 min'],
+    ['Bible reading', '10–15 min'], ['Literature / history reading', '10–20 min'],
+    ['Nature Study', 'outdoor time may run longer; formal lesson/read-aloud stays short']
+  ],
+  form2: [
+    ['Math', '20–30 min'], ['History reading', '20–30 min'], ['Geography', '20–30 min'],
+    ['Literature or science reading', '20–30 min'], ['Dictation / grammar / written narration', 'often shorter than the max']
+  ],
+  form3: [
+    ['Math', '30–45 min max'], ['Science', '30–45 min max'], ['History', '30–45 min max'], ['Literature', '30–45 min max'],
+    ['Some practices', 'remain shorter even for older students'],
+    ['Older students', 'may add independent reading or written narration beyond a combined family/group reading']
+  ]
+};
+
+var PHASE0_READINESS = [
+  ['Student', 'Supported'], ['Student grade/form band', 'Needs model change'], ['Group', 'Supported'],
+  ['SubjectColumn', 'Supported'], ['PlanCard', 'Supported'], ['Participant override', 'Supported'],
+  ['Mixed-age group time rule', 'Needs model change'], ['Extension work', 'Needs model change'],
+  ['Loop', 'Supported'], ['Loop item', 'Supported'], ['Sequence', 'Supported'], ['Sequence item', 'Supported'],
+  ['Resource', 'Supported'], ['ResourceUse', 'Supported'], ['Resource status', 'Needs model change'],
+  ['StarterTemplate', 'Supported'], ['AgeStageTemplate', 'Needs model change'],
+  ['Lesson length / time estimate', 'Needs model change'], ['Schedule mode', 'Supported'],
+  ['PrintSettings', 'Supported'], ['Resource print orientation', 'Supported'],
+  ['Student Lens', 'Supported'], ['Group Lens', 'Supported'], ['Subject Lens', 'Supported'],
+  ['Needs resources filter', 'Supported'], ['Needs scheduling filter', 'Needs model change'],
+  ['Needs placement filter', 'Supported'], ['Workload/time preview later', 'Deferred intentionally'],
+  ['Term Plan projection later', 'Deferred intentionally'], ['Today checklist later', 'Deferred intentionally'],
+  ['Progress tracking later', 'Deferred intentionally']
+];
+
+function mnStatusTag(s) {
+  var cls = s === 'Supported' ? 'mn-status-supported' : (s === 'Deferred intentionally' ? 'mn-status-deferred' : 'mn-status-change');
+  return '<span class="mn-status-tag ' + cls + '">' + escapeHtml(s) + '</span>';
+}
+
+window.openModelNotes = function () {
+  closePanels();
+  var html = '';
+
+  html += '<div class="mn-section"><h5>Charlotte Mason lesson-length guardrails by grade/form</h5>' +
+    '<p>Literal maximums, not vague phrases. Many subjects will take less than the maximum — it\'s a guardrail, not a target every subject must fill. Parents can override everything per card.</p>' +
+    '<table class="mn-table"><tr><th>Band</th><th>Suggested min</th><th>Target</th><th>Hard max</th></tr>' +
+    AGE_STAGE_GUARDRAILS.map(function (g) {
+      return '<tr><td>' + escapeHtml(g.label) + '</td><td>' + g.min + ' min</td><td>' + g.target + ' min</td><td>' + g.max + ' min</td></tr>';
+    }).join('') + '</table>' +
+    AGE_STAGE_GUARDRAILS.map(function (g) {
+      return '<div style="margin-top:6px;"><strong style="font-size:11px;">' + escapeHtml(g.label) + ' sample minutes</strong>' +
+        '<table class="mn-table">' + AGE_STAGE_SAMPLE_MINUTES[g.band].map(function (row) {
+          return '<tr><td>' + escapeHtml(row[0]) + '</td><td>' + escapeHtml(row[1]) + '</td></tr>';
+        }).join('') + '</table></div>';
+    }).join('') +
+  '</div>';
+
+  html += '<div class="mn-section"><h5>Mixed-age group lesson-length rule</h5>' +
+    '<p>For a shared/group card, the suggested lesson length defaults to the <strong>youngest</strong> participant\'s guardrail (optionally the middle child), not the oldest. Older participants can get extension work attached to the same card instead of stretching the shared lesson.</p>' +
+    '<p><em>Demo on the map:</em> "American History Spine" (audience: Older Students = Lucy + Jeremiah) is sized to Lucy\'s Form II guardrail (~25 min), with a separate extension entry for Jeremiah (+15 min independent reading &amp; written narration). Toggle Detailed mode and expand that card to see it.</p>' +
+    '<table class="mn-table"><tr><th>Rule</th><th>Behavior</th></tr>' +
+    '<tr><td>Default</td><td>Use the youngest participant\'s max lesson length</td></tr>' +
+    '<tr><td>Alternate</td><td>Use the middle child\'s level, when that fits the group better</td></tr>' +
+    '<tr><td>Manual override</td><td>Parent sets a custom shared lesson length</td></tr>' +
+    '<tr><td>Extension work</td><td>Independent reading / written narration / notebook work / extra resource / extra minutes, attached per older student</td></tr>' +
+    '</table></div>';
+
+  html += '<div class="mn-section"><h5>Workload / time preview (mockup, not computed)</h5>' +
+    '<p>Structure for a future per-student or per-group workload preview, tied to the Student Lens. Numbers below are illustrative placeholders, not calculated from the sample data.</p>' +
+    '<div style="border:1px solid var(--border);border-radius:6px;padding:8px;">' +
+    '<div style="font-weight:600;font-size:11px;margin-bottom:4px;">Jeremiah <span style="color:var(--muted);font-weight:400;">— Together + Older Students + Individual + Co-op included</span></div>' +
+    ['Estimated weekly lesson time', '~9.5 hrs (mock)', 'Shared lesson time', '~4 hrs (mock)', 'Independent time', '~4.5 hrs (mock)',
+     'Extension work', '~1 hr (mock)', 'Needs resources', '1 card (mock)', 'Needs scheduling', '0 cards (mock)',
+     'Lessons over suggested max', '0 (mock)'].reduce(function (acc, val, idx) {
+      if (idx % 2 === 0) acc.push('<div class="mn-workload-row"><span>' + escapeHtml(val) + '</span>');
+      else acc[acc.length - 1] += '<span>' + escapeHtml(val) + '</span></div>';
+      return acc;
+    }, []).join('') +
+    '</div></div>';
+
+  html += '<div class="mn-section"><h5>Gentle workload warnings (examples, not wired up)</h5>' +
+    '<p>Soft warnings, never hard blocks. Parents can always override.</p>' +
+    [
+      'This lesson exceeds the suggested maximum for the youngest participant.',
+      'This group lesson may be too long for the younger students.',
+      'Consider splitting into a shared reading plus older-student extension work.',
+      'This child\'s total weekly time looks light / balanced / heavy.',
+      'This subject has time assigned but no resource chosen.',
+      'This resource is needed but has not been chosen yet.'
+    ].map(function (w) { return '<div class="mn-warning">' + escapeHtml(w) + '</div>'; }).join('') +
+  '</div>';
+
+  html += '<div class="mn-section"><h5>Phase 0 readiness checklist</h5>' +
+    '<p>Supported = the prototype/model already shapes this. Needs model change = real fields/records still need to be added in Phase 0. Deferred intentionally = explicitly out of scope until Phase 1/2.</p>' +
+    '<table class="mn-table"><tr><th>Concept</th><th>Status</th></tr>' +
+    PHASE0_READINESS.map(function (row) {
+      return '<tr><td>' + escapeHtml(row[0]) + '</td><td>' + mnStatusTag(row[1]) + '</td></tr>';
+    }).join('') + '</table></div>';
+
+  document.getElementById('model-notes-body').innerHTML = html;
+  document.getElementById('model-notes-panel').classList.add('show');
+};
+
+document.getElementById('density-toggle').addEventListener('click', function (e) {
+  var btn = e.target.closest('button'); if (!btn) return;
+  document.querySelectorAll('#density-toggle button').forEach(function (b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  state.density = btn.dataset.mode;
+  document.body.classList.toggle('compact', state.density === 'compact');
+  document.body.classList.toggle('detailed', state.density === 'detailed');
+});
+document.getElementById('sample-toggle').addEventListener('click', function (e) {
+  var btn = e.target.closest('button'); if (!btn) return;
+  document.querySelectorAll('#sample-toggle button').forEach(function (b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  state.sample = btn.dataset.sample;
+  buildGrid();
+});
+
+populateLensSelect();
+buildFilters();
+buildGrid();
+document.body.classList.add('compact');
+window.renderEditorConditionals('standalone', null);
+
+// Demo state per earlier review: pre-select Jeremiah in the lens so it's
+// immediately obvious that Together + Older Students + individual cards
+// all light up together.
+document.getElementById('lens-select').value = 'student:jeremiah';
+window.onLensChange();
+</script>
+
+</body>
+</html>
