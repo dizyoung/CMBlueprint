@@ -68,8 +68,37 @@ function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
+// Spoken/menu name for a card. Subject first, Form second — never the
+// concatenated "Form II Science" form, which read as a card named after a Form.
 function cardName(c) {
-  return c.formLabel ? c.formLabel + ' ' + c.subjectLabel : c.subjectLabel;
+  return c.formLabel ? c.subjectLabel + ', ' + c.formLabel : c.subjectLabel;
+}
+
+// --- derived labels (presentation only — nothing here is ever stored) ------
+
+// ['Form I', 'Form II'] -> 'Forms I + II'.  A single card keeps its own label.
+// Anything that is not a "Form N" label is joined whole, so a pile of oddly
+// named cards still reads sensibly.
+function formsLine(formLabels) {
+  const labels = formLabels.filter(Boolean);
+  if (!labels.length) return '';
+  if (labels.length === 1) return labels[0];
+  const numerals = labels.map(l => /^Form\s+(.+)$/.exec(l)).filter(Boolean).map(m => m[1]);
+  if (numerals.length === labels.length) return 'Forms ' + numerals.join(' + ');
+  return labels.join(' + ');
+}
+
+// Names the decisions still open on a pile, in place of a bare count.
+function stackNeeds(stackId) {
+  const st = CT.findStack(state, stackId);
+  const cards = CT.cardsInStack(state, stackId);
+  const needs = [];
+  if (!st.loopId) needs.push('loop');
+  if (CT.sharedResources(state, stackId).length === 0) needs.push('shared resource');
+  if (st.relationship === 'layered' && cards.some(c => CT.resourcesForCard(state, c.id).length === 0)) {
+    needs.push('Form layers');
+  }
+  return needs;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,31 +125,48 @@ function bookHTML(r, kindNote) {
     '</span>';
 }
 
+// A collapsed pile is ONE visual object. The cards behind the top one are
+// shown as paper edges with a small Form tab — never as labelled member cards,
+// and never with a separate summary card underneath.
 function collapsedStackHTML(sum) {
   const st = CT.findStack(state, sum.stackId);
-  const leaves = CT.cardsInStack(state, sum.stackId).map((c, i) =>
-    '<div class="leaf" style="--i:' + i + '">' + esc(cardName(c)) + '</div>').join('');
+  const cards = CT.cardsInStack(state, sum.stackId);
+  const forms = formsLine(sum.forms);
+  const needs = stackNeeds(sum.stackId);
   const books = CT.sharedResources(state, sum.stackId).map(r => bookHTML(r, 'shared book')).join('');
-  const facts = [
-    '<span>' + esc(sum.forms.join(' · ')) + '</span>',
-    '<span>' + esc(sum.relationshipLabel) + '</span>',
-    '<span>' + esc(sum.loopLabel) + '</span>',
-    '<span>' + sum.sharedResourceCount + ' shared ' + (sum.sharedResourceCount === 1 ? 'book' : 'books') + '</span>',
-    '<span>' + sum.formSpecificResourceCount + ' for one Form</span>'
+
+  // One edge per card behind the face, deepest first, each with a Form tab.
+  // At most three edges are drawn, or a big pile would walk off its own corner.
+  const edgeCards = cards.slice(0, -1).slice(-3);
+  const edges = edgeCards.map((c, i) =>
+    '<div class="pile-edge" style="--i:' + (edgeCards.length - i) + '">' +
+      '<span class="form-tab">' + esc(String(c.formLabel || c.subjectLabel).replace(/^Form\s+/, '')) + '</span>' +
+    '</div>').join('');
+
+  const lines = [
+    '<div class="pile-forms">' + esc(forms) + '</div>',
+    '<div class="pile-rel">' + esc(sum.relationshipLabel) + '</div>'
   ];
-  if (sum.unresolvedCount > 0) facts.push('<span class="unresolved">' + sum.unresolvedCount + ' still to decide</span>');
+  if (sum.loopId) lines.push('<div class="pile-loop">' + esc(sum.loopLabel) + '</div>');
+  lines.push('<div class="pile-books">' + sum.sharedResourceCount + ' shared ' +
+    (sum.sharedResourceCount === 1 ? 'book' : 'books') +
+    (sum.formSpecificResourceCount ? ' · ' + sum.formSpecificResourceCount + ' for one Form' : '') + '</div>');
+  if (needs.length) lines.push('<div class="pile-needs">Needs: ' + esc(needs.join(', ')) + '</div>');
+
   return '<div class="stack" data-kind="stack" data-stack-id="' + esc(sum.stackId) + '" data-drop="stack" tabindex="0" role="button"' +
-      ' aria-label="' + esc(sum.subjectLabel + ' pile, ' + sum.forms.join(', ') + ', ' + sum.relationshipLabel) + '">' +
-      '<div class="stack-pile rel-' + esc(st.relationship) + '">' + leaves + '</div>' +
-      (books ? '<div class="books stack-books" data-drop="stack-shared" data-stack-id="' + esc(sum.stackId) + '">' + books + '</div>' : '') +
-      '<div class="stack-summary">' +
-        '<div class="headline">' + esc(sum.subjectLabel) + '</div>' +
-        '<div class="facts">' + facts.join(' · ') + '</div>' +
-        '<div class="actions">' +
-          '<button type="button" data-action="open" data-id="' + esc(sum.stackId) + '">Open</button>' +
-          '<button type="button" class="quiet" data-menu="stack" data-id="' + esc(sum.stackId) + '">Move…</button>' +
+      ' aria-label="' + esc(sum.subjectLabel + ' pile, ' + forms + ', ' + sum.relationshipLabel) + '">' +
+      '<div class="stack-pile rel-' + esc(st.relationship) + '">' +
+        edges +
+        '<div class="pile-face">' +
+          '<div class="pile-title">' + esc(sum.subjectLabel) + '</div>' +
+          '<div class="pile-lines">' + lines.join('') + '</div>' +
+          '<div class="actions">' +
+            '<button type="button" data-action="open" data-id="' + esc(sum.stackId) + '">Open</button>' +
+            '<button type="button" class="quiet" data-menu="stack" data-id="' + esc(sum.stackId) + '">Move…</button>' +
+          '</div>' +
         '</div>' +
       '</div>' +
+      (books ? '<div class="books stack-books" data-drop="stack-shared">' + books + '</div>' : '') +
     '</div>';
 }
 
@@ -145,7 +191,7 @@ function expandedStackHTML(sum) {
     '<div class="open-head">' +
       '<div>' +
         '<h3>' + esc(sum.subjectLabel) + '</h3>' +
-        '<p class="open-sub">' + esc(sum.forms.join(' · ')) + ' — in ' + esc(sum.loopLabel) + '</p>' +
+        '<p class="open-sub">' + esc(formsLine(sum.forms)) + (sum.loopId ? ' — in ' + esc(sum.loopLabel) : '') + '</p>' +
       '</div>' +
       '<div class="rel-toggle">' +
         '<button type="button" data-action="rel" data-id="' + esc(sum.stackId) + '" data-rel="together"' + (st.relationship === 'together' ? ' class="on"' : '') + '>Together</button>' +
@@ -153,12 +199,12 @@ function expandedStackHTML(sum) {
         '<button type="button" data-action="close" data-id="' + esc(sum.stackId) + '">Close</button>' +
       '</div>' +
     '</div>' +
-    '<div class="shared-area" data-drop="stack-shared" data-stack-id="' + esc(sum.stackId) + '">' +
+    '<div class="shared-area" data-drop="stack-shared">' +
       '<h4>Everyone shares</h4>' +
       '<div class="books">' + (shared.length ? shared.map(r => bookHTML(r, 'shared book')).join('')
         : '<span class="book-note">Drop a book here to use it with all of them.</span>') + '</div>' +
     '</div>' +
-    '<div class="form-row">' + cols + '</div>' +
+    '<div class="form-row rel-' + esc(st.relationship) + '">' + cols + '</div>' +
   '</div>';
 }
 
@@ -204,7 +250,10 @@ function dropTargetFor(el, drag) {
   while (el && el !== document.body) {
     const kind = el.getAttribute && el.getAttribute('data-drop');
     if (kind && accepts(kind, el, drag)) {
-      return { kind, el, cardId: el.getAttribute('data-card-id'), stackId: el.getAttribute('data-stack-id'), loopId: el.getAttribute('data-loop-id') };
+      // The stack id lives on the one element that represents the stack, so a
+      // drop zone inside it (shared books) inherits it rather than repeating it.
+      const owner = el.hasAttribute('data-stack-id') ? el : el.closest('[data-stack-id]');
+      return { kind, el, cardId: el.getAttribute('data-card-id'), stackId: owner ? owner.getAttribute('data-stack-id') : null, loopId: el.getAttribute('data-loop-id') };
     }
     el = el.parentElement;
   }

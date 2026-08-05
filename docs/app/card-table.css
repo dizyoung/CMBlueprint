@@ -109,34 +109,44 @@ button.on { background: var(--accent); border-color: var(--accent); color: #fff;
 .stack.dragging { opacity: 0.35; }
 .stack.drop-valid .stack-pile { box-shadow: 0 0 0 3px rgba(63,122,82,0.28); border-radius: 6px; }
 
-.stack-pile { position: relative; height: 126px; margin-bottom: 10px; }
-.stack-pile .leaf {
+/* The pile IS the object: one face carrying the identity, with the other
+   cards showing only as clipped paper edges behind it. */
+.stack-pile { position: relative; margin: 22px 56px 10px 0; }
+
+/* Each clipped card shows only as a paper edge to the upper right, with a
+   small Form tab in the exposed strip. No member titles here. */
+.pile-edge {
   position: absolute;
-  width: 208px; height: 104px;
+  left: calc(var(--i) * 3px); top: calc(var(--i) * -5px);
+  right: calc(var(--i) * -16px);
+  height: 100%;
   background: var(--card);
   border: 1px solid var(--rule);
-  border-radius: 4px;
-  box-shadow: 0 1px 0 var(--edge), 0 6px 14px -12px rgba(0,0,0,0.55);
-  padding: 8px 12px;
-  font-size: 13px; font-family: system-ui, sans-serif; color: var(--ink-soft);
-  overflow: hidden;
+  border-radius: 5px;
+  box-shadow: 0 1px 0 var(--edge);
+  z-index: 0;
 }
-/* Together: tightly clipped — reads as one object. */
-.stack-pile.rel-together .leaf { left: calc(var(--i) * 4px); top: calc(var(--i) * 3px); }
-/* Layered: visibly staggered so each Form's own edge shows. */
-.stack-pile.rel-layered .leaf { left: calc(var(--i) * 22px); top: calc(var(--i) * 14px); }
+.stack-pile.rel-layered .pile-edge { top: calc(var(--i) * -9px); }
+.pile-edge .form-tab {
+  position: absolute; right: 4px; top: 7px;
+  font-family: system-ui, sans-serif; font-size: 10px; letter-spacing: 0.06em;
+  color: var(--ink-soft);
+}
 
-.stack-summary {
-  background: rgba(255,255,255,0.72);
-  border: 1px solid var(--rule); border-radius: 8px;
-  padding: 10px 12px;
+.pile-face {
+  position: relative; z-index: 1;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  box-shadow: 0 1px 0 var(--edge), 0 8px 16px -12px rgba(0,0,0,0.55);
+  padding: 12px 14px 12px;
   font-family: system-ui, sans-serif; font-size: 13px;
 }
-.stack-summary .headline { font-family: inherit; font-size: 15px; color: var(--ink); margin-bottom: 4px; }
-.stack-summary .facts { color: var(--ink-soft); line-height: 1.7; }
-.stack-summary .facts span { white-space: nowrap; }
-.stack-summary .unresolved { color: var(--accent); font-weight: 600; }
-.stack-summary .actions { margin-top: 10px; display: flex; gap: 8px; }
+.pile-title { font-family: inherit; font-size: 18px; color: var(--ink); }
+.pile-lines { color: var(--ink-soft); line-height: 1.6; margin-top: 8px; }
+.pile-forms { color: var(--ink); }
+.pile-needs { color: var(--accent); margin-top: 4px; }
+.pile-face .actions { margin-top: 12px; display: flex; gap: 8px; }
 
 /* expanded */
 .stack-open {
@@ -161,7 +171,14 @@ button.on { background: var(--accent); border-color: var(--accent); color: #fff;
 }
 .shared-area.drop-valid, .form-col.drop-valid { border-color: var(--valid); background: #eaf4ed; }
 
-.form-row { display: flex; flex-wrap: wrap; gap: 16px; }
+.form-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+/* Together: the open cards sit tight against one another. */
+.form-row.rel-together { gap: 4px; }
+/* Layered: each Form steps down and along, so its own addition has room. */
+.form-row.rel-layered { gap: 20px; }
+.form-row.rel-layered .form-col:nth-child(2) { margin-top: 18px; }
+.form-row.rel-layered .form-col:nth-child(3) { margin-top: 36px; }
+.form-row.rel-layered .form-col:nth-child(n+4) { margin-top: 54px; }
 .form-col {
   border: 1px dashed transparent; border-radius: 8px; padding: 8px;
 }
