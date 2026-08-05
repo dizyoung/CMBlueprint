@@ -1043,6 +1043,164 @@ const SKEY = 'cmblueprint.familySchoolMap.v1';
 }
 
 
+// ===========================================================================
+// AUDIENCE/LOOP DECOUPLING + DENSITY - prototype pages only.
+// ===========================================================================
+{
+  const M2 = await import('../lib/familyMap.mjs');
+  const vp = await browser.newPage();
+  const errs = [];
+  vp.on('pageerror', e => errs.push(e.message));
+  vp.on('dialog', async d => { await d.accept(); });
+
+  const S1 = M2.FEAST_LIBRARY[0];
+  const seed = {
+    appStateVersion: 1, subjectColumns: [], cards: [], loopItems: [],
+    resources: [], resourceUses: [], outsideCommitments: [],
+    students: [{
+      id: 'stu_v', name: 'Vesper', active: true, gradeBand: 'form2', gradeBandConfirmed: true,
+      dayCapacity: { mon: 'full', tue: 'full', wed: 'full', thu: 'full', fri: 'full' },
+      dayCapacityExplicit: { mon: true, tue: true, wed: true, thu: true, fri: true }
+    }],
+    groups: [{ id: 'grp_v', label: 'A named group', studentIds: ['stu_v'], active: true }],
+    loops: [{ id: 'lp_v', title: 'Named bucket', active: true, rhythmDayIds: [] }],
+    // One member with an audience, one with none at all.
+    strandAssignments: [
+      { id: 'sa_v1', strandId: S1.id, strandLabel: S1.label, assignmentMode: 'custom-group', groupId: 'grp_v', loopId: 'lp_v', studentIds: [] },
+      { id: 'sa_v2', strandId: M2.FEAST_LIBRARY[1].id, strandLabel: M2.FEAST_LIBRARY[1].label, assignmentMode: 'loop', loopId: 'lp_v', studentIds: [] }
+    ],
+    setupPrototype: { groupsReviewed: true, availabilityReviewed: true }
+  };
+  await vp.goto(FEAST_URL);
+  await vp.evaluate(([k, v]) => localStorage.setItem(k, v), [SKEY, JSON.stringify(seed)]);
+  await vp.goto(FEAST_URL);
+  await vp.waitForLoadState('networkidle');
+  await vp.waitForTimeout(500);
+
+  // --- view control
+  const currentView = await vp.$eval('#view-controls button.is-current', el => el.textContent);
+  ok('Feast view control defaults to Suggested Stacks', currentView === 'Suggested Stacks');
+  ok('Feast view control offers all five views',
+    (await vp.$$eval('#view-controls button', els => els.length)) === 5);
+  ok('Suggested Stacks renders stack sections',
+    (await vp.$$eval('.stack-section', els => els.length)) > 5);
+  const stacksChips = await vp.$$eval('.strand-chip', els => els.length);
+  ok('Suggested Stacks still shows every strand', stacksChips === M2.FEAST_LIBRARY.length);
+
+  await vp.click('#view-controls button[data-view="subject"]');
+  await vp.waitForTimeout(300);
+  ok('Switching to By Subject changes the view',
+    (await vp.$eval('#view-controls button.is-current', el => el.textContent)) === 'By Subject');
+  ok('By Subject shows every strand exactly once',
+    (await vp.$$eval('.strand-chip', els => els.length)) === M2.FEAST_LIBRARY.length);
+  await vp.click('#view-controls button[data-view="unsorted"]');
+  await vp.waitForTimeout(300);
+  const unsortedChips = await vp.$$eval('.strand-chip', els => els.length);
+  ok('Unsorted Only shows fewer strands than the whole feast', unsortedChips < M2.FEAST_LIBRARY.length);
+  await vp.click('#view-controls button[data-view="stacks"]');
+  await vp.waitForTimeout(300);
+
+  // --- density
+  const chipText = await vp.$eval('.strand-chip[data-strand-id="' + S1.id + '"]', el => el.innerText);
+  ok('A compact strand card shows its Form and subject family', /Form|All Together/.test(chipText));
+  ok('A compact strand card shows its audience', chipText.includes('A named group'));
+  const wtSummary = await vp.$eval('.strand-chip[data-strand-id="' + S1.id + '"] details.chip-worktype summary',
+    el => el.textContent);
+  ok('A compact strand card does not show the work type until expanded',
+    !/Group lesson|Independent|Shared with Mom/.test(wtSummary));
+  await vp.$eval('.strand-chip[data-strand-id="' + S1.id + '"] details.chip-worktype', el => { el.open = true; });
+  await vp.waitForTimeout(200);
+  const wtOpen = await vp.$eval('.strand-chip[data-strand-id="' + S1.id + '"] details.chip-worktype', el => el.innerText);
+  ok('Expanding a strand card reveals the work type', /Group lesson|Independent|Shared with Mom|not set/.test(wtOpen));
+
+  // --- an audience survives loop membership
+  const savedAudience = await vp.evaluate(k => JSON.parse(localStorage.getItem(k)), SKEY);
+  ok('A strand in a loop keeps its own audience',
+    savedAudience.strandAssignments.find(sa => sa.id === 'sa_v1').assignmentMode === 'custom-group');
+
+  // --- Open <Loop Name> opens the loop detail view
+  const openBtn = await vp.$eval('.loop-bucket[data-loop-id="lp_v"] [data-role="open-loop"]', el => el.textContent);
+  ok('A loop card offers a prominent "Open <Loop Name>" button', openBtn === 'Open Named bucket');
+  ok('The old "Review strands" link is gone from the loop card',
+    !(await vp.$eval('.loop-bucket[data-loop-id="lp_v"]', el => el.textContent)).includes('Review strands'));
+  await vp.click('.loop-bucket[data-loop-id="lp_v"] [data-role="open-loop"]');
+  await vp.waitForTimeout(400);
+  const detailText = await vp.$eval('#loop-detail-panel', el => el.innerText);
+  ok('Opening a loop shows the loop detail view', detailText.includes('Named bucket'));
+  ok('The loop detail names each strand audience beside it', detailText.includes('A named group'));
+  ok('The loop detail says which strands have no audience yet', detailText.includes('Audience not chosen yet'));
+  ok('The loop detail shows a count of unresolved strands',
+    (await vp.$eval('#loop-detail-panel .count-pill', el => el.textContent)).includes('1 with no audience'));
+  ok('The loop detail shows the derived audience summary', detailText.includes('Mixed audience') || detailText.includes('A named group'));
+  ok('The loop detail suggests related unsorted strands',
+    (await vp.$$eval('#loop-detail-panel [data-role="detail-add"]', els => els.length)) > 0);
+  ok('The loop detail offers move and remove per strand',
+    (await vp.$$eval('#loop-detail-panel [data-role="detail-remove"]', els => els.length)) === 2 &&
+    (await vp.$$eval('#loop-detail-panel [data-role="detail-move"]', els => els.length)) === 2);
+
+  // Clicking the card itself opens it too, and inner controls still work.
+  await vp.click('#loop-detail-panel [data-role="close-loop"]');
+  await vp.waitForTimeout(300);
+  ok('The loop detail can be closed',
+    (await vp.$eval('#loop-detail-panel', el => el.style.display)) === 'none');
+  await vp.click('.loop-bucket[data-loop-id="lp_v"] h3');
+  await vp.waitForTimeout(300);
+  ok('Clicking the loop card body opens the same detail view',
+    (await vp.$eval('#loop-detail-panel', el => el.innerText)).includes('Named bucket'));
+  await vp.selectOption('.loop-bucket[data-loop-id="lp_v"] select[data-role="move-loop"]', '__none__');
+  await vp.waitForTimeout(600);
+  ok('A control inside the loop card still works without the card click swallowing it',
+    (await vp.$eval('.loop-bucket[data-loop-id="lp_v"]', el => el.textContent)).includes('1 strand'));
+
+  ok('No JS errors through views, stacks, and the loop detail view', errs.length === 0);
+  if (errs.length) errs.forEach(e => console.log('  JS error:', e));
+  await vp.evaluate(k => localStorage.removeItem(k), SKEY);
+  await vp.close();
+}
+
+// --- Setup's loop UI asks for a name and a description, never weekdays ---
+{
+  const dp = await browser.newPage();
+  const errs = [];
+  dp.on('pageerror', e => errs.push(e.message));
+  await dp.goto(SETUP_URL);
+  await dp.evaluate(([k, v]) => localStorage.setItem(k, v), [SKEY, JSON.stringify({
+    appStateVersion: 1, subjectColumns: [], cards: [], groups: [], strandAssignments: [], outsideCommitments: [],
+    students: [{ id: 'stu_w', name: 'Wren', active: true, gradeBand: 'form2', gradeBandConfirmed: true }],
+    loops: [{ id: 'lp_w', title: 'Named bucket', active: true, rhythmDayIds: ['mon', 'wed'] }],
+    setupPrototype: { groupsReviewed: true, availabilityReviewed: true }
+  })]);
+  await dp.goto(SETUP_URL);
+  await dp.waitForLoadState('networkidle');
+  await dp.waitForTimeout(400);
+  await dp.click('[data-action="goto-step"][data-step="rhythm"]');
+  await dp.waitForTimeout(300);
+
+  ok("Setup's loop UI has no weekday control",
+    (await dp.$$eval('.loop-card [data-action="loop-day"]', els => els.length)) === 0);
+  ok("Setup's loop UI asks for a name",
+    (await dp.$$eval('.loop-card [data-action="loop-title"]', els => els.length)) === 1);
+  ok("Setup's loop UI asks for an optional short description",
+    (await dp.$$eval('.loop-card [data-action="loop-description"]', els => els.length)) === 1);
+  ok('Setup says day placement belongs to the Weekly Rhythm',
+    (await dp.$eval('#step-body', el => el.textContent)).includes('Weekly Rhythm, not here'));
+  ok('Setup offers a prominent Open button per loop bucket',
+    (await dp.$eval('.loop-card [data-action="review-loop-strands"]', el => el.textContent)) === 'Open Named bucket');
+
+  await dp.fill('[data-action="loop-description"]', 'Right after breakfast');
+  await dp.keyboard.press('Tab');
+  await dp.waitForTimeout(1400);
+  const saved = JSON.parse(await dp.evaluate(k => localStorage.getItem(k), SKEY));
+  ok('A loop description persists', saved.loops[0].description === 'Right after breakfast');
+  ok('Existing rhythmDayIds are preserved untouched',
+    JSON.stringify(saved.loops[0].rhythmDayIds) === JSON.stringify(['mon', 'wed']));
+  ok('No JS errors on the weekday-free loop bucket UI', errs.length === 0);
+  if (errs.length) errs.forEach(e => console.log('  JS error:', e));
+  await dp.evaluate(k => localStorage.removeItem(k), SKEY);
+  await dp.close();
+}
+
+
 await browser.close();
 console.log('\n' + passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total');
 if (failed > 0) process.exit(1);

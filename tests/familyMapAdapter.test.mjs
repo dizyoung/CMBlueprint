@@ -1323,7 +1323,12 @@ test('makeStrandAssignment creates a strand assignment with defaults', () => {
 test('STRAND_ASSIGNMENT_MODES contains expected modes', () => {
   assert.ok(Array.isArray(M.STRAND_ASSIGNMENT_MODES));
   assert.ok(M.STRAND_ASSIGNMENT_MODES.includes('everyone'));
-  assert.ok(M.STRAND_ASSIGNMENT_MODES.includes('loop'));
+  // 'loop' is a CONTAINER, not an audience: it is no longer a valid mode, but is
+  // still accepted on read so legacy saved plans keep loading.
+  assert.ok(!M.STRAND_ASSIGNMENT_MODES.includes('loop'));
+  assert.ok(M.STRAND_ASSIGNMENT_MODES_ACCEPTED_ON_READ.includes('loop'));
+  assert.equal(M.resolveStrandAudience({ assignmentMode: 'loop', loopId: 'l1' }), null);
+  assert.equal(M.resolveStrandLoopId({ assignmentMode: 'loop', loopId: 'l1' }), 'l1');
   assert.ok(M.STRAND_ASSIGNMENT_MODES.includes('not-this-year'));
   assert.ok(M.STRAND_ASSIGNMENT_MODES.includes('individual'));
 });
@@ -1409,7 +1414,7 @@ test('assignStrandToLoop adds a strand assignment to state', () => {
   assert.equal(state.strandAssignments.length, before + 1);
   const added = state.strandAssignments[state.strandAssignments.length - 1];
   assert.equal(added.strandId, 'art');
-  assert.equal(added.assignmentMode, 'loop');
+  assert.equal(added.assignmentMode, null, 'loop membership is not an audience');
   assert.equal(added.loopId, 'loop_beauty');
 });
 
@@ -1465,7 +1470,8 @@ test('source strands stay present when assigned to a loop', () => {
   const row = feastRowById(rows, FEAST_HYMN);
   assert.ok(row, 'row still present after assignment');
   assert.equal(row.strandId, FEAST_HYMN);
-  assert.equal(row.assignmentMode, 'loop');
+  assert.equal(row.loopId, 'loop_bible');
+  assert.equal(row.assignmentMode, null, 'a loop is not an audience');
   assert.equal(row.loopTitle, 'Bible Loop');
 });
 
@@ -2267,7 +2273,7 @@ test('19. moving a strand between loops updates both buckets and leaves no dupli
   assert.equal(state.strandAssignments.filter((sa) => sa.strandId === STRAND_A.id).length, 1);
 
   // Taking it out of the loop leaves it unsorted again, with no duplicate.
-  A.setStrandAssignmentForStrand(state, STRAND_A.id, STRAND_A.label, { assignmentMode: null });
+  A.moveStrandLoopAssignment(state, STRAND_A.id, STRAND_A.label, null);
   assert.equal(A.getLoopBucketContents(state, l2.id).length, 0);
   assert.ok(A.getLoopSortingProgress(state).unsortedStrandIds.indexOf(STRAND_A.id) > -1);
   assert.ok(state.strandAssignments.filter((sa) => sa.strandId === STRAND_A.id).length <= 1);
@@ -2453,16 +2459,17 @@ test('C2.10 renaming a loop invalidates bucket review via the fingerprint', () =
   assert.equal(A.getLoopSortingProgress(state).bucketsReviewed, true);
 });
 
-test('C2.11 changing a loop\'s rhythmDayIds invalidates bucket review', () => {
+test('C2.11 weekdays are no longer a Setup decision, so they never invalidate bucket review', () => {
   const loop = M.makeLoop({ id: 'l1', title: 'Morning', rhythmDayIds: ['mon'] });
   const state = setupState({ loops: [loop] });
   A.markLoopBucketsReviewed(state);
+  // Day placement belongs to Weekly Rhythm — it is not part of the fingerprint.
   state.loops[0].rhythmDayIds = ['mon', 'wed'];
-  assert.equal(A.getLoopSortingProgress(state).bucketsReviewed, false);
-  // Order must not matter — the fingerprint sorts day ids.
-  A.markLoopBucketsReviewed(state);
-  state.loops[0].rhythmDayIds = ['wed', 'mon'];
   assert.equal(A.getLoopSortingProgress(state).bucketsReviewed, true);
+  assert.deepEqual(state.loops[0].rhythmDayIds, ['mon', 'wed'], 'the field is kept in the model');
+  // The bucket's own short description IS a Setup decision.
+  state.loops[0].description = 'Mornings, before math';
+  assert.equal(A.getLoopSortingProgress(state).bucketsReviewed, false);
 });
 
 test('C2.12 moving a strand between buckets does NOT invalidate bucket review', () => {
@@ -3464,7 +3471,7 @@ function twoLoopState(extra) {
 function saOn(loopId, strandId, fields) {
   return Object.assign({
     id: 'sa_' + strandId, strandId: strandId, strandLabel: 'Strand ' + strandId,
-    assignmentMode: 'loop', loopId: loopId, groupId: null, studentIds: [],
+    assignmentMode: null, loopId: loopId, groupId: null, studentIds: [],
     coopProvider: '', workType: null, mayOccurOnLightDays: false, notes: '',
     sortOrder: 0, createdBy: A.FEAST_PROTOTYPE_CREATED_BY
   }, fields || {});
@@ -3605,7 +3612,7 @@ test('audience and unrelated choices survive both loop -> loop and loop -> unsor
   });
   A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, 'lp_b');
   let sa = st.strandAssignments[0];
-  assert.equal(sa.assignmentMode, 'loop');
+  assert.equal(sa.assignmentMode, null, 'the mover never writes an audience');
   assert.equal(sa.loopId, 'lp_b');
   assert.equal(sa.workType, 'independent');
   assert.equal(sa.mayOccurOnLightDays, true);
@@ -3625,16 +3632,18 @@ test('audience and unrelated choices survive both loop -> loop and loop -> unsor
   assert.equal(sa.id, 'sa_' + MV_A);
 });
 
-test('a strand assigned to a group then moved between loops never resurrects a stale groupId', () => {
+test('a strand assigned to a group KEEPS that group through every loop move', () => {
   const st = twoLoopState({ groups: [{ id: 'grp_1', label: 'A group', studentIds: [] }] });
   A.setStrandAssignmentForStrand(st, MV_A, MV_A_LABEL, { assignmentMode: 'custom-group', groupId: 'grp_1' });
   A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, 'lp_a');
-  assert.equal(st.strandAssignments[0].groupId, null);
+  assert.equal(st.strandAssignments[0].assignmentMode, 'custom-group');
+  assert.equal(st.strandAssignments[0].groupId, 'grp_1');
   A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, 'lp_b');
-  assert.equal(st.strandAssignments[0].groupId, null);
+  assert.equal(st.strandAssignments[0].groupId, 'grp_1');
   A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, null);
-  assert.equal(st.strandAssignments[0].groupId, null);
-  assert.deepEqual(st.strandAssignments[0].studentIds, []);
+  assert.equal(st.strandAssignments[0].assignmentMode, 'custom-group');
+  assert.equal(st.strandAssignments[0].groupId, 'grp_1');
+  assert.equal(st.strandAssignments[0].loopId, null);
 });
 
 test('both the archived groups and the bucket contents reflect a move immediately', () => {
@@ -3773,6 +3782,372 @@ test('the per-loop set-aside helpers tolerate {} and missing optional arrays', (
   const none = {};
   assert.equal(A.moveStrandLoopAssignment(none, MV_A, MV_A_LABEL, null), null);
   assert.deepEqual(none.strandAssignments, []);
+});
+
+// ---------------------------------------------------------------------------
+// Audience / loop decoupling, derived loop views, stacks and feast views.
+// Every state below is built inline. No student name, group label, loop title,
+// or subject is hardcoded - they all come from the fixtures or the library.
+// ---------------------------------------------------------------------------
+const DC_S1 = M.FEAST_LIBRARY[0];
+const DC_S2 = M.FEAST_LIBRARY[1];
+const DC_S3 = M.FEAST_LIBRARY[2];
+
+function dcState(extra) {
+  return Object.assign({
+    appStateVersion: 1,
+    students: [
+      { id: 'stu_1', name: 'One', active: true, gradeBand: 'form2', gradeBandConfirmed: true,
+        dayCapacity: { mon: 'full', tue: 'full', wed: 'full', thu: 'full', fri: 'full' },
+        dayCapacityExplicit: { mon: true, tue: true, wed: true, thu: true, fri: true } },
+      { id: 'stu_2', name: 'Two', active: true, gradeBand: 'form1', gradeBandConfirmed: true,
+        dayCapacity: { mon: 'full', tue: 'off', wed: 'full', thu: 'full', fri: 'full' },
+        dayCapacityExplicit: { mon: true, tue: true, wed: true, thu: true, fri: true } }
+    ],
+    groups: [{ id: 'grp_1', label: 'A named group', studentIds: ['stu_1', 'stu_2'], active: true }],
+    subjectColumns: [], cards: [], loopItems: [], sequences: [], sequenceItems: [],
+    resources: [], resourceUses: [], outsideCommitments: [],
+    loops: [{ id: 'lp_1', title: 'Bucket one', active: true, rhythmDayIds: [] }],
+    strandAssignments: [],
+    weeklyRhythm: { days: [], blocks: [], assignments: [] },
+    setupPrototype: {}
+  }, extra || {});
+}
+
+test('D1. a strand keeps its audience when it is put into a loop', () => {
+  const st = dcState();
+  A.setStrandAssignmentForStrand(st, DC_S1.id, DC_S1.label, { assignmentMode: 'custom-group', groupId: 'grp_1' });
+  A.moveStrandLoopAssignment(st, DC_S1.id, DC_S1.label, 'lp_1');
+  const sa = st.strandAssignments[0];
+  assert.equal(sa.assignmentMode, 'custom-group');
+  assert.equal(sa.groupId, 'grp_1');
+  assert.equal(sa.loopId, 'lp_1');
+  const row = A.buildFeastRows(st).find((r) => r.strandId === DC_S1.id);
+  assert.equal(row.assignmentMode, 'custom-group');
+  assert.equal(row.whoLabel, 'A named group');
+  assert.equal(row.loopId, 'lp_1');
+});
+
+test('D2. changing a strand audience does not clear its loopId', () => {
+  const st = dcState();
+  A.moveStrandLoopAssignment(st, DC_S1.id, DC_S1.label, 'lp_1');
+  A.setStrandAssignmentForStrand(st, DC_S1.id, DC_S1.label, { assignmentMode: 'everyone' });
+  assert.equal(st.strandAssignments[0].loopId, 'lp_1');
+  A.setStrandAudience(st, DC_S1.id, DC_S1.label, 'individual');
+  assert.equal(st.strandAssignments[0].loopId, 'lp_1');
+  A.setStrandAudience(st, DC_S1.id, DC_S1.label, null);
+  assert.equal(st.strandAssignments[0].assignmentMode, null);
+  assert.equal(st.strandAssignments[0].loopId, 'lp_1');
+});
+
+test('D3. moveStrandLoopAssignment touches only loopId', () => {
+  const st = dcState({
+    loops: [
+      { id: 'lp_1', title: 'Bucket one', active: true, rhythmDayIds: [] },
+      { id: 'lp_2', title: 'Bucket two', active: true, rhythmDayIds: [] }
+    ]
+  });
+  A.setStrandAssignmentForStrand(st, DC_S1.id, DC_S1.label, { assignmentMode: 'individual', studentIds: ['stu_1'] });
+  A.setStrandAssignmentForStrand(st, DC_S1.id, DC_S1.label, { workType: 'independent-flexible', mayOccurOnLightDays: true, notes: 'keep me' });
+  const before = JSON.parse(JSON.stringify(st.strandAssignments[0]));
+
+  A.moveStrandLoopAssignment(st, DC_S1.id, DC_S1.label, 'lp_2');
+  const after = st.strandAssignments[0];
+  assert.equal(after.loopId, 'lp_2');
+  ['id', 'assignmentMode', 'groupId', 'coopProvider', 'workType', 'mayOccurOnLightDays', 'notes', 'createdBy', 'sortOrder', 'strandId']
+    .forEach((k) => assert.deepEqual(after[k], before[k], k + ' must be untouched'));
+  assert.deepEqual(after.studentIds, before.studentIds);
+});
+
+test('D4. one loop may hold Everyone, group, and individual strands at once', () => {
+  const st = dcState();
+  A.setStrandAssignmentForStrand(st, DC_S1.id, DC_S1.label, { assignmentMode: 'everyone' });
+  A.setStrandAssignmentForStrand(st, DC_S2.id, DC_S2.label, { assignmentMode: 'custom-group', groupId: 'grp_1' });
+  A.setStrandAssignmentForStrand(st, DC_S3.id, DC_S3.label, { assignmentMode: 'individual', studentIds: ['stu_2'] });
+  [DC_S1, DC_S2, DC_S3].forEach((s) => A.moveStrandLoopAssignment(st, s.id, s.label, 'lp_1'));
+
+  const contents = A.getLoopBucketContents(st, 'lp_1');
+  assert.equal(contents.length, 3);
+  assert.deepEqual(contents.map((r) => r.assignmentMode).sort(), ['custom-group', 'everyone', 'individual']);
+  const summary = A.getLoopAudienceSummary(st, 'lp_1');
+  assert.equal(summary.label, 'Mixed audience');
+  assert.equal(summary.memberStrandCount, 3);
+  assert.equal(summary.unresolvedCount, 0);
+});
+
+test('D5. a loop defaultAudience prefills only a strand that has no audience', () => {
+  let st = A.createLoopBucket(dcState({ loops: [] }), 'Named bucket', {
+    defaultAudience: { mode: 'custom-group', groupId: 'grp_1' },
+    description: 'a short line'
+  });
+  const loopId = st.loops[0].id;
+  assert.equal(st.loops[0].description, 'a short line');
+
+  A.moveStrandLoopAssignment(st, DC_S1.id, DC_S1.label, loopId);
+  assert.equal(st.strandAssignments[0].assignmentMode, 'custom-group');
+  assert.equal(st.strandAssignments[0].groupId, 'grp_1');
+
+  A.setStrandAssignmentForStrand(st, DC_S2.id, DC_S2.label, { assignmentMode: 'everyone' });
+  A.moveStrandLoopAssignment(st, DC_S2.id, DC_S2.label, loopId);
+  const two = st.strandAssignments.find((sa) => sa.strandId === DC_S2.id);
+  assert.equal(two.assignmentMode, 'everyone');
+  assert.equal(two.groupId, null);
+
+  st.loops[0].defaultAudience = { mode: 'everyone' };
+  assert.equal(st.strandAssignments.find((sa) => sa.strandId === DC_S1.id).assignmentMode, 'custom-group');
+
+  const plain = A.createLoopBucket(dcState({ loops: [] }), 'Plain bucket');
+  A.moveStrandLoopAssignment(plain, DC_S3.id, DC_S3.label, plain.loops[0].id);
+  assert.equal(plain.strandAssignments[0].assignmentMode, null);
+});
+
+test('D6. migration rewrites legacy assignmentMode loop, keeps the loop, and is idempotent', () => {
+  const legacy = dcState({
+    strandAssignments: [{
+      id: 'sa_legacy', strandId: DC_S1.id, strandLabel: DC_S1.label,
+      assignmentMode: 'loop', loopId: 'lp_1', groupId: null, studentIds: [],
+      workType: 'independent-flexible', mayOccurOnLightDays: true, notes: 'kept', sortOrder: 3,
+      createdBy: A.FEAST_PROTOTYPE_CREATED_BY
+    }]
+  });
+  const before = JSON.parse(JSON.stringify(legacy.strandAssignments[0]));
+  const once = A.migrateSetupPrototypeState(legacy);
+  const sa = once.strandAssignments[0];
+  assert.equal(sa.assignmentMode, null, 'audience is genuinely unresolved, never invented');
+  assert.equal(sa.loopId, 'lp_1');
+  ['id', 'workType', 'mayOccurOnLightDays', 'notes', 'sortOrder', 'createdBy', 'strandLabel']
+    .forEach((k) => assert.deepEqual(sa[k], before[k], k + ' preserved'));
+
+  assert.equal(A.getLoopAudienceSummary(once, 'lp_1').unresolvedCount, 1);
+  assert.equal(A.getLoopAudienceSummary(once, 'lp_1').label, 'Audience not chosen yet');
+  const unsortedRow = A.buildFeastRows(once).find((r) => r.strandId === DC_S1.id);
+  assert.equal(unsortedRow.hasAudience, false);
+
+  const twice = A.migrateSetupPrototypeState(once);
+  assert.deepEqual(twice.strandAssignments, once.strandAssignments, 'migration is idempotent');
+});
+
+test('D7. getLoopAudienceSummary derives Everyone, the group own label, and Mixed', () => {
+  const st = dcState();
+  A.setStrandAssignmentForStrand(st, DC_S1.id, DC_S1.label, { assignmentMode: 'everyone' });
+  A.setStrandAssignmentForStrand(st, DC_S2.id, DC_S2.label, { assignmentMode: 'everyone' });
+  [DC_S1, DC_S2].forEach((s) => A.moveStrandLoopAssignment(st, s.id, s.label, 'lp_1'));
+  assert.equal(A.getLoopAudienceSummary(st, 'lp_1').label, 'Everyone');
+
+  const grouped = dcState();
+  [DC_S1, DC_S2].forEach((s) => {
+    A.setStrandAssignmentForStrand(grouped, s.id, s.label, { assignmentMode: 'custom-group', groupId: 'grp_1' });
+    A.moveStrandLoopAssignment(grouped, s.id, s.label, 'lp_1');
+  });
+  assert.equal(A.getLoopAudienceSummary(grouped, 'lp_1').label, grouped.groups[0].label);
+  grouped.groups[0].label = 'Renamed on purpose';
+  assert.equal(A.getLoopAudienceSummary(grouped, 'lp_1').label, 'Renamed on purpose');
+
+  const mixed = dcState();
+  A.setStrandAssignmentForStrand(mixed, DC_S1.id, DC_S1.label, { assignmentMode: 'everyone' });
+  A.setStrandAssignmentForStrand(mixed, DC_S2.id, DC_S2.label, { assignmentMode: 'individual', studentIds: ['stu_1'] });
+  [DC_S1, DC_S2].forEach((s) => A.moveStrandLoopAssignment(mixed, s.id, s.label, 'lp_1'));
+  assert.equal(A.getLoopAudienceSummary(mixed, 'lp_1').label, 'Mixed audience');
+});
+
+test('D8. unresolvedCount counts loop members with no audience, and they never force Mixed', () => {
+  const st = dcState();
+  A.setStrandAssignmentForStrand(st, DC_S1.id, DC_S1.label, { assignmentMode: 'everyone' });
+  A.moveStrandLoopAssignment(st, DC_S1.id, DC_S1.label, 'lp_1');
+  A.moveStrandLoopAssignment(st, DC_S2.id, DC_S2.label, 'lp_1');
+  const summary = A.getLoopAudienceSummary(st, 'lp_1');
+  assert.equal(summary.memberStrandCount, 2);
+  assert.equal(summary.unresolvedCount, 1);
+  assert.equal(summary.label, 'Everyone', 'an unresolved member does not make the loop Mixed');
+});
+
+test('D9. getLoopFeasibility intersects full-group days and reports partial days', () => {
+  const st = dcState();
+  A.setStrandAssignmentForStrand(st, DC_S1.id, DC_S1.label, { assignmentMode: 'individual', studentIds: ['stu_1'] });
+  A.setStrandAssignmentForStrand(st, DC_S2.id, DC_S2.label, { assignmentMode: 'individual', studentIds: ['stu_2'] });
+  [DC_S1, DC_S2].forEach((s) => A.moveStrandLoopAssignment(st, s.id, s.label, 'lp_1'));
+
+  const f = A.getLoopFeasibility(st, 'lp_1');
+  assert.deepEqual(f.fullGroupDayIds, ['mon', 'wed', 'thu', 'fri']);
+  assert.deepEqual(f.partialDayIds, ['tue'], 'one member can, the other cannot');
+  assert.deepEqual(f.perStrand[DC_S1.id].eligibleDayIds, ['mon', 'tue', 'wed', 'thu', 'fri']);
+  assert.equal(f.perStrand[DC_S2.id].workTypeId, 'independent-essential');
+  assert.equal(f.unresolvedCount, 0);
+});
+
+test('D10. a strand with no eligible days, or no audience, lands in conflicts and never throws', () => {
+  const st = dcState({
+    students: [{
+      id: 'stu_off', name: 'Off', active: true, gradeBand: 'form2', gradeBandConfirmed: true,
+      dayCapacity: { mon: 'off', tue: 'off', wed: 'off', thu: 'off', fri: 'off' },
+      dayCapacityExplicit: { mon: true, tue: true, wed: true, thu: true, fri: true }
+    }],
+    groups: []
+  });
+  A.setStrandAssignmentForStrand(st, DC_S1.id, DC_S1.label, { assignmentMode: 'individual', studentIds: ['stu_off'] });
+  A.moveStrandLoopAssignment(st, DC_S1.id, DC_S1.label, 'lp_1');
+  A.moveStrandLoopAssignment(st, DC_S2.id, DC_S2.label, 'lp_1');
+
+  const f = A.getLoopFeasibility(st, 'lp_1');
+  assert.equal(f.conflicts.length, 2);
+  assert.ok(f.conflicts.some((c) => c.strandId === DC_S2.id && /No audience chosen yet/.test(c.reason)));
+  assert.ok(f.conflicts.some((c) => c.strandId === DC_S1.id && /No weekday/.test(c.reason)));
+  assert.deepEqual(f.fullGroupDayIds, []);
+  assert.equal(f.unresolvedCount, 1);
+  assert.doesNotThrow(() => A.getLoopFeasibility(st, 'lp_missing'));
+  assert.doesNotThrow(() => A.getLoopFeasibility({}, 'lp_1'));
+});
+
+test('D11. feasibility is advisory - it never mutates state', () => {
+  const st = dcState();
+  A.setStrandAssignmentForStrand(st, DC_S1.id, DC_S1.label, { assignmentMode: 'everyone' });
+  A.moveStrandLoopAssignment(st, DC_S1.id, DC_S1.label, 'lp_1');
+  const before = JSON.stringify(st);
+  A.getLoopFeasibility(st, 'lp_1');
+  A.getLoopAudienceSummary(st, 'lp_1');
+  assert.equal(JSON.stringify(st), before);
+});
+
+test('D12. a loop bucket is created with no weekdays, and rhythmDayIds stays in the model', () => {
+  const st = A.createLoopBucket(dcState({ loops: [] }), 'Named bucket');
+  assert.deepEqual(st.loops[0].rhythmDayIds, [], 'created with no weekdays');
+  assert.ok('rhythmDayIds' in M.makeLoop({}), 'the field is still part of the model');
+  const legacy = dcState({ loops: [{ id: 'lp_old', title: 'Old', active: true, rhythmDayIds: ['mon', 'wed'] }] });
+  assert.deepEqual(A.migrateSetupPrototypeState(legacy).loops[0].rhythmDayIds, ['mon', 'wed']);
+  const html = fs.readFileSync(new URL('../docs/app/setup-prototype.html', import.meta.url), 'utf8');
+  assert.equal(html.indexOf('data-action="loop-day"'), -1, 'Setup must not offer a weekday control for loops');
+  assert.ok(html.indexOf('data-action="loop-description"') > -1);
+});
+
+test('D13. loopBucketFingerprint ignores rhythmDayIds and reacts to description', () => {
+  const st = dcState({ loops: [{ id: 'lp_1', title: 'Bucket one', active: true, rhythmDayIds: [] }] });
+  const base = A.loopBucketFingerprint(st);
+  st.loops[0].rhythmDayIds = ['mon', 'tue'];
+  assert.equal(A.loopBucketFingerprint(st), base, 'weekdays are not part of bucket structure');
+  st.loops[0].description = 'now described';
+  assert.notEqual(A.loopBucketFingerprint(st), base, 'description is part of bucket structure');
+});
+
+test('D14. migration re-stamps an existing stored fingerprint exactly once', () => {
+  const st = dcState({ loops: [{ id: 'lp_1', title: 'Bucket one', active: true, rhythmDayIds: ['mon'] }] });
+  st.setupPrototype = { loopBucketsReviewed: true, loopBucketsFingerprint: 'a-fingerprint-in-the-old-format' };
+  const once = A.migrateSetupPrototypeState(st);
+  assert.equal(A.getLoopSortingProgress(once).bucketsReviewed, true, 'not forced to re-confirm');
+  const twice = A.migrateSetupPrototypeState(once);
+  assert.deepEqual(twice.setupPrototype, once.setupPrototype, 're-stamp happens once');
+  twice.loops[0].title = 'Renamed';
+  assert.equal(A.getLoopSortingProgress(twice).bucketsReviewed, false);
+  assert.equal(A.getLoopSortingProgress(A.migrateSetupPrototypeState(twice)).bucketsReviewed, false);
+});
+
+test('D15. every FEAST_LIBRARY strand is in exactly one stack', () => {
+  const stacks = M.buildFeastStacks();
+  const seen = new Map();
+  stacks.forEach((s) => s.strandIds.forEach((id) => seen.set(id, (seen.get(id) || 0) + 1)));
+  assert.equal(seen.size, M.FEAST_LIBRARY.length, 'union covers the whole library');
+  M.FEAST_LIBRARY.forEach((e) => assert.equal(seen.get(e.id), 1, e.id + ' must be in exactly one stack'));
+  assert.equal(stacks.reduce((n, s) => n + s.strandIds.length, 0), M.FEAST_LIBRARY.length);
+  const stackOf = (label) => M.stackForStrand(M.FEAST_LIBRARY.find((e) => e.label === label));
+  assert.equal(stackOf('Oral Narration'), 'narration');
+  assert.equal(stackOf('Nature Walk'), 'natural-history');
+  assert.equal(stackOf('Object Lessons / Natural History'), 'natural-history');
+  assert.equal(stackOf('Special Studies'), 'science');
+  assert.equal(stackOf('Citizenship / Plutarch'), 'citizenship');
+  assert.equal(stackOf('Map Work'), 'geography');
+  assert.equal(stackOf('Grammar'), 'grammar-composition');
+  assert.equal(stackOf('Copywork'), 'early-reading');
+});
+
+test('D16. a stack bulk action never merges records - one assignment per strand', () => {
+  const st = dcState();
+  const stack = M.buildFeastStacks()[0];
+  A.applyStackBulkAction(st, stack.id, 'audience', 'everyone');
+  assert.equal(st.strandAssignments.length, stack.strandIds.length);
+  const ids = st.strandAssignments.map((sa) => sa.id);
+  assert.equal(new Set(ids).size, ids.length, 'every record has its own stable id');
+  assert.deepEqual(st.strandAssignments.map((sa) => sa.strandId).sort(), stack.strandIds.slice().sort());
+  A.applyStackBulkAction(st, stack.id, 'loop', 'lp_1');
+  assert.equal(st.strandAssignments.length, stack.strandIds.length, 'a second bulk action appends nothing');
+  assert.deepEqual(st.strandAssignments.map((sa) => sa.id), ids, 'the same records are updated in place');
+});
+
+test('D17. an individual override survives a later unrelated bulk action', () => {
+  const st = dcState();
+  const stack = M.buildFeastStacks().find((s) => s.strandIds.length > 1);
+  A.applyStackBulkAction(st, stack.id, 'audience', 'everyone');
+  const target = stack.strandIds[0];
+  const label = M.FEAST_LIBRARY.find((e) => e.id === target).label;
+  A.setStrandAssignmentForStrand(st, target, label, { assignmentMode: 'custom-group', groupId: 'grp_1' });
+  A.applyStackBulkAction(st, stack.id, 'loop', 'lp_1');
+  const overridden = st.strandAssignments.find((sa) => sa.strandId === target);
+  assert.equal(overridden.assignmentMode, 'custom-group');
+  assert.equal(overridden.groupId, 'grp_1');
+  assert.equal(overridden.loopId, 'lp_1');
+  const sibling = st.strandAssignments.find((sa) => sa.strandId === stack.strandIds[1]);
+  assert.equal(sibling.assignmentMode, 'everyone');
+  assert.equal(sibling.loopId, 'lp_1');
+});
+
+test('D18. By Subject includes every strand exactly once', () => {
+  const view = A.buildFeastView(dcState(), 'subject');
+  const ids = view.groups.reduce((acc, g) => acc.concat(g.rows.map((r) => r.strandId)), []);
+  assert.equal(ids.length, M.FEAST_LIBRARY.length);
+  assert.equal(new Set(ids).size, M.FEAST_LIBRARY.length);
+});
+
+test('D19. By Form includes every strand exactly once', () => {
+  const view = A.buildFeastView(dcState(), 'form');
+  const ids = view.groups.reduce((acc, g) => acc.concat(g.rows.map((r) => r.strandId)), []);
+  assert.equal(ids.length, M.FEAST_LIBRARY.length);
+  assert.equal(new Set(ids).size, M.FEAST_LIBRARY.length);
+  ['stacks', 'all'].forEach((v) => {
+    const other = A.buildFeastView(dcState(), v);
+    const otherIds = other.groups.reduce((acc, g) => acc.concat(g.rows.map((r) => r.strandId)), []);
+    assert.equal(otherIds.length, M.FEAST_LIBRARY.length, v + ' must be complete');
+    assert.equal(new Set(otherIds).size, M.FEAST_LIBRARY.length, v + ' must have no duplicates');
+  });
+});
+
+test('D20. Unsorted Only reflects a handling decision immediately', () => {
+  const st = dcState();
+  const countUnsorted = () => A.buildFeastView(st, 'unsorted').rowCount;
+  const before = countUnsorted();
+  assert.equal(before, M.FEAST_LIBRARY.length);
+  A.moveStrandLoopAssignment(st, DC_S1.id, DC_S1.label, 'lp_1');
+  assert.equal(countUnsorted(), before - 1, 'gaining a loop leaves Unsorted');
+  A.setStrandAssignmentForStrand(st, DC_S2.id, DC_S2.label, { assignmentMode: 'everyone' });
+  assert.equal(countUnsorted(), before - 2, 'gaining an audience leaves Unsorted');
+  A.moveStrandLoopAssignment(st, DC_S1.id, DC_S1.label, null);
+  assert.equal(countUnsorted(), before - 1, 'losing the decision returns it immediately');
+});
+
+test('D21. every new helper tolerates {} and missing optional arrays', () => {
+  assert.doesNotThrow(() => A.getLoopAudienceSummary({}, 'lp_x'));
+  assert.equal(A.getLoopAudienceSummary({}, 'lp_x').memberStrandCount, 0);
+  assert.equal(A.getLoopAudienceSummary({}, 'lp_x').label, 'Nothing in this loop yet');
+  assert.doesNotThrow(() => A.getLoopFeasibility({}, 'lp_x'));
+  assert.deepEqual(A.getLoopFeasibility({}, 'lp_x').conflicts, []);
+  assert.doesNotThrow(() => A.getLoopFeasibility(undefined, 'lp_x'));
+  assert.doesNotThrow(() => A.buildFeastView({}, 'stacks'));
+  assert.doesNotThrow(() => A.buildFeastView(undefined, 'nonsense-view'));
+  assert.equal(A.buildFeastView({}, 'nonsense-view').viewId, 'stacks');
+  assert.doesNotThrow(() => A.getRelatedUnsortedStrandsForLoop({}, 'lp_x'));
+  assert.deepEqual(A.applyStackBulkAction({}, 'no-such-stack', 'audience', 'everyone'), []);
+  assert.doesNotThrow(() => A.applyStackBulkAction({}, M.buildFeastStacks()[0].id, 'loop', null));
+  assert.equal(A.getFeastStackForStrand('not-a-strand'), null);
+  assert.ok(A.getFeastStackForStrand(M.FEAST_LIBRARY[0].id).strandIds.length > 0);
+  assert.doesNotThrow(() => A.setStrandAudience({}, DC_S1.id, DC_S1.label, 'everyone'));
+});
+
+test('D22. a loop suggests unsorted strands that share a stack with its contents', () => {
+  const st = dcState();
+  const stack = M.buildFeastStacks().find((s) => s.strandIds.length > 1);
+  const first = stack.strandIds[0];
+  A.moveStrandLoopAssignment(st, first, M.FEAST_LIBRARY.find((e) => e.id === first).label, 'lp_1');
+  const related = A.getRelatedUnsortedStrandsForLoop(st, 'lp_1').map((r) => r.strandId);
+  assert.ok(related.length > 0);
+  assert.ok(!related.includes(first), 'a strand already in the loop is not suggested');
+  related.forEach((id) => assert.ok(stack.strandIds.includes(id), 'suggestions share the stack'));
 });
 
 for (const t of tests) {

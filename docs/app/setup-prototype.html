@@ -90,6 +90,13 @@
   .loop-card-actions a.loop-link {
     font-size: 12px; color: var(--navy-story); text-decoration: underline;
   }
+  .loop-open-btn {
+    display: inline-block; font-size: 13px; font-weight: 600; text-decoration: none;
+    background: var(--wonder-marine); color: #fff; border-radius: 8px; padding: 6px 12px;
+  }
+  .help-more { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+  .help-more > summary { cursor: pointer; }
+  .help-more p { margin: 6px 0 0; }
   .capacity-legend { font-size: 11px; color: var(--muted); margin: 4px 0 0; }
   .guide ol { margin: 6px 0 0; padding-left: 20px; font-size: 13px; }
   .guide li { margin-bottom: 3px; }
@@ -138,12 +145,15 @@
 
 <div class="banner">
   <span class="proto-badge">PROTOTYPE — Setup only. Does not create cards or change your Weekly Rhythm.</span>
-  <p class="proto-note">
-    This page records the few facts every other page should be able to read instead of re-asking:
-    who is in your family, which Forms they are in, which groups exist, which days they actually work,
-    and the broad shape of your loops. Everyone, availability, and group availability are always
-    <em>derived</em> — they are never stored twice.
-  </p>
+  <details class="help-more">
+    <summary>What this page records</summary>
+    <p class="proto-note">
+      The few facts every other page should be able to read instead of re-asking:
+      who is in your family, which Forms they are in, which groups exist, which days they actually work,
+      and which loop buckets exist. Everyone, availability, and group availability are always
+      <em>derived</em> — they are never stored twice.
+    </p>
+  </details>
 </div>
 
 <div id="save-bar"></div>
@@ -262,7 +272,12 @@ function ensureShape(s) {
   // Old saved state must keep loading: one normalizer, run on every load.
   if (typeof A.migrateSetupPrototypeState === 'function') {
     var migrated = A.migrateSetupPrototypeState(s);
-    if (migrated && typeof migrated === 'object') s.setupPrototype = migrated.setupPrototype;
+    if (migrated && typeof migrated === 'object') {
+      s.setupPrototype = migrated.setupPrototype;
+      // Legacy strand records that stored a loop as an audience are rewritten
+      // once, keeping their loop. Old saved state keeps loading either way.
+      if (Array.isArray(migrated.strandAssignments)) s.strandAssignments = migrated.strandAssignments;
+    }
   }
   return s;
 }
@@ -632,17 +647,19 @@ function setAsideLoopsHTML() {
   archived.forEach(function (b) {
     html += '<div class="set-aside-card" data-loop-id="' + escH(b.loopId) + '">';
     html += '<div><strong>' + escH(b.title) + '</strong></div>';
-    html += '<div class="member-line">Broad days: ' +
-      escH(b.dayLabels.length ? b.dayLabels.join(', ') : 'No days chosen') + '</div>';
+    var archivedLoop = findLoopLocal(b.loopId);
+    if (archivedLoop && archivedLoop.description) {
+      html += '<div class="member-line">' + escH(archivedLoop.description) + '</div>';
+    }
     html += '<div class="member-line">' + b.strandCount + ' strand' +
       (b.strandCount === 1 ? '' : 's') + ' still linked to it.</div>';
     html += '<div class="row-actions">' +
       '<button type="button" class="accent" data-action="restore-loop" data-id="' + escH(b.loopId) + '">Restore</button>';
     // Only offered when there is actually something to move.
     if (b.strandCount > 0) {
-      html += '<a class="loop-link" data-action="review-loop-strands" data-id="' + escH(b.loopId) +
+      html += '<a class="loop-open-btn" data-action="review-loop-strands" data-id="' + escH(b.loopId) +
         '" href="./feast-prototype.html#loop=' + encodeURIComponent(b.loopId) +
-        '">Review and move strands</a>';
+        '">Open ' + escH(b.title) + '</a>';
     }
     if (b.canDeletePermanently) {
       html += '<button type="button" class="danger" data-action="delete-loop-permanently" data-id="' +
@@ -660,7 +677,12 @@ function renderRhythmStep() {
   var sorting = A.getLoopSortingProgress(state);
   var html = '<div class="panel"><h2 class="section-title">Loop Buckets <span class="hint">buckets only — contents come later</span></h2>';
   html += '<p class="sub" style="margin:0 0 10px;"><strong>Create the loop buckets you may use. You will sort strands into them during Feast Planning.</strong></p>';
-  html += '<p class="sub" style="margin:0 0 10px;">A bucket needs only a name, and optionally the broad days it may occur on. Nothing about what goes <em>inside</em> a loop is decided here — an empty bucket is a perfectly finished bucket.</p>';
+  // At most ONE visible instruction line per panel — the rest is behind this.
+  html += '<details class="help-more"><summary>What is a loop bucket?</summary>' +
+    '<p>A bucket needs only a name, and optionally a short description. Nothing about what goes ' +
+    '<em>inside</em> a loop is decided here — an empty bucket is a perfectly finished bucket.</p>' +
+    '<p><strong>Which days a loop actually happens on is decided in the Weekly Rhythm, not here.</strong></p>' +
+    '</details>';
   // Archived buckets are set aside, never deleted — they are simply not listed
   // among the buckets in use this year.
   var loops = arr(state.loops).filter(function (l) { return l && l.active !== false; });
@@ -672,14 +694,17 @@ function renderRhythmStep() {
   loops.forEach(function (l) {
     html += '<div class="loop-card" data-loop-id="' + escH(l.id) + '">';
     html += '<div><input type="text" data-action="loop-title" data-id="' + escH(l.id) + '" value="' + escH(l.title || '') + '" placeholder="Loop name"></div>';
-    html += '<div style="margin-top:6px;">May occur on: ' + weekdayChecksHTML('loop-day', l.id, arr(l.rhythmDayIds)) +
-      ' <span class="hint">optional</span></div>';
+    // Weekdays are NOT asked for here any more — day placement is a Weekly
+    // Rhythm decision. Any rhythmDayIds already saved are kept untouched.
+    html += '<div style="margin-top:6px;"><input type="text" style="width:100%;max-width:420px;" ' +
+      'data-action="loop-description" data-id="' + escH(l.id) + '" value="' + escH(l.description || '') +
+      '" placeholder="Short description (optional)" aria-label="Loop description"></div>';
     // Per-loop actions. Renaming is the title input above — it re-opens bucket
     // review by itself through the fingerprint, so it needs no button here.
     var impact = A.describeLoopSetAsideImpact(state, l.id);
     html += '<div class="loop-card-actions">' +
-      '<a class="loop-link" data-action="review-loop-strands" data-id="' + escH(l.id) + '" href="./feast-prototype.html#loop=' +
-      encodeURIComponent(l.id) + '">Review strands</a>' +
+      '<a class="loop-open-btn" data-action="review-loop-strands" data-id="' + escH(l.id) + '" href="./feast-prototype.html#loop=' +
+      encodeURIComponent(l.id) + '">Open ' + escH(l.title || 'this loop') + '</a>' +
       '<button type="button" data-action="set-aside-loop" data-id="' + escH(l.id) + '">Set aside this loop</button>' +
       '<span class="hint">' + impact.strandCount + ' strand' + (impact.strandCount === 1 ? '' : 's') +
       ' sorted in · ' + impact.otherReferenceCount + ' other reference' +
@@ -1134,10 +1159,11 @@ document.addEventListener('change', function (ev) {
       loop = findLoopLocal(id);
       if (loop) loop.title = el.value;
       break;
-    case 'loop-day':
+    case 'loop-description':
       loop = findLoopLocal(id);
-      // Additive optional field — existing loop fields are left untouched.
-      if (loop) loop.rhythmDayIds = toggleInList(arr(loop.rhythmDayIds).slice(), el.getAttribute('data-day'), el.checked);
+      // Additive optional field. rhythmDayIds is deliberately untouched here —
+      // day placement belongs to the Weekly Rhythm.
+      if (loop) loop.description = el.value;
       break;
     default:
       return;
