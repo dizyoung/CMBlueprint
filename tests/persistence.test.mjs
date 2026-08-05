@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import * as P from '../lib/persistence.mjs';
 import * as A from '../lib/familyMapAdapter.mjs';
+import * as M from '../lib/familyMap.mjs';
 
 const tests = [];
 function test(name, fn) { tests.push({ name, fn }); }
@@ -127,6 +128,204 @@ test('persistence module exposes no browser globals (document/window/localStorag
   assert.equal(typeof document, 'undefined');
   assert.equal(typeof window, 'undefined');
   assert.equal(typeof localStorage, 'undefined');
+});
+
+// ---------------------------------------------------------------------------
+// Hardened saving — a real family's plan must survive a save/load round trip
+// field for field, and a damaged file must never touch what is already there.
+// ---------------------------------------------------------------------------
+
+// A plan that exercises every field the prototypes write.
+function buildRichState() {
+  const state = A.buildSampleAppState();
+  // Setup edits
+  state.students = state.students.map((s, i) =>
+    Object.assign({}, s, { name: 'Child ' + i, grade: '4', gradeBand: 'form-1', gradeBandConfirmed: true, active: true }));
+  state.students[0].dayCapacity = { mon: 'light' };
+  state.students[0].dayCapacityExplicit = { mon: true };
+  state.outsideCommitments = [
+    M.makeOutsideCommitment
+      ? M.makeOutsideCommitment({ label: 'Co-op', dayIds: ['tue'] })
+      : { id: 'oc1', label: 'Co-op', dayIds: ['tue'] }
+  ];
+  state.setupPrototype = {
+    groupsReviewed: true, loopBucketsReviewed: true, loopSortingReviewed: true,
+    noLoopsChosen: false, availabilityReviewed: true
+  };
+
+  // Two loops: one active, one set aside.
+  let next = A.createLoopBucket(state, 'Morning Loop');
+  next = A.createLoopBucket(next, 'Nature Loop');
+  next.loops[next.loops.length - 1].active = false;
+
+  // Feast decisions: audience, loop, notes, workType, light-day flag.
+  next.strandAssignments = [
+    {
+      id: 'sa_1', strandId: 'strand_a', strandLabel: 'Nature study',
+      assignmentMode: 'group', groupId: next.groups[0] ? next.groups[0].id : 'g1', studentIds: [],
+      coopProvider: '', loopId: next.loops[0].id, workType: 'group-lesson',
+      mayOccurOnLightDays: true, notes: 'Tuesdays after lunch', useThisYear: true,
+      sortOrder: 0, createdBy: 'feast-prototype'
+    },
+    {
+      id: 'sa_2', strandId: 'strand_b', strandLabel: 'Latin',
+      assignmentMode: 'students', groupId: null,
+      studentIds: [next.students[0].id], coopProvider: '', loopId: null,
+      workType: 'independent', mayOccurOnLightDays: false, notes: '',
+      useThisYear: false, sortOrder: 1, createdBy: 'feast-prototype'
+    }
+  ];
+  return next;
+}
+
+function roundTrip(state) {
+  const result = P.loadAppStateSafely(P.deserializeAppState(P.serializeAppState(state)));
+  assert.equal(result.ok, true, 'round trip must load cleanly: ' + (result.errors || []).join(', '));
+  return result.state;
+}
+
+test('Setup edits survive serialize → deserialize', () => {
+  const back = roundTrip(buildRichState());
+  assert.equal(back.students[0].name, 'Child 0');
+  assert.equal(back.students[0].gradeBandConfirmed, true);
+  assert.deepEqual(back.students[0].dayCapacity, { mon: 'light' });
+  assert.deepEqual(back.students[0].dayCapacityExplicit, { mon: true });
+  assert.equal(back.outsideCommitments.length, 1);
+  assert.equal(back.outsideCommitments[0].label, 'Co-op');
+  assert.deepEqual(back.setupPrototype, buildRichState().setupPrototype);
+});
+
+test('Feast strand assignments survive serialize → deserialize', () => {
+  const back = roundTrip(buildRichState());
+  assert.equal(back.strandAssignments.length, 2);
+  assert.equal(back.strandAssignments[0].strandLabel, 'Nature study');
+  assert.equal(back.strandAssignments[1].strandLabel, 'Latin');
+});
+
+test('audience and loopId persist independently of each other', () => {
+  const state = buildRichState();
+  const back = roundTrip(state);
+  const a = back.strandAssignments[0];
+  const b = back.strandAssignments[1];
+  // In a loop AND assigned to a group.
+  assert.equal(a.assignmentMode, 'group');
+  assert.equal(a.groupId, state.strandAssignments[0].groupId);
+  assert.equal(a.loopId, state.loops[0].id);
+  // Audience set, no loop — the audience must not be dragged along by loopId.
+  assert.equal(b.assignmentMode, 'students');
+  assert.deepEqual(b.studentIds, state.strandAssignments[1].studentIds);
+  assert.equal(b.loopId, null);
+});
+
+test('notes, workType, mayOccurOnLightDays and useThisYear all persist', () => {
+  const back = roundTrip(buildRichState());
+  const a = back.strandAssignments[0];
+  const b = back.strandAssignments[1];
+  assert.equal(a.notes, 'Tuesdays after lunch');
+  assert.equal(a.workType, 'group-lesson');
+  assert.equal(a.mayOccurOnLightDays, true);
+  assert.equal(a.useThisYear, true);
+  assert.equal(b.workType, 'independent');
+  assert.equal(b.mayOccurOnLightDays, false);
+  assert.equal(b.useThisYear, false);
+});
+
+test('a set-aside loop persists with active:false and is never dropped', () => {
+  const state = buildRichState();
+  const back = roundTrip(state);
+  assert.equal(back.loops.length, state.loops.length);
+  const setAside = back.loops.filter((l) => l.active === false);
+  assert.equal(setAside.length, 1);
+  assert.equal(setAside[0].title, 'Nature Loop');
+});
+
+test('buildExportPayload carries the complete state plus export stamps', () => {
+  const state = buildRichState();
+  const payload = P.buildExportPayload(state, new Date('2026-06-20T12:00:00Z'));
+  assert.equal(payload.appStateVersion, P.CURRENT_APP_STATE_VERSION);
+  assert.equal(payload.exportedAt, '2026-06-20T12:00:00.000Z');
+  assert.equal(typeof payload.exportedAtLocal, 'string');
+  assert.ok(payload.exportedAtLocal.length > 0);
+  ['students', 'groups', 'subjectColumns', 'cards', 'loops', 'loopItems', 'sequences',
+   'sequenceItems', 'extensionWorks', 'resources', 'resourceUses', 'starterTemplates',
+   'strandAssignments', 'outsideCommitments'].forEach((key) => {
+    assert.deepEqual(payload[key], state[key], key + ' must be exported intact');
+  });
+  assert.deepEqual(payload.setupPrototype, state.setupPrototype);
+  assert.deepEqual(payload.weeklyRhythm, state.weeklyRhythm);
+  assert.deepEqual(payload.printSettings, state.printSettings);
+});
+
+test('export → import reproduces the normalized state exactly', () => {
+  const state = P.normalizeAppState(buildRichState());
+  const payload = P.buildExportPayload(state, new Date('2026-06-20T12:00:00Z'));
+  const onDisk = JSON.parse(JSON.stringify(payload));       // what the file holds
+  const result = P.loadAppStateSafely(onDisk);
+  assert.equal(result.ok, true);
+  const reloaded = Object.assign({}, result.state);
+  delete reloaded.exportedAt;
+  delete reloaded.exportedAtLocal;
+  assert.deepEqual(reloaded, state);
+});
+
+test('an invalid or truncated import returns ok:false and changes nothing', () => {
+  const state = P.normalizeAppState(buildRichState());
+  const before = P.serializeAppState(state);
+
+  const payload = P.buildExportPayload(state);
+  const text = JSON.stringify(payload);
+
+  // 1. Truncated file — not even parseable.
+  let threw = false;
+  try { P.deserializeAppState(text.slice(0, Math.floor(text.length / 2))); } catch (e) { threw = true; }
+  assert.equal(threw, true, 'a truncated file must fail to parse rather than load partially');
+
+  // 2. Parseable but corrupted in a required collection.
+  const corrupted = Object.assign({}, payload, { cards: 'not-an-array', students: null });
+  const result = P.loadAppStateSafely(corrupted);
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.length > 0);
+  assert.ok(result.errors.every((e) => typeof e === 'string' && e.length > 0));
+  assert.equal(result.state, undefined, 'a failed import must hand back no state at all');
+
+  // 3. The plan we already had is byte-identical afterwards.
+  assert.equal(P.serializeAppState(state), before);
+});
+
+test('a plan file from a newer build is rejected with a readable message', () => {
+  const payload = P.buildExportPayload(
+    Object.assign({}, P.normalizeAppState(buildRichState()), { appStateVersion: P.CURRENT_APP_STATE_VERSION + 1 })
+  );
+  const result = P.loadAppStateSafely(payload);
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((e) => e.toLowerCase().includes('newer')));
+  assert.ok(result.errors.every((e) => !/undefined|\[object/.test(e)));
+});
+
+test('summarizeAppState describes a plan file in terms a parent can check', () => {
+  const state = P.normalizeAppState(buildRichState());
+  const payload = P.buildExportPayload(state, new Date('2026-06-20T12:00:00Z'));
+  const summary = P.summarizeAppState(state, payload);
+  assert.equal(summary.childCount, state.students.length);
+  assert.deepEqual(summary.childNames, state.students.map((s) => s.name));
+  assert.equal(summary.groupCount, state.groups.length);
+  assert.equal(summary.loopCount, state.loops.length);
+  assert.equal(summary.activeLoopCount, state.loops.filter((l) => l.active !== false).length);
+  assert.equal(summary.setAsideLoopCount, 1);
+  assert.equal(summary.strandDecisionCount, 2);
+  assert.equal(summary.exportedAt, '2026-06-20T12:00:00.000Z');
+
+  const text = P.describeImportSummary(summary);
+  assert.ok(text.includes(String(summary.childCount)));
+  assert.ok(text.includes('set aside'));
+  assert.ok(text.includes('Exported:'));
+});
+
+test('summarizeAppState never throws on junk', () => {
+  const summary = P.summarizeAppState(null, null);
+  assert.equal(summary.childCount, 0);
+  assert.equal(summary.loopCount, 0);
+  assert.equal(typeof P.describeImportSummary(summary), 'string');
 });
 
 let passed = 0;

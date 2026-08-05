@@ -1,4 +1,7 @@
 import { chromium } from 'playwright';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 const BASE = 'http://localhost:8765';
 const URL  = BASE + '/docs/app/family-school-map.html';
 let passed = 0; let failed = 0;
@@ -1304,6 +1307,312 @@ const SKEY = 'cmblueprint.familySchoolMap.v1';
   await fp.evaluate(k => localStorage.removeItem(k), SKEY);
   await fp.close();
   await pp.close();
+}
+
+
+// ===========================================================================
+// PERSISTENCE — a real family's plan must survive reloads, navigation inside
+// the autosave debounce window, and an export → reset → import round trip.
+// Every check below drives the real UI in a real browser.
+// ===========================================================================
+{
+  const ctx = await browser.newContext({ acceptDownloads: true });
+  const errs = [];
+  const seedPlan = () => ({
+    appStateVersion: 1, subjectColumns: [], cards: [], loopItems: [],
+    resources: [], resourceUses: [], strandAssignments: [], groups: [],
+    loops: [
+      { id: 'loop_keep', title: 'Morning Loop', active: true, sortOrder: 0, rhythmDayIds: [] },
+      { id: 'loop_aside', title: 'Nature Loop', active: false, sortOrder: 1, rhythmDayIds: [] }
+    ],
+    students: [
+      { id: 'stu_a', name: 'Wren', active: true, gradeBand: 'form2', gradeBandConfirmed: true },
+      { id: 'stu_b', name: 'Ash', active: true, gradeBand: 'form1', gradeBandConfirmed: true }
+    ]
+  });
+  const newSeededPage = async (url, seed) => {
+    const p = await ctx.newPage();
+    p.on('pageerror', e => errs.push(e.message));
+    await p.goto(url);
+    await p.evaluate(([k, v]) => localStorage.setItem(k, v), [SKEY, JSON.stringify(seed || seedPlan())]);
+    await p.goto(url);
+    await p.waitForLoadState('networkidle');
+    await p.waitForTimeout(400);
+    return p;
+  };
+  const readState = (p) => p.evaluate(k => JSON.parse(localStorage.getItem(k) || 'null'), SKEY);
+
+  // --- the save bar tells the parent, at all times, where their plan lives ---
+  {
+    const p = await newSeededPage(SETUP_URL);
+    const note = await p.$eval('#save-scope-note', el => el.textContent);
+    ok('Save bar says the plan is saved in this browser only',
+      note.includes('this browser only') && note.includes('not synced'));
+    ok('Save bar offers a "Save backup now" button', !!(await p.$('#save-backup-btn')));
+    ok('Export button is labelled "Export Plan"',
+      (await p.$eval('#export-btn', el => el.textContent)).trim() === 'Export Plan');
+
+    // "Save backup now" does both jobs at once: write to the browser AND put a
+    // file on disk. It must work even for an edit made a moment ago.
+    await p.click('[data-action="goto-step"][data-step="family"]');
+    await p.waitForTimeout(200);
+    await p.fill('[data-action="student-name"]', 'Bramble');
+    await p.press('[data-action="student-name"]', 'Tab');
+    await p.waitForTimeout(100);           // inside the debounce, on purpose
+    const backupDl = p.waitForEvent('download');
+    await p.click('#save-backup-btn');
+    const backupFile = await backupDl;
+    ok('"Save backup now" downloads a plan file', !!backupFile.suggestedFilename());
+    const savedNow = await readState(p);
+    ok('"Save backup now" also writes the pending edit to the browser straight away',
+      JSON.stringify(savedNow.students).includes('Bramble'));
+    await p.close();
+  }
+
+  // --- a Setup edit survives a reload ---
+  {
+    const p = await newSeededPage(SETUP_URL);
+    await p.click('[data-action="goto-step"][data-step="family"]');
+    await p.waitForTimeout(200);
+    await p.fill('[data-action="student-name"]', 'Juniper');
+    await p.press('[data-action="student-name"]', 'Tab');
+    await p.waitForTimeout(1200);
+    const statusText = await p.$eval('#save-status', el => el.textContent);
+    ok('Save status shows the clock time of the last save', /^Saved at /.test(statusText.trim()));
+    await p.reload();
+    await p.waitForLoadState('networkidle');
+    await p.waitForTimeout(400);
+    await p.click('[data-action="goto-step"][data-step="family"]');
+    await p.waitForTimeout(200);
+    ok('A Setup edit is still there after a reload',
+      (await p.$eval('[data-action="student-name"]', el => el.value)) === 'Juniper');
+    ok('After a reload the status still reports a real saved time',
+      /^Saved at /.test((await p.$eval('#save-status', el => el.textContent)).trim()));
+    await p.close();
+  }
+
+  // --- REGRESSION: an edit followed immediately by navigation is not lost ---
+  {
+    const p = await newSeededPage(SETUP_URL);
+    await p.click('[data-action="goto-step"][data-step="family"]');
+    await p.waitForTimeout(200);
+    await p.fill('[data-action="student-name"]', 'Clover');
+    await p.press('[data-action="student-name"]', 'Tab');
+    await p.waitForTimeout(120);            // well inside the 800ms debounce
+    await p.goto(FEAST_URL);                 // navigate away immediately
+    await p.waitForLoadState('networkidle');
+    await p.goto(SETUP_URL);
+    await p.waitForLoadState('networkidle');
+    await p.waitForTimeout(400);
+    await p.click('[data-action="goto-step"][data-step="family"]');
+    await p.waitForTimeout(200);
+    ok('An edit made and navigated away from inside the debounce window survives',
+      (await p.$eval('[data-action="student-name"]', el => el.value)) === 'Clover');
+    await p.close();
+  }
+
+  // --- REGRESSION: text typed but never blurred is not lost on exit ---
+  {
+    const p = await newSeededPage(SETUP_URL);
+    await p.click('[data-action="goto-step"][data-step="family"]');
+    await p.waitForTimeout(200);
+    const sel = '[data-action="student-name"]';
+    await p.fill(sel, '');
+    await p.waitForTimeout(1200);
+    await p.click(sel);
+    await p.type(sel, 'Rosemary', { delay: 10 });   // input events only, no blur
+    await p.waitForTimeout(120);
+    await p.goto(SETUP_URL);                        // leave mid-word
+    await p.waitForLoadState('networkidle');
+    await p.waitForTimeout(400);
+    await p.click('[data-action="goto-step"][data-step="family"]');
+    await p.waitForTimeout(200);
+    ok('Text typed without leaving the field survives closing the page',
+      (await p.$eval(sel, el => el.value)) === 'Rosemary');
+    await p.close();
+  }
+
+  // --- Feast: audience and loop are stored, and stored independently ---
+  {
+    const p = await newSeededPage(FEAST_URL);
+    const strandId = await p.$eval('.strand-chip[data-strand]', el => el.getAttribute('data-strand'));
+    ok('A strand chip is available in the Feast', !!strandId);
+    const whoSel = '.strand-chip[data-strand="' + strandId + '"] select[data-role="who"]';
+    const loopSel = '.strand-chip[data-strand="' + strandId + '"] select[data-role="chip-loop"]';
+    const studentValue = await p.$eval(whoSel, el => {
+      const opt = Array.from(el.options).find(o => o.value.indexOf('student:') === 0);
+      return opt ? opt.value : '';
+    });
+    ok('The Who select offers an individual child', !!studentValue);
+    await p.selectOption(whoSel, studentValue);
+    await p.waitForTimeout(300);
+    await p.selectOption(loopSel, 'loop_keep');
+    await p.waitForTimeout(1200);
+
+    await p.reload();
+    await p.waitForLoadState('networkidle');
+    await p.waitForTimeout(500);
+    ok('A Feast audience assignment survives a reload',
+      (await p.$eval(whoSel, el => el.value)) === studentValue);
+    ok('The loop choice survives the same reload',
+      (await p.$eval(loopSel, el => el.value)) === 'loop_keep');
+
+    // Independence: clearing the loop must not clear the audience.
+    await p.selectOption(loopSel, '');
+    await p.waitForTimeout(1200);
+    await p.reload();
+    await p.waitForLoadState('networkidle');
+    await p.waitForTimeout(500);
+    ok('Taking a strand out of a loop leaves its audience untouched after a reload',
+      (await p.$eval(whoSel, el => el.value)) === studentValue);
+    ok('and the loop really is cleared', (await p.$eval(loopSel, el => el.value)) === '');
+
+    // workType + mayOccurOnLightDays, behind the disclosure.
+    const openMore = () => p.$eval('.strand-chip[data-strand="' + strandId + '"] details.chip-worktype',
+      el => { el.open = true; });
+    await openMore();
+    const wtSel = '.strand-chip[data-strand="' + strandId + '"] select[data-role="work-type"]';
+    const lightSel = '.strand-chip[data-strand="' + strandId + '"] input[data-role="light-days"]';
+    const wtValue = await p.$eval(wtSel, el => {
+      const opt = Array.from(el.options).find(o => o.value);
+      return opt ? opt.value : '';
+    });
+    await p.selectOption(wtSel, wtValue);
+    await p.waitForTimeout(300);
+    await openMore();
+    await p.check(lightSel);
+    await p.waitForTimeout(1200);
+    await p.reload();
+    await p.waitForLoadState('networkidle');
+    await p.waitForTimeout(500);
+    await openMore();
+    ok('The kind of work survives a reload', (await p.$eval(wtSel, el => el.value)) === wtValue);
+    ok('The light-days opt-in survives a reload', (await p.$eval(lightSel, el => el.checked)) === true);
+
+    // notes live in the model; they must survive an unrelated edit + reload.
+    await p.evaluate(([k, sid]) => {
+      const s = JSON.parse(localStorage.getItem(k));
+      const sa = s.strandAssignments.find(a => a.strandId === sid);
+      sa.notes = 'Tuesdays after lunch';
+      localStorage.setItem(k, JSON.stringify(s));
+    }, [SKEY, strandId]);
+    await p.reload();
+    await p.waitForLoadState('networkidle');
+    await p.waitForTimeout(400);
+    await openMore();
+    await p.check(lightSel);
+    await p.waitForTimeout(1200);
+    const afterState = await readState(p);
+    const assignment = afterState.strandAssignments.find(a => a.strandId === strandId);
+    ok('Notes on a strand survive a later unrelated edit', assignment.notes === 'Tuesdays after lunch');
+    ok('A set-aside loop is still stored with active:false',
+      afterState.loops.filter(l => l.active === false).map(l => l.id).join() === 'loop_aside');
+    ok('and the set-aside loop was not deleted', afterState.loops.length === 2);
+    await p.close();
+  }
+
+  // --- Export Plan → Reset to sample → Import Plan restores what was exported ---
+  {
+    const p = await newSeededPage(SETUP_URL);
+    await p.click('[data-action="goto-step"][data-step="family"]');
+    await p.waitForTimeout(200);
+    await p.fill('[data-action="student-name"]', 'Marigold');
+    await p.press('[data-action="student-name"]', 'Tab');
+    await p.waitForTimeout(1200);
+    const exported = await readState(p);
+
+    const dlPromise = p.waitForEvent('download');
+    await p.click('#export-btn');
+    const download = await dlPromise;
+    ok('Export Plan produces a date-stamped file',
+      /^family-school-map-backup-\d{4}-\d{2}-\d{2}\.json$/.test(download.suggestedFilename()));
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cmb-')), download.suggestedFilename());
+    await download.saveAs(file);
+    const payload = JSON.parse(fs.readFileSync(file, 'utf8'));
+    ok('The exported file carries a schema version', payload.appStateVersion === 1);
+    ok('The exported file carries an ISO export timestamp', typeof payload.exportedAt === 'string');
+    ok('The exported file carries a readable local export time', typeof payload.exportedAtLocal === 'string');
+    ok('The exported file carries the whole plan',
+      Array.isArray(payload.students) && Array.isArray(payload.loops) &&
+      Array.isArray(payload.strandAssignments) && payload.loops.length === 2);
+
+    // The prototype pages hide the shared "Reset to sample plan" button in
+    // favour of their own narrower reset, so the round trip runs the reset on
+    // the Family School Map page — same browser, same storage, same save bar.
+    await p.goto(URL);
+    await p.waitForLoadState('networkidle');
+    await p.waitForTimeout(400);
+
+    // Reset to the sample plan — it must ask first.
+    let resetAsked = false;
+    const onDialog = d => { if (d.type() === 'confirm') resetAsked = true; d.accept(); };
+    p.on('dialog', onDialog);
+    await p.click('#reset-btn');
+    await p.waitForTimeout(600);
+    ok('Reset to sample plan asks for confirmation first', resetAsked);
+    const afterReset = await readState(p);
+    ok('After the reset the edited name is gone',
+      !JSON.stringify(afterReset.students).includes('Marigold'));
+
+    // Import the file back. It must summarise the file, then confirm.
+    let summaryText = '';
+    p.off('dialog', onDialog);
+    p.on('dialog', d => { summaryText += d.message(); d.accept(); });
+    await p.setInputFiles('#import-input', file);
+    await p.waitForTimeout(800);
+    ok('Import shows a readable summary of the file before replacing anything',
+      summaryText.includes('This file contains:') && summaryText.includes('child') &&
+      summaryText.includes('loop') && summaryText.includes('Exported:'));
+    const afterImport = await readState(p);
+    ok('Importing the exported file restores the exported plan',
+      JSON.stringify(afterImport.students) === JSON.stringify(exported.students) &&
+      JSON.stringify(afterImport.loops) === JSON.stringify(exported.loops) &&
+      JSON.stringify(afterImport.strandAssignments) === JSON.stringify(exported.strandAssignments));
+    await p.close();
+  }
+
+  // --- A damaged file leaves the current plan completely untouched ---
+  {
+    const p = await newSeededPage(SETUP_URL);
+    await p.click('[data-action="goto-step"][data-step="family"]');
+    await p.waitForTimeout(200);
+    await p.fill('[data-action="student-name"]', 'Hazel');
+    await p.press('[data-action="student-name"]', 'Tab');
+    await p.waitForTimeout(1200);
+    const before = await p.evaluate(k => localStorage.getItem(k), SKEY);
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cmb-bad-'));
+    const good = JSON.stringify({
+      appStateVersion: 1, students: [], groups: [], subjectColumns: [], cards: [], exportedAt: '2026-01-01T00:00:00.000Z'
+    });
+    const cases = [
+      ['a truncated file', 'truncated.json', good.slice(0, Math.floor(good.length / 2)), 'not valid JSON'],
+      ['a file with a corrupted collection', 'corrupt.json',
+        JSON.stringify({ appStateVersion: 1, students: 'nope', groups: [], subjectColumns: [], cards: [] }), 'students'],
+      ['a file from a newer version of the app', 'newer.json',
+        JSON.stringify({ appStateVersion: 99, students: [], groups: [], subjectColumns: [], cards: [] }), 'newer']
+    ];
+    for (const [label, name, body, expect] of cases) {
+      const bad = path.join(dir, name);
+      fs.writeFileSync(bad, body);
+      let message = '';
+      let confirmed = false;
+      const handler = d => { if (d.type() === 'confirm') confirmed = true; message += d.message(); d.accept(); };
+      p.on('dialog', handler);
+      await p.setInputFiles('#import-input', bad);
+      await p.waitForTimeout(700);
+      p.off('dialog', handler);
+      ok('Importing ' + label + ' explains the problem in plain words', message.includes(expect));
+      ok('Importing ' + label + ' never asks to replace the plan', confirmed === false);
+      ok('Importing ' + label + ' leaves the saved plan byte-identical',
+        (await p.evaluate(k => localStorage.getItem(k), SKEY)) === before);
+    }
+    await p.close();
+  }
+
+  ok('No JS errors anywhere in the persistence suite', errs.length === 0);
+  if (errs.length) errs.forEach(e => console.log('  JS error:', e));
+  await ctx.close();
 }
 
 

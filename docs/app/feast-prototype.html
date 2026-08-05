@@ -291,8 +291,15 @@ var saveBar = createSaveBar({
   }
 });
 saveBar.mountControls(document.getElementById('save-bar'));
-saveBar.wire(function () { return state; });
-saveBar.setStatus(initial.source === 'saved' ? 'Saved in this browser' : 'Using sample plan', initial.source === 'saved' ? 'saved' : 'sample');
+// commitTextOnInput: a half-typed loop name or note is committed to the plan
+// after a short pause, so closing the tab mid-sentence cannot lose it.
+saveBar.wire(function () { return state; }, { commitTextOnInput: true });
+if (initial.source === 'saved') {
+  // Show the real clock time of the last save when we know it.
+  if (!saveBar.adoptStoredSavedAt()) saveBar.setStatus('Loaded your saved plan', 'saved');
+} else {
+  saveBar.setStatus('Using sample plan', 'sample');
+}
 if (initial.source === 'reset-after-invalid') {
   saveBar.saveNow(state);
   window.alert('Your saved plan could not be opened, so the sample plan was loaded instead.');
