@@ -1200,6 +1200,112 @@ const SKEY = 'cmblueprint.familySchoolMap.v1';
   await dp.close();
 }
 
+// ---------------------------------------------------------------------------
+// Print views prototype — four URLs, one page. Read-only sheets over a plan
+// that is built here inline (never a hardcoded family from the fixtures).
+// ---------------------------------------------------------------------------
+{
+  const PRINT_URL = BASE + '/docs/app/print-prototype.html';
+  const pp = await browser.newPage();
+  const errs = [];
+  pp.on('pageerror', e => errs.push(e.message));
+  await pp.goto(PRINT_URL);
+  await pp.evaluate(([k, v]) => localStorage.setItem(k, v), [SKEY, JSON.stringify({
+    appStateVersion: 1, subjectColumns: [], cards: [], outsideCommitments: [],
+    students: [{ id: 'stu_w', name: 'Wren', active: true, gradeBand: 'form2', gradeBandConfirmed: true }],
+    groups: [{ id: 'grp_m', label: 'Middles', studentIds: ['stu_w'], active: true }],
+    loops: [{ id: 'lp_w', title: 'Named bucket', active: true, rhythmDayIds: ['mon'] }],
+    strandAssignments: [],
+    setupPrototype: {}
+  })]);
+
+  for (const view of ['map', 'loops', 'unresolved', 'nextup']) {
+    await pp.goto(PRINT_URL + '?view=' + view);
+    await pp.waitForLoadState('networkidle');
+    await pp.waitForTimeout(300);
+    const heading = await pp.$eval('#print-root h1', el => el.textContent).catch(() => '');
+    ok('print-prototype ?view=' + view + ' renders its own sheet', heading.length > 0);
+    ok('print-prototype ?view=' + view + ' marks its picker entry current',
+      (await pp.$$eval('.view-picker a.is-current', els => els.length)) === 1);
+  }
+
+  await pp.goto(PRINT_URL + '?view=map');
+  await pp.waitForLoadState('networkidle');
+  await pp.waitForTimeout(300);
+  ok('?view=map groups strands into audience sections',
+    (await pp.$$eval('#print-root .print-section', els => els.length)) > 0);
+  ok('?view=map has an "Audience not chosen yet" section before anything is decided',
+    (await pp.$eval('#print-root', el => el.textContent)).includes('Audience not chosen yet'));
+
+  await pp.goto(PRINT_URL + '?view=nextup');
+  await pp.waitForLoadState('networkidle');
+  await pp.waitForTimeout(400);
+  ok('?view=nextup renders one worksheet per active strand',
+    (await pp.$$eval('.worksheet', els => els.length)) > 10);
+  ok('?view=nextup renders 20 numbered lines on a worksheet',
+    (await pp.$$eval('.worksheet:first-of-type .ws-lines li', els => els.length)) === 20);
+  ok('?view=nextup names itself a temporary planning sheet',
+    (await pp.$eval('.worksheet .ws-temp', el => el.textContent)).includes('Temporary planning sheet'));
+
+  const printedUnresolved = await (async () => {
+    await pp.goto(PRINT_URL + '?view=unresolved');
+    await pp.waitForLoadState('networkidle');
+    await pp.waitForTimeout(300);
+    return pp.$$eval('#print-root .count-pill', els => els.map(e => e.textContent.trim()));
+  })();
+  ok('?view=unresolved shows three counts', printedUnresolved.length === 3);
+  ok('?view=unresolved shows no technical ids',
+    !(await pp.$eval('#print-root', el => el.textContent)).includes('feast_'));
+
+  // The same counts must appear in Feast — one report, two readers.
+  const fp = await browser.newPage();
+  fp.on('pageerror', e => errs.push(e.message));
+  await fp.goto(FEAST_URL);
+  await fp.waitForLoadState('networkidle');
+  await fp.waitForTimeout(500);
+  const feastSort = (await fp.$eval('#unsorted-count', el => el.textContent)).trim();
+  const feastAudience = (await fp.$eval('#missing-audience-count', el => el.textContent)).trim();
+  ok('Feast "Still to sort" count matches the printed Unresolved sheet', feastSort === printedUnresolved[1]);
+  ok('Feast "needs an audience" count matches the printed Unresolved sheet', feastAudience === printedUnresolved[0]);
+
+  // A strand toggled off then on keeps the audience it had.
+  const toggled = await fp.evaluate(() => {
+    const chip = document.querySelector('.strand-chip[data-strand]');
+    return chip ? chip.getAttribute('data-strand') : null;
+  });
+  ok('a strand chip is available to toggle', !!toggled);
+  if (toggled) {
+    const sel = '.strand-chip[data-strand="' + toggled + '"] select[data-role="who"]';
+    const groupValue = await fp.$eval(sel, el => {
+      const opt = Array.from(el.options).find(o => o.value.indexOf('group:') === 0);
+      return opt ? opt.value : '';
+    });
+    ok('the Who select offers the family\'s own group', groupValue.length > 0);
+    await fp.selectOption(sel, groupValue);
+    await fp.waitForTimeout(300);
+    // Use-this-year lives behind the chip's disclosure, and every render
+    // rebuilds the chip, so the disclosure is opened before each click.
+    const useSel = '.strand-chip[data-strand="' + toggled + '"] input[data-role="use"]';
+    const openMore = () => fp.$eval('.strand-chip[data-strand="' + toggled + '"] details.chip-more',
+      el => { el.open = true; });
+    await openMore();
+    await fp.uncheck(useSel);
+    await fp.waitForTimeout(300);
+    await openMore();
+    await fp.check(useSel);
+    await fp.waitForTimeout(300);
+    ok('a strand toggled off then on still shows its original audience',
+      (await fp.$eval(sel, el => el.value)) === groupValue);
+    ok('and its chip says it is not in a loop',
+      (await fp.$eval('.strand-chip[data-strand="' + toggled + '"]', el => el.textContent)).includes('Not in a loop'));
+  }
+  ok('No JS errors across the print views or the toggle round trip', errs.length === 0);
+  if (errs.length) errs.forEach(e => console.log('  JS error:', e));
+  await fp.evaluate(k => localStorage.removeItem(k), SKEY);
+  await fp.close();
+  await pp.close();
+}
+
 
 await browser.close();
 console.log('\n' + passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total');

@@ -203,10 +203,10 @@
   <details class="help-more">
     <summary>What this prototype touches</summary>
     <p class="proto-note">
-      This page only records two things per strand: who it is for, and which loop (if any) holds it.
-      Those are separate answers. It never creates, edits, or deletes cards, loops, sequences,
-      resources, or anything in your Weekly Rhythm. Everything else you see here is derived live and
-      thrown away on every render.
+      This page records three separate things per strand: whether you are using it this year, who it is
+      for, and which loop (if any) holds it. Changing one never clears the others. It creates, edits and
+      deletes nothing else — cards, loops, sequences, resources and your Weekly Rhythm are untouched, and
+      everything else here is derived live on every render.
     </p>
   </details>
 </div>
@@ -216,11 +216,12 @@
 <div id="save-bar"></div>
 
 <h1 class="page-title">Feast Planning Prototype</h1>
-<p class="sub">Choose a view, then decide each strand: who it is for, and which loop (if any) holds it.</p>
+<p class="sub">Decide each strand: use it this year, who it is for, and which loop (if any) holds it.</p>
 
 <div class="toolbar">
   <a href="./setup-prototype.html">← Back to Setup</a>
   <a href="./family-school-map.html">← Back to Family School Map</a>
+  <a href="./print-prototype.html?view=map">Print views</a>
   <span class="build-label" title="Build identifier">build:feast-prototype</span>
   <button type="button" id="reset-proto-btn" class="danger">Reset prototype choices</button>
   <span style="font-size:11px;color:var(--muted);">Only clears choices made in this prototype. Assignments made elsewhere in the app are left alone.</span>
@@ -485,7 +486,11 @@ function chipHTML(row) {
     (row.activeThisYear ? '' : '<span class="chip-off-tag">OFF</span>') + '</div>';
   html += '<div class="chip-meta">' + escH(row.formLabel) + ' \u00b7 ' + escH(row.columnLabel) + '</div>';
   if (row.whoLabel) html += '<div class="chip-who">Who: ' + escH(row.whoLabel) + '</div>';
-  if (row.placementLabel) html += '<div><span class="chip-badge">' + escH(row.placementLabel) + '</span></div>';
+  // The loop line is always stated, so a strand that has just come back to
+  // Unsorted plainly reads "Not in a loop" beside the audience it kept.
+  html += '<div class="chip-meta">' + escH(row.loopTitle ? 'In ' + row.loopTitle : 'Not in a loop') + '</div>';
+  var badge = row.placementLabel || (row.activeThisYear ? 'Still to sort' : '');
+  if (badge) html += '<div><span class="chip-badge">' + escH(badge) + '</span></div>';
   html += '<div class="chip-controls">';
   html += whoSelectHTML(row);
   html += '<div class="chip-loop-row"><label>Put in loop</label>' +
@@ -507,16 +512,20 @@ function chipHTML(row) {
 // ---------------------------------------------------------------------------
 function renderUnsorted(rows) {
   var sorting = A.getLoopSortingProgress(state);
-  var unsorted = rows.filter(function (r) {
-    return r.activeThisYear === true && r.placementState === 'unassigned';
-  });
+  // ONE source of truth: the printed Unresolved Decisions sheet and this panel
+  // both read the same report, so they can never disagree.
+  var report = A.getUnresolvedReport(state, rows);
+  var byId = {};
+  rows.forEach(function (r) { byId[r.strandId] = r; });
+  var unsorted = report.missingHandling.map(function (e) { return byId[e.strandId]; }).filter(Boolean);
   var html = '<h2 class="section-title">Unsorted / Still to Sort' +
-    '<span class="count-pill' + (unsorted.length ? '' : ' is-zero') + '" id="unsorted-count">' + unsorted.length + '</span></h2>';
+    '<span class="count-pill' + (unsorted.length ? '' : ' is-zero') + '" id="unsorted-count">' + report.missingHandlingCount + '</span></h2>';
+  html += '<p class="sub" style="margin:0 0 6px;">Who it is for and how it happens are two separate decisions. ' +
+    '<span id="missing-audience-count">' + report.missingAudienceCount + '</span> still need an audience. ' +
+    '<a href="./print-prototype.html?view=unresolved">Print the unresolved list</a></p>';
   if (!unsorted.length) {
     html += '<p class="calm-empty">Everything has a home.</p>';
   } else {
-    html += '<p class="sub" style="margin:0;">' + unsorted.length + ' strand' + (unsorted.length === 1 ? '' : 's') +
-      ' still need somewhere to go. Put one in a loop, or decide it another way on its chip below.</p>';
     html += '<div class="unsorted-list">' + unsorted.map(function (r) {
       return '<div class="unsorted-item" data-strand-id="' + escH(r.strandId) + '">' +
         '<div class="u-label">' + escH(r.label) + '</div>' +
@@ -764,7 +773,9 @@ function renderGrid(rows) {
 
   if (currentView === 'stacks') {
     var view = A.buildFeastView(state, 'stacks', rows);
-    html += '<p class="sub" style="margin:0 0 10px;">Suggested stacks group similar strands so you can decide once \u2014 every strand is in exactly one stack, and any one of them can still be changed on its own.</p>';
+    html += '<p class="sub" style="margin:0 0 10px;">Decide a whole stack at once, or any one strand on its own.</p>' +
+      '<details class="help-more"><summary>How stacks work</summary><p>Suggested stacks group similar strands so you can decide once. ' +
+      'Every strand is in exactly one stack, records stay separate, and a later change to one strand always wins.</p></details>';
     view.groups.forEach(function (g) {
       html += '<details class="stack-section" data-stack-id="' + escH(g.id) + '" open>';
       html += '<summary>' + escH(g.label) + ' <span class="hint">' + g.rows.length + ' strand' +
@@ -928,6 +939,15 @@ function applyDecision(strandId, fields) {
   render();
 }
 
+// Turning a strand on or off for this year. One entry point, and it never
+// touches any other decision.
+function setUseThisYear(strandId, useIt) {
+  if (!strandId) return;
+  A.setStrandUseThisYear(state, strandId, strandLabelFor(strandId), useIt !== false);
+  markDirtyAndSave();
+  render();
+}
+
 function setupPrototypeObj() {
   if (!state.setupPrototype || typeof state.setupPrototype !== 'object') state.setupPrototype = {};
   return state.setupPrototype;
@@ -998,7 +1018,7 @@ document.getElementById('archived-panel').addEventListener('click', function (ev
     var role = el.getAttribute('data-role');
     var strandId = el.getAttribute('data-strand');
     if (role === 'remove-from-loop') { moveStrandToLoop(strandId, null); return; }
-    if (role === 'unsorted-off') { applyDecision(strandId, { assignmentMode: 'not-this-year' }); return; }
+    if (role === 'unsorted-off') { setUseThisYear(strandId, false); return; }
   });
 });
 
@@ -1066,8 +1086,10 @@ document.getElementById('feast-grid').addEventListener('change', function (ev) {
   if (!strandId || !role) return;
 
   if (role === 'use') {
-    // Unchecked -> not this year. Rechecked -> back to undecided.
-    applyDecision(strandId, el.checked ? { assignmentMode: null } : { assignmentMode: 'not-this-year' });
+    // Use-this-year is ORTHOGONAL to audience. Switching a strand off records
+    // only that, so its audience, loop, work type, light-day opt-in and notes
+    // are all still there when it is switched back on.
+    setUseThisYear(strandId, el.checked);
     return;
   }
 

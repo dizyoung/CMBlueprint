@@ -1563,6 +1563,12 @@ test('placement is derived, never persisted into strandAssignments', () => {
   assert.ok(!serialized.includes('placementState'), 'placementState must never be stored');
   assert.ok(!serialized.includes('placementLabel'), 'placementLabel must never be stored');
   assert.ok(!serialized.includes('activeThisYear'), 'activeThisYear must never be stored');
+  // The parent DECISION behind it is stored, under its own unambiguous name and
+  // never in the audience field.
+  assert.ok(serialized.includes('useThisYear'), 'the use-this-year decision is stored');
+  const off = state.strandAssignments.find((sa) => sa.strandId === FEAST_COPYWORK);
+  assert.equal(off.useThisYear, false, 'turning a strand off is recorded on its own field');
+  assert.equal(off.assignmentMode, null, 'and never in the audience field');
   assert.ok(!serialized.includes('resourceState'), 'resourceState must never be stored');
   // A strand with no assignment at all reads as unassigned with a blank label.
   const untouched = feastRowById(rows, 'feast_form4_math_uppermath');
@@ -4149,6 +4155,337 @@ test('D22. a loop suggests unsorted strands that share a stack with its contents
   assert.ok(!related.includes(first), 'a strand already in the loop is not suggested');
   related.forEach((id) => assert.ok(stack.strandIds.includes(id), 'suggestions share the stack'));
 });
+
+// ---------------------------------------------------------------------------
+// P. Non-destructive decisions, the unresolved report, and the print views.
+// Every state below is built inline — no shared fixture, no hardcoded family.
+// ---------------------------------------------------------------------------
+function pState(overrides) {
+  return Object.assign({
+    appStateVersion: 1,
+    students: [], groups: [], subjectColumns: [], cards: [], loops: [], loopItems: [],
+    sequences: [], sequenceItems: [], resources: [], resourceUses: [],
+    outsideCommitments: [], strandAssignments: []
+  }, overrides || {});
+}
+const P_S1 = M.FEAST_LIBRARY[0];
+const P_S2 = M.FEAST_LIBRARY[1];
+function pRow(state, strandId) {
+  return A.buildFeastRows(state).find((r) => r.strandId === strandId);
+}
+
+test('P1. Return to Unsorted preserves the audience and only clears the loop', () => {
+  const g = M.makeGroup({ label: 'Middles' });
+  const loop = M.makeLoop({ title: 'Morning Basket' });
+  const st = pState({ groups: [g], loops: [loop] });
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, { assignmentMode: 'custom-group', groupId: g.id });
+  A.moveStrandLoopAssignment(st, P_S1.id, P_S1.label, loop.id);
+  A.moveStrandLoopAssignment(st, P_S1.id, P_S1.label, null);
+  const sa = st.strandAssignments.find((x) => x.strandId === P_S1.id);
+  assert.equal(sa.assignmentMode, 'custom-group');
+  assert.equal(sa.groupId, g.id);
+  assert.equal(sa.loopId, null);
+  const row = pRow(st, P_S1.id);
+  assert.equal(row.whoLabel, 'Middles');
+  assert.equal(row.loopTitle, null);
+  assert.equal(row.placementState, 'still-to-place');
+});
+
+test('P2. Return to Unsorted preserves work type, light days, notes, and the record id', () => {
+  const loop = M.makeLoop({ title: 'Riches' });
+  const st = pState({ loops: [loop] });
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, { assignmentMode: 'everyone' });
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, {
+    workType: M.WORK_TYPES[0].id, mayOccurOnLightDays: true, notes: 'ask about the atlas'
+  });
+  A.moveStrandLoopAssignment(st, P_S1.id, P_S1.label, loop.id);
+  const idBefore = st.strandAssignments.find((x) => x.strandId === P_S1.id).id;
+  A.moveStrandLoopAssignment(st, P_S1.id, P_S1.label, null);
+  const sa = st.strandAssignments.find((x) => x.strandId === P_S1.id);
+  assert.equal(sa.id, idBefore, 'the record id survives');
+  assert.equal(sa.workType, M.WORK_TYPES[0].id);
+  assert.equal(sa.mayOccurOnLightDays, true);
+  assert.equal(sa.notes, 'ask about the atlas');
+  assert.equal(sa.assignmentMode, 'everyone');
+});
+
+test('P3. use this year off then on is a full round trip — the record is never deleted', () => {
+  const g = M.makeGroup({ label: 'Olders' });
+  const loop = M.makeLoop({ title: 'Beauty' });
+  const st = pState({ groups: [g], loops: [loop] });
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, { assignmentMode: 'custom-group', groupId: g.id });
+  A.moveStrandLoopAssignment(st, P_S1.id, P_S1.label, loop.id);
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, {
+    workType: M.WORK_TYPES[0].id, mayOccurOnLightDays: true, notes: 'keep'
+  });
+  const before = Object.assign({}, st.strandAssignments.find((x) => x.strandId === P_S1.id));
+
+  A.setStrandUseThisYear(st, P_S1.id, P_S1.label, false);
+  assert.equal(st.strandAssignments.filter((x) => x.strandId === P_S1.id).length, 1, 'still exactly one record');
+  const off = st.strandAssignments.find((x) => x.strandId === P_S1.id);
+  assert.equal(off.useThisYear, false);
+  assert.equal(off.assignmentMode, 'custom-group', 'turning off never clears the audience');
+  assert.equal(off.groupId, g.id);
+  assert.equal(off.loopId, loop.id);
+  assert.equal(pRow(st, P_S1.id).activeThisYear, false);
+
+  A.setStrandUseThisYear(st, P_S1.id, P_S1.label, true);
+  const on = st.strandAssignments.find((x) => x.strandId === P_S1.id);
+  assert.equal(on.id, before.id);
+  assert.equal(on.assignmentMode, before.assignmentMode);
+  assert.equal(on.groupId, before.groupId);
+  assert.equal(on.loopId, before.loopId);
+  assert.equal(on.workType, before.workType);
+  assert.equal(on.mayOccurOnLightDays, before.mayOccurOnLightDays);
+  assert.equal(on.notes, before.notes);
+  assert.equal(pRow(st, P_S1.id).activeThisYear, true);
+});
+
+test('P4. useThisYear false never clears groupId or studentIds', () => {
+  const stu = M.makeStudent({ name: 'Wren' });
+  const g = M.makeGroup({ label: 'Pair' });
+  const st = pState({ students: [stu], groups: [g] });
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, { assignmentMode: 'custom-group', groupId: g.id });
+  A.setStrandAssignmentForStrand(st, P_S2.id, P_S2.label, { assignmentMode: 'individual', studentIds: [stu.id] });
+  A.setStrandUseThisYear(st, P_S1.id, P_S1.label, false);
+  A.setStrandUseThisYear(st, P_S2.id, P_S2.label, false);
+  assert.equal(st.strandAssignments.find((x) => x.strandId === P_S1.id).groupId, g.id);
+  assert.deepEqual(st.strandAssignments.find((x) => x.strandId === P_S2.id).studentIds, [stu.id]);
+  // The legacy spelling of the same decision is accepted on read and never
+  // written back into the audience field.
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, { assignmentMode: 'not-this-year' });
+  assert.equal(st.strandAssignments.find((x) => x.strandId === P_S1.id).groupId, g.id);
+  assert.equal(pRow(st, P_S1.id).activeThisYear, false);
+});
+
+test('P5. clearing the Who select nulls the audience and keeps the record', () => {
+  const g = M.makeGroup({ label: 'Middles' });
+  const loop = M.makeLoop({ title: 'Riches' });
+  const st = pState({ groups: [g], loops: [loop] });
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, { assignmentMode: 'custom-group', groupId: g.id });
+  A.moveStrandLoopAssignment(st, P_S1.id, P_S1.label, loop.id);
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, { workType: M.WORK_TYPES[0].id, notes: 'keep me' });
+  const idBefore = st.strandAssignments.find((x) => x.strandId === P_S1.id).id;
+
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, { assignmentMode: null });
+  const sa = st.strandAssignments.find((x) => x.strandId === P_S1.id);
+  assert.ok(sa, 'clearing the audience must never delete the record');
+  assert.equal(sa.id, idBefore);
+  assert.equal(sa.assignmentMode, null);
+  assert.equal(sa.groupId, null, 'the stale group is cleared with the audience');
+  assert.equal(sa.loopId, loop.id);
+  assert.equal(sa.workType, M.WORK_TYPES[0].id);
+  assert.equal(sa.notes, 'keep me');
+
+  // The same is true for a strand with no loop at all.
+  A.setStrandAssignmentForStrand(st, P_S2.id, P_S2.label, { assignmentMode: 'everyone' });
+  A.setStrandAssignmentForStrand(st, P_S2.id, P_S2.label, { notes: 'also keep' });
+  A.setStrandAssignmentForStrand(st, P_S2.id, P_S2.label, { assignmentMode: null });
+  const sa2 = st.strandAssignments.find((x) => x.strandId === P_S2.id);
+  assert.ok(sa2, 'a loop-less record survives a cleared audience too');
+  assert.equal(sa2.notes, 'also keep');
+});
+
+test('P6. migration rewrites legacy not-this-year, preserves every other field, and is idempotent', () => {
+  const loop = M.makeLoop({ title: 'Riches' });
+  const legacy = M.makeStrandAssignment({
+    id: 'sa_legacy', strandId: P_S1.id, strandLabel: P_S1.label,
+    assignmentMode: 'not-this-year', loopId: loop.id, groupId: 'grp_x',
+    workType: M.WORK_TYPES[0].id, mayOccurOnLightDays: true, notes: 'legacy note', createdBy: 'feast-prototype'
+  });
+  delete legacy.useThisYear; // a record saved before the field existed
+  const st = pState({ loops: [loop], strandAssignments: [legacy] });
+
+  const once = A.migrateSetupPrototypeState(st);
+  const sa = once.strandAssignments[0];
+  assert.equal(sa.assignmentMode, null);
+  assert.equal(sa.useThisYear, false);
+  assert.equal(sa.id, 'sa_legacy');
+  assert.equal(sa.loopId, loop.id);
+  assert.equal(sa.groupId, 'grp_x');
+  assert.equal(sa.workType, M.WORK_TYPES[0].id);
+  assert.equal(sa.mayOccurOnLightDays, true);
+  assert.equal(sa.notes, 'legacy note');
+  assert.equal(sa.createdBy, 'feast-prototype');
+
+  const twice = A.migrateSetupPrototypeState(once);
+  assert.deepEqual(twice.strandAssignments, once.strandAssignments, 'migration is idempotent');
+  // An unmigrated legacy record still READS as off.
+  assert.equal(M.resolveStrandActiveThisYear(legacy), false);
+});
+
+test('P7. a looped strand with a group audience produces no duplicate regular card', () => {
+  const g = M.makeGroup({ label: 'Olders' });
+  const loop = M.makeLoop({ title: 'Morning Basket' });
+  const st = pState({ groups: [g], loops: [loop] });
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, { assignmentMode: 'custom-group', groupId: g.id });
+  A.moveStrandLoopAssignment(st, P_S1.id, P_S1.label, loop.id);
+  const required = M.deriveRequiredCards(st.strandAssignments, st.students, st.groups, st.loops);
+  assert.deepEqual(required.filter((r) => r.title.indexOf(P_S1.label) === 0), [], 'the loop covers it');
+  const preview = A.buildDerivedCardPreview(st);
+  assert.ok(!preview.groupCards.some((c) => c.strandIds.includes(P_S1.id)));
+  assert.ok(!preview.familyCards.some((c) => c.strandIds.includes(P_S1.id)));
+  assert.ok(preview.loopCovered.some((l) => l.strandIds.includes(P_S1.id)));
+});
+
+test('P8. a non-looped strand with a group audience does produce a card', () => {
+  const g = M.makeGroup({ label: 'Olders' });
+  const st = pState({ groups: [g] });
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, { assignmentMode: 'custom-group', groupId: g.id });
+  const preview = A.buildDerivedCardPreview(st);
+  const card = preview.groupCards.find((c) => c.strandIds.includes(P_S1.id));
+  assert.ok(card, 'an unlooped group strand still needs its own card');
+  assert.equal(card.groupLabel, 'Olders');
+});
+
+test('P9. getUnresolvedReport counts match the Feast view exactly', () => {
+  const g = M.makeGroup({ label: 'Olders' });
+  const loop = M.makeLoop({ title: 'Morning Basket' });
+  const st = pState({ groups: [g], loops: [loop] });
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, { assignmentMode: 'custom-group', groupId: g.id });
+  A.moveStrandLoopAssignment(st, P_S2.id, P_S2.label, loop.id);
+  A.setStrandUseThisYear(st, M.FEAST_LIBRARY[2].id, M.FEAST_LIBRARY[2].label, false);
+
+  const rows = A.buildFeastRows(st);
+  const report = A.getUnresolvedReport(st, rows);
+  // The Feast page's "Unsorted / Still to Sort" set, computed the way the view does.
+  const viewUnsorted = A.buildFeastView(st, 'unsorted', rows).rowCount;
+  assert.equal(report.missingHandlingCount, viewUnsorted, 'the report and the view can never disagree');
+  const viewMissingAudience = rows.filter((r) => r.activeThisYear === true && !r.hasAudience).length;
+  assert.equal(report.missingAudienceCount, viewMissingAudience);
+  assert.equal(report.missingHandlingCount, M.FEAST_LIBRARY.length - 3);
+  assert.equal(report.inSetAsideLoopsCount, 0);
+
+  // Setting the loop aside moves its members into the third list, and never
+  // into "still to sort" — they have a home, it is just put away.
+  st.loops[0].active = false;
+  const after = A.getUnresolvedReport(st);
+  assert.equal(after.inSetAsideLoopsCount, 1);
+  assert.equal(after.inSetAsideLoops[0].loopTitle, 'Morning Basket');
+  assert.ok(!after.missingHandling.some((e) => e.strandId === P_S2.id));
+  // The strand set aside for the year is in no list at all.
+  ['missingAudience', 'missingHandling', 'inSetAsideLoops'].forEach((k) => {
+    assert.ok(!after[k].some((e) => e.strandId === M.FEAST_LIBRARY[2].id), k + ' excludes inactive strands');
+  });
+});
+
+test('P10. getUnresolvedReport puts no technical id in any user-facing string', () => {
+  const loop = M.makeLoop({ title: 'Morning Basket' });
+  const st = pState({ loops: [loop] });
+  A.moveStrandLoopAssignment(st, P_S1.id, P_S1.label, loop.id);
+  st.loops[0].active = false;
+  const report = A.getUnresolvedReport(st);
+  const facing = []
+    .concat(report.missingAudience.map((e) => [e.label, e.formLabel, e.columnLabel]))
+    .concat(report.missingHandling.map((e) => [e.label, e.formLabel, e.columnLabel]))
+    .concat(report.inSetAsideLoops.map((e) => [e.label, e.loopTitle]))
+    .reduce((a, b) => a.concat(b), []);
+  assert.ok(facing.length > 0);
+  facing.forEach((text) => {
+    assert.equal(typeof text, 'string');
+    assert.ok(text.indexOf('feast_') === -1, 'no strand id leaked: ' + text);
+    assert.ok(text.indexOf(loop.id) === -1, 'no loop id leaked: ' + text);
+    assert.ok(text.indexOf('lp_') === -1 && text.indexOf('sa_') === -1, 'no record id leaked: ' + text);
+  });
+});
+
+test('P11. the printed Family School Map includes every active strand exactly once', () => {
+  const stu = M.makeStudent({ name: 'Wren' });
+  const g = M.makeGroup({ label: 'Olders' });
+  const loop = M.makeLoop({ title: 'Morning Basket' });
+  const st = pState({ students: [stu], groups: [g], loops: [loop] });
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, { assignmentMode: 'custom-group', groupId: g.id });
+  A.setStrandAssignmentForStrand(st, P_S2.id, P_S2.label, { assignmentMode: 'individual', studentIds: [stu.id] });
+  A.moveStrandLoopAssignment(st, P_S2.id, P_S2.label, loop.id);
+  const off = M.FEAST_LIBRARY[2];
+  A.setStrandUseThisYear(st, off.id, off.label, false);
+
+  const doc = A.buildPrintFamilyMap(st);
+  const ids = doc.sections.reduce((acc, s) => acc.concat(s.rows.map((r) => r.strandId)), []);
+  assert.equal(ids.length, M.FEAST_LIBRARY.length - 1);
+  assert.equal(new Set(ids).size, ids.length, 'no strand is printed twice');
+  assert.ok(!ids.includes(off.id), 'a strand set aside for the year is not printed');
+  M.FEAST_LIBRARY.filter((e) => e.id !== off.id).forEach((e) => {
+    assert.ok(ids.includes(e.id), 'missing from the printed map: ' + e.label);
+  });
+  // Loop name or "Regular", and an explicit work type only.
+  const looped = doc.sections.reduce((f, s) => f || s.rows.find((r) => r.strandId === P_S2.id), null);
+  assert.equal(looped.placementLabel, 'Morning Basket');
+  assert.equal(looped.workTypeLabel, '', 'a suggested work type is never printed as a decision');
+  const grouped = doc.sections.reduce((f, s) => f || s.rows.find((r) => r.strandId === P_S1.id), null);
+  assert.equal(grouped.placementLabel, 'Regular');
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, { workType: M.WORK_TYPES[0].id });
+  const doc2 = A.buildPrintFamilyMap(st);
+  const grouped2 = doc2.sections.reduce((f, s) => f || s.rows.find((r) => r.strandId === P_S1.id), null);
+  assert.equal(grouped2.workTypeLabel, M.workTypeLabel(M.WORK_TYPES[0].id));
+  // Sections are audience-grouped, Everyone first when it exists.
+  assert.ok(doc2.sections.some((s) => s.label === 'Olders'));
+  assert.ok(doc2.sections.some((s) => s.label === 'Wren'));
+});
+
+test('P12. Next-Up generates exactly one worksheet per active strand, with 20 lines', () => {
+  const st = pState();
+  const off = M.FEAST_LIBRARY[0];
+  A.setStrandUseThisYear(st, off.id, off.label, false);
+  const doc = A.buildPrintNextUpWorksheets(st);
+  assert.equal(doc.lineCount, 20);
+  assert.equal(doc.worksheets.length, M.FEAST_LIBRARY.length - 1);
+  const ids = doc.worksheets.map((w) => w.strandId);
+  assert.equal(new Set(ids).size, ids.length, 'one worksheet per strand, never two');
+  assert.ok(!ids.includes(off.id));
+  doc.worksheets.forEach((w) => {
+    assert.ok(w.label && w.label.length, 'a worksheet always names its strand');
+    assert.ok(w.audienceLabel && w.audienceLabel.length, 'and always says who it is for, or that nobody is chosen');
+  });
+});
+
+test('P13. the printed loop summary keeps set-aside loops in their own section', () => {
+  const active = M.makeLoop({ title: 'Morning Basket' });
+  const aside = M.makeLoop({ title: 'Put Away', active: false });
+  const st = pState({ loops: [active, aside] });
+  A.moveStrandLoopAssignment(st, P_S1.id, P_S1.label, active.id);
+  A.moveStrandLoopAssignment(st, P_S2.id, P_S2.label, aside.id);
+  const doc = A.buildPrintLoopSummary(st);
+  assert.deepEqual(doc.loops.map((l) => l.title), ['Morning Basket']);
+  assert.deepEqual(doc.setAsideLoops.map((l) => l.title), ['Put Away']);
+  assert.equal(doc.loops[0].strands.length, 1);
+  assert.equal(doc.loops[0].warnings.length, 1, 'a member with no audience is flagged');
+  assert.ok(doc.loops[0].warnings[0].indexOf(P_S1.label) === 0);
+  assert.ok(doc.loops[0].warnings[0].indexOf('feast_') === -1, 'no technical id in a warning');
+  // A strand set aside for the year drops out of the loop listing.
+  A.setStrandUseThisYear(st, P_S1.id, P_S1.label, false);
+  assert.equal(A.buildPrintLoopSummary(st).loops[0].strands.length, 0);
+});
+
+test('P14. resetPrototypeStrandAssignments still clears a record left by a cleared audience', () => {
+  const st = pState();
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, { assignmentMode: 'everyone' });
+  A.setStrandAssignmentForStrand(st, P_S1.id, P_S1.label, { assignmentMode: null });
+  A.setStrandUseThisYear(st, P_S2.id, P_S2.label, false);
+  assert.equal(st.strandAssignments.length, 2, 'both records survive their decisions');
+  const reset = A.resetPrototypeStrandAssignments(st);
+  assert.deepEqual(reset.strandAssignments, []);
+});
+
+test('P15. the new helpers tolerate {} and missing optional arrays', () => {
+  [undefined, {}, { strandAssignments: null, loops: null }].forEach((s) => {
+    assert.doesNotThrow(() => A.getUnresolvedReport(s));
+    assert.doesNotThrow(() => A.buildPrintFamilyMap(s));
+    assert.doesNotThrow(() => A.buildPrintLoopSummary(s));
+    assert.doesNotThrow(() => A.buildPrintNextUpWorksheets(s));
+  });
+  assert.equal(A.getUnresolvedReport({}).missingAudienceCount, M.FEAST_LIBRARY.length);
+  assert.deepEqual(A.buildPrintLoopSummary({}).loops, []);
+  assert.deepEqual(A.buildPrintLoopSummary({}).setAsideLoops, []);
+  assert.equal(A.buildPrintNextUpWorksheets({}).worksheets.length, M.FEAST_LIBRARY.length);
+  assert.equal(A.normalizePrintView('nonsense'), 'map');
+  assert.equal(A.normalizePrintView('nextup'), 'nextup');
+  assert.equal(A.printViewLabel('unresolved'), 'Unresolved Decisions');
+  assert.equal(M.resolveStrandActiveThisYear(null), true);
+  assert.equal(M.resolveStrandActiveThisYear({}), true);
+  assert.doesNotThrow(() => A.setStrandUseThisYear({}, P_S1.id, P_S1.label, false));
+});
+
 
 for (const t of tests) {
   try {

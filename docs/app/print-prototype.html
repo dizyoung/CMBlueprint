@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Print Views Prototype</title>
+<link rel="stylesheet" href="./shared.css">
+<style>
+  .proto-badge {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+    background: var(--sunshine); color: #5a4400; border-radius: 12px; padding: 5px 12px;
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+  .build-label { font-size: 10px; color: var(--muted); font-family: monospace; }
+  #save-bar #reset-btn { display: none; }
+
+  .view-picker { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .view-picker a {
+    font-size: 12px; border: 1px solid var(--border); border-radius: 999px;
+    padding: 5px 12px; text-decoration: none; color: var(--ink); background: var(--milk-white);
+  }
+  .view-picker a.is-current { background: var(--field-mint); color: var(--navy-story); font-weight: 600; }
+
+  .print-doc { background: var(--milk-white); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+  .print-doc h1 { font-size: 20px; margin: 0 0 2px; }
+  .print-doc .doc-sub { font-size: 12px; color: var(--muted); margin: 0 0 14px; }
+  .print-section { margin-bottom: 18px; break-inside: avoid; }
+  .print-section > h2 { font-size: 14px; margin: 0 0 6px; border-bottom: 1px solid var(--border); padding-bottom: 3px; }
+  table.print-table { border-collapse: collapse; width: 100%; }
+  table.print-table th, table.print-table td {
+    border: 1px solid var(--border); padding: 4px 7px; font-size: 12px; text-align: left; vertical-align: top;
+  }
+  table.print-table th { background: var(--field-mint); font-weight: 600; }
+  .calm-empty { font-size: 12px; color: var(--muted); font-style: italic; }
+  .warn-line { font-size: 12px; color: var(--poppy); margin: 2px 0 0; }
+  .set-aside-note { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+  .count-pill {
+    display: inline-block; font-size: 11px; border-radius: 999px; padding: 1px 8px; margin-left: 6px;
+    background: var(--field-mint); color: var(--navy-story); border: 1px solid var(--border);
+  }
+
+  /* ---- Next-Up worksheets ---- */
+  .worksheet { break-after: page; page-break-after: always; padding-bottom: 10px; }
+  .worksheet:last-child { break-after: auto; page-break-after: auto; }
+  .worksheet h2 { font-size: 17px; margin: 0 0 2px; }
+  .worksheet .ws-meta { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+  .ws-rule { border-bottom: 1px solid var(--ink); height: 20px; margin: 2px 0 12px; }
+  .ws-rule-label { font-size: 11px; color: var(--muted); }
+  .ws-lines { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 26px; }
+  .ws-lines li { font-size: 12px; padding: 3px 0; border-bottom: 1px dotted var(--border); break-inside: avoid; }
+  .ws-lines .ws-box {
+    display: inline-block; width: 11px; height: 11px; border: 1px solid var(--ink);
+    margin-right: 7px; vertical-align: middle;
+  }
+  .ws-notes { margin-top: 12px; }
+  .ws-notes .ws-notes-box { border: 1px solid var(--border); height: 90px; border-radius: 6px; }
+  .ws-temp {
+    font-size: 11px; color: var(--muted); border: 1px dashed var(--border);
+    border-radius: 6px; padding: 5px 8px; margin: 0 0 10px;
+  }
+
+  /* ---- Stale-module banner (same pattern as the other prototype pages) ---- */
+  .stale-module-banner {
+    border: 1px solid var(--poppy); border-left: 5px solid var(--poppy); background: var(--blush);
+    border-radius: 10px; padding: 14px 16px; font-size: 13px; color: var(--ink);
+  }
+  .stale-module-banner p { margin: 8px 0 0; line-height: 1.5; }
+  .stale-module-banner code { font-family: monospace; font-size: 12px; }
+  .stale-module-banner kbd {
+    font-family: monospace; font-size: 11px; border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 5px; background: var(--milk-white);
+  }
+  .stale-module-banner .stale-detail { font-size: 11px; color: var(--muted); font-family: monospace; }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --border: #2b4247; --field-mint: #10262a; --milk-white: #0d1c20; --ink: #e6f1f2;
+      --inkwell: #e6f1f2; --muted: #93b0b4; --navy-story: #9fc7ea; --wonder-marine: #6fd3d3; --blush: #3a2124;
+    }
+    body { background: #08171a; }
+    .proto-badge { background: #6a5400; color: #ffe9a8; }
+  }
+
+  /* ---- Print CSS. No PDF library, no canvas: this is the whole engine. ---- */
+  @media print {
+    /* Everything that is not the printable document disappears. */
+    #app-header, #save-bar, .banner, .toolbar, .view-picker, .screen-only { display: none !important; }
+    body { background: #fff; }
+    .page-wrap { max-width: none; margin: 0; padding: 0; }
+    .print-doc { border: none; border-radius: 0; padding: 0; background: #fff; }
+    table.print-table th { background: #f0f0f0; }
+    a { color: inherit; text-decoration: none; }
+  }
+  /* The map is wide: it prints landscape. Every other view is portrait. */
+  @media print { .landscape-page { } }
+</style>
+<style id="page-size-style"></style>
+</head>
+<body>
+<div id="app-header"></div>
+
+<div class="page-wrap">
+
+<div class="banner">
+  <span class="proto-badge">PROTOTYPE — reads your saved plan; changes nothing</span>
+</div>
+
+<div id="save-bar"></div>
+
+<h1 class="page-title screen-only">Print Views Prototype</h1>
+<p class="sub screen-only">Pick a view, then print it. These sheets are read-only pictures of the plan you already made.</p>
+
+<div class="toolbar">
+  <a href="./feast-prototype.html">← Back to Feast Planning</a>
+  <button type="button" id="print-btn">Print this view</button>
+  <span class="build-label" title="Build identifier">build:print-prototype</span>
+</div>
+
+<div id="view-picker" class="view-picker"></div>
+
+<div id="print-root" class="print-doc"></div>
+
+</div>
+
+<script type="module">
+import * as A from '../../lib/familyMapAdapter.mjs';
+import * as M from '../../lib/familyMap.mjs';
+import { createSaveBar, loadInitialState } from './saveBar.mjs';
+import { appHeaderHTML } from './nav.mjs';
+
+document.getElementById('app-header').outerHTML = appHeaderHTML('feast');
+
+// arr() normalizes ANY expected-array export to a real array, so a cached or
+// older lib/ can never throw at module scope and leave a blank page.
+function arr(value) { return Array.isArray(value) ? value : []; }
+function escH(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+var REQUIRED_EXPORTS = [
+  { name: 'buildFeastRows', ok: typeof A.buildFeastRows === 'function' },
+  { name: 'getUnresolvedReport', ok: typeof A.getUnresolvedReport === 'function' },
+  { name: 'buildPrintFamilyMap', ok: typeof A.buildPrintFamilyMap === 'function' },
+  { name: 'buildPrintLoopSummary', ok: typeof A.buildPrintLoopSummary === 'function' },
+  { name: 'buildPrintNextUpWorksheets', ok: typeof A.buildPrintNextUpWorksheets === 'function' },
+  { name: 'PRINT_VIEWS', ok: arr(A.PRINT_VIEWS).length > 0 },
+  { name: 'FEAST_LIBRARY', ok: arr(M.FEAST_LIBRARY).length > 0 }
+];
+function missingExports() {
+  return REQUIRED_EXPORTS.filter(function (e) { return !e.ok; }).map(function (e) { return e.name; });
+}
+function moduleIsStale() { return missingExports().length > 0; }
+function staleModuleBannerHTML() {
+  return '<div class="stale-module-banner" role="alert">' +
+    '<strong>This page needs a newer copy of the planner library than your browser has.</strong>' +
+    '<p>Your browser is using a cached or older <code>lib/familyMap.mjs</code>, ' +
+    'so these print views cannot be built. Nothing in your saved plan has been changed or lost.</p>' +
+    '<p><strong>To fix:</strong> hard-refresh this page — ' +
+    '<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> (Windows/Linux) or ' +
+    '<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> (Mac).</p>' +
+    '<p class="stale-detail">Not found: ' + escH(missingExports().join(', ')) + '</p>' +
+    '</div>';
+}
+
+function normalize(s) {
+  if (!s || typeof s !== 'object') return s;
+  if (!s.strandAssignments) s.strandAssignments = [];
+  // Old saved state must keep loading: the same normalizer Setup and Feast run.
+  if (typeof A.migrateSetupPrototypeState === 'function') {
+    var migrated = A.migrateSetupPrototypeState(s);
+    if (migrated && typeof migrated === 'object') {
+      s.setupPrototype = migrated.setupPrototype;
+      if (Array.isArray(migrated.strandAssignments)) s.strandAssignments = migrated.strandAssignments;
+    }
+  }
+  return s;
+}
+
+var initial = loadInitialState();
+var state = normalize(initial.state);
+
+var saveBar = createSaveBar({
+  onStateReplaced: function (newState, source) {
+    state = normalize(newState);
+    render();
+    saveBar.setStatus(source === 'sample' ? 'Using sample plan' : 'Saved in this browser', source === 'sample' ? 'sample' : 'saved');
+  }
+});
+saveBar.mountControls(document.getElementById('save-bar'));
+saveBar.wire(function () { return state; });
+saveBar.setStatus(initial.source === 'saved' ? 'Saved in this browser' : 'Using sample plan', initial.source === 'saved' ? 'saved' : 'sample');
+
+// The view lives in the query string, so every sheet has its own URL a parent
+// can bookmark. It is a preference, never plan state — nothing is saved here.
+function currentViewId() {
+  var raw = '';
+  try { raw = new URLSearchParams(window.location.search).get('view') || ''; } catch (e) { raw = ''; }
+  return typeof A.normalizePrintView === 'function' ? A.normalizePrintView(raw) : 'map';
+}
+
+// @page cannot be toggled with a class, so the one rule that must change per
+// view is written into its own style element.
+function applyPageSize(viewId) {
+  var el = document.getElementById('page-size-style');
+  el.textContent = viewId === 'map'
+    ? '@media print { @page { size: landscape; margin: 12mm; } }'
+    : '@media print { @page { size: portrait; margin: 14mm; } }';
+}
+
+function renderViewPicker(viewId) {
+  document.getElementById('view-picker').innerHTML = arr(A.PRINT_VIEWS).map(function (v) {
+    return '<a href="?view=' + escH(v.id) + '"' + (v.id === viewId ? ' class="is-current"' : '') + '>' +
+      escH(v.label) + '</a>';
+  }).join('');
+}
+
+function tableHTML(headers, rows) {
+  var html = '<table class="print-table"><thead><tr>';
+  headers.forEach(function (h) { html += '<th>' + escH(h) + '</th>'; });
+  html += '</tr></thead><tbody>';
+  rows.forEach(function (cells) {
+    html += '<tr>' + cells.map(function (c) { return '<td>' + escH(c) + '</td>'; }).join('') + '</tr>';
+  });
+  return html + '</tbody></table>';
+}
+
+// A — Family School Map. Grouped by audience; every active strand appears once.
+function renderMap(rows) {
+  var doc = A.buildPrintFamilyMap(state, rows);
+  var html = '<h1>Family School Map</h1><p class="doc-sub">' + doc.strandCount +
+    ' strand' + (doc.strandCount === 1 ? '' : 's') + ' in this year’s plan. Strands set aside for this year are not listed.</p>';
+  if (!doc.sections.length) {
+    html += '<p class="calm-empty">Nothing is in this year’s plan yet.</p>';
+  }
+  doc.sections.forEach(function (sec) {
+    html += '<div class="print-section" data-section="' + escH(sec.key) + '"><h2>' + escH(sec.label) +
+      '<span class="count-pill">' + sec.rows.length + '</span></h2>';
+    html += tableHTML(['Strand', 'Who', 'Loop or Regular', 'Kind of work'], sec.rows.map(function (r) {
+      return [
+        r.label + (r.formLabel ? ' · ' + r.formLabel : ''),
+        r.audienceLabel,
+        r.placementLabel,
+        // Only an explicitly chosen work type prints. A suggestion is not a
+        // decision, and printing it would look like one.
+        r.workTypeLabel || ''
+      ];
+    }));
+    html += '</div>';
+  });
+  return html;
+}
+
+// B — Loop Summary.
+function renderLoops() {
+  var doc = A.buildPrintLoopSummary(state);
+  function loopBlock(l) {
+    var html = '<div class="print-section" data-loop-block="1"><h2>' + escH(l.title) +
+      '<span class="count-pill">' + l.strands.length + '</span></h2>';
+    if (l.description) html += '<p class="doc-sub">' + escH(l.description) + '</p>';
+    if (!l.strands.length) {
+      html += '<p class="calm-empty">Nothing is in this loop yet.</p>';
+    } else {
+      html += tableHTML(['Strand', 'Who'], l.strands.map(function (s) {
+        return [s.label + (s.formLabel ? ' · ' + s.formLabel : ''), s.audienceLabel || 'Not chosen yet'];
+      }));
+    }
+    l.warnings.forEach(function (w) { html += '<p class="warn-line">' + escH(w) + '</p>'; });
+    return html + '</div>';
+  }
+  var html = '<h1>Loop Summary</h1><p class="doc-sub">A loop is a container, not an audience — each strand keeps its own.</p>';
+  html += doc.loops.length ? doc.loops.map(loopBlock).join('')
+    : '<p class="calm-empty">No loops in use this year.</p>';
+  if (doc.setAsideLoops.length) {
+    html += '<div class="print-section"><h2>Set aside for this year</h2>' +
+      '<p class="set-aside-note">These loops were set aside, not deleted. Anything still inside them is not part of this year’s week.</p></div>';
+    html += doc.setAsideLoops.map(loopBlock).join('');
+  }
+  return html;
+}
+
+// C — Unresolved Decisions. Same report the Feast page counts from.
+function renderUnresolved(rows) {
+  var report = A.getUnresolvedReport(state, rows);
+  function block(title, items, emptyLine, cells, headers) {
+    var html = '<div class="print-section"><h2>' + escH(title) +
+      '<span class="count-pill">' + items.length + '</span></h2>';
+    html += items.length ? tableHTML(headers, items.map(cells))
+      : '<p class="calm-empty">' + escH(emptyLine) + '</p>';
+    return html + '</div>';
+  }
+  var html = '<h1>Unresolved Decisions</h1>' +
+    '<p class="doc-sub">Three lists, three different questions. Nothing here is an error.</p>';
+  html += block('Still needs an audience', report.missingAudience,
+    'Every strand in this year’s plan has someone it is for.',
+    function (e) { return [e.label, e.formLabel, e.columnLabel]; }, ['Strand', 'Form', 'Subject']);
+  html += block('Still to sort', report.missingHandling,
+    'Every strand has a home.',
+    function (e) { return [e.label, e.formLabel, e.columnLabel]; }, ['Strand', 'Form', 'Subject']);
+  html += block('Sitting in a loop that is set aside', report.inSetAsideLoops,
+    'Nothing is stranded in a set-aside loop.',
+    function (e) { return [e.label, e.loopTitle]; }, ['Strand', 'Loop']);
+  return html;
+}
+
+// D — Next-Up worksheets. One page per active strand.
+function renderNextUp(rows) {
+  var doc = A.buildPrintNextUpWorksheets(state, rows);
+  // On screen this names the sheet; in print it disappears so each worksheet
+  // still owns a whole page.
+  var heading = '<h1 class="screen-only">Next-Up worksheets</h1>';
+  if (!doc.worksheets.length) return heading + '<p class="calm-empty">Nothing is in this year’s plan yet.</p>';
+  var lines = '';
+  for (var i = 1; i <= doc.lineCount; i++) {
+    lines += '<li><span class="ws-box"></span>' + i + '.</li>';
+  }
+  return heading + doc.worksheets.map(function (w) {
+    var meta = [w.formLabel, w.columnLabel, w.audienceLabel].filter(Boolean).join(' · ');
+    return '<div class="worksheet" data-strand="' + escH(w.strandId) + '">' +
+      '<h2>' + escH(w.label) + '</h2>' +
+      '<p class="ws-meta">' + escH(meta) + (w.loopTitle ? ' · ' + escH('In ' + w.loopTitle) : '') + '</p>' +
+      '<p class="ws-temp">Temporary planning sheet. This is a place to jot what comes next by hand — ' +
+      'it is not how resources are finally modelled, and nothing written here is saved.</p>' +
+      '<div class="ws-rule-label">Resource / book title</div><div class="ws-rule"></div>' +
+      '<ol class="ws-lines">' + lines + '</ol>' +
+      '<div class="ws-notes"><div class="ws-rule-label">Notes</div><div class="ws-notes-box"></div></div>' +
+      '</div>';
+  }).join('');
+}
+
+function render() {
+  var root = document.getElementById('print-root');
+  var viewId = currentViewId();
+  renderViewPicker(viewId);
+  applyPageSize(viewId);
+  if (moduleIsStale()) { root.innerHTML = staleModuleBannerHTML(); return; }
+  var rows = [];
+  try { rows = arr(A.buildFeastRows(state)); } catch (e) { rows = []; }
+  root.className = 'print-doc' + (viewId === 'map' ? ' landscape-page' : '');
+  if (viewId === 'loops') root.innerHTML = renderLoops();
+  else if (viewId === 'unresolved') root.innerHTML = renderUnresolved(rows);
+  else if (viewId === 'nextup') root.innerHTML = renderNextUp(rows);
+  else root.innerHTML = renderMap(rows);
+}
+
+document.getElementById('print-btn').addEventListener('click', function () { window.print(); });
+window.addEventListener('popstate', render);
+
+render();
+</script>
+</body>
+</html>
