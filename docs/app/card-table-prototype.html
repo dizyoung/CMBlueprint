@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Card Table prototype — CM Blueprint</title>
+<link rel="stylesheet" href="card-table.css">
+</head>
+<body>
+<div class="page">
+
+  <header class="tabletop-head">
+    <h1>The card table</h1>
+    <span id="save-status" class="save-status">Not saved yet</span>
+    <button id="reset-btn" type="button" class="quiet">Start over</button>
+  </header>
+  <p class="lede">
+    One card per Form, per subject. Put cards on top of each other to teach them together.
+    Fan them out when the younger ones share the lesson but the oldest goes further.
+    Slide the pile into a loop. Books go underneath.
+  </p>
+
+  <section class="zone zone-table" id="zone-table" data-drop="table">
+    <h2>On the table</h2>
+    <div class="items" id="table-items"></div>
+  </section>
+
+  <div class="loops-row" id="loops-row"></div>
+
+  <section class="zone zone-tray" id="zone-tray" data-drop="tray">
+    <h2>Books not placed yet</h2>
+    <p class="hint">Drop a book on a pile to share it, or on one Form's card to give it to that Form alone.</p>
+    <div class="books" id="tray-items"></div>
+  </section>
+
+  <p class="lede" style="margin-top:26px;font-size:13px;">
+    Prototype only. Nothing here touches your real plan — it is saved separately in this browser.
+  </p>
+</div>
+
+<div id="drag-ghost" hidden></div>
+<div id="menu" hidden role="menu" aria-label="Card actions"></div>
+<p id="live" class="sr-only" role="status" aria-live="polite"></p>
+
+<script type="module">
+import * as CT from '../../lib/cardTable.mjs';
+import { createCardTableSaver, loadCardTableState, clearCardTableState } from './cardTableStore.mjs';
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let state = loadCardTableState().state;
+let selected = null;   // { kind, id } for the click/keyboard fallback
+
+const statusEl = document.getElementById('save-status');
+const live = document.getElementById('live');
+const saver = createCardTableSaver({ getState: () => state, statusEl });
+saver.install();
+
+function commit(next, message) {
+  state = next;
+  render();
+  saver.scheduleSave();
+  if (message) live.textContent = message;
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function cardName(c) {
+  return c.formLabel ? c.formLabel + ' ' + c.subjectLabel : c.subjectLabel;
+}
+
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
+
+function cardHTML(c, opts) {
+  const o = opts || {};
+  const sel = selected && selected.kind === 'card' && selected.id === c.id ? ' selected' : '';
+  return '<div class="card' + sel + '" data-kind="card" data-card-id="' + esc(c.id) + '" data-drop="card"' +
+    ' tabindex="0" role="button" aria-label="' + esc(cardName(c)) + '">' +
+      '<div class="card-tools"><button type="button" class="quiet" data-menu="card" data-id="' + esc(c.id) + '" aria-label="Actions for ' + esc(cardName(c)) + '">⋯</button></div>' +
+      '<div class="subject">' + esc(c.subjectLabel) + '</div>' +
+      '<div class="form">' + esc(c.formLabel || 'All together') + (o.loopNote ? ' · ' + esc(o.loopNote) : '') + '</div>' +
+    '</div>';
+}
+
+function bookHTML(r, kindNote) {
+  const sel = selected && selected.kind === 'resource' && selected.id === r.id ? ' selected' : '';
+  return '<span class="book' + sel + '" data-kind="resource" data-res-id="' + esc(r.id) + '"' +
+    ' tabindex="0" role="button" aria-label="' + esc(r.title) + (kindNote ? ', ' + kindNote : '') + '">' +
+    esc(r.title) +
+    '<button type="button" class="detach quiet" data-menu="resource" data-id="' + esc(r.id) + '" aria-label="Actions for ' + esc(r.title) + '">⋯</button>' +
+    '</span>';
+}
+
+function collapsedStackHTML(sum) {
+  const st = CT.findStack(state, sum.stackId);
+  const leaves = CT.cardsInStack(state, sum.stackId).map((c, i) =>
+    '<div class="leaf" style="--i:' + i + '">' + esc(cardName(c)) + '</div>').join('');
+  const books = CT.sharedResources(state, sum.stackId).map(r => bookHTML(r, 'shared book')).join('');
+  const facts = [
+    '<span>' + esc(sum.forms.join(' · ')) + '</span>',
+    '<span>' + esc(sum.relationshipLabel) + '</span>',
+    '<span>' + esc(sum.loopLabel) + '</span>',
+    '<span>' + sum.sharedResourceCount + ' shared ' + (sum.sharedResourceCount === 1 ? 'book' : 'books') + '</span>',
+    '<span>' + sum.formSpecificResourceCount + ' for one Form</span>'
+  ];
+  if (sum.unresolvedCount > 0) facts.push('<span class="unresolved">' + sum.unresolvedCount + ' still to decide</span>');
+  return '<div class="stack" data-kind="stack" data-stack-id="' + esc(sum.stackId) + '" data-drop="stack" tabindex="0" role="button"' +
+      ' aria-label="' + esc(sum.subjectLabel + ' pile, ' + sum.forms.join(', ') + ', ' + sum.relationshipLabel) + '">' +
+      '<div class="stack-pile rel-' + esc(st.relationship) + '">' + leaves + '</div>' +
+      (books ? '<div class="books stack-books" data-drop="stack-shared" data-stack-id="' + esc(sum.stackId) + '">' + books + '</div>' : '') +
+      '<div class="stack-summary">' +
+        '<div class="headline">' + esc(sum.subjectLabel) + '</div>' +
+        '<div class="facts">' + facts.join(' · ') + '</div>' +
+        '<div class="actions">' +
+          '<button type="button" data-action="open" data-id="' + esc(sum.stackId) + '">Open</button>' +
+          '<button type="button" class="quiet" data-menu="stack" data-id="' + esc(sum.stackId) + '">Move…</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+}
+
+function expandedStackHTML(sum) {
+  const st = CT.findStack(state, sum.stackId);
+  const shared = CT.sharedResources(state, sum.stackId);
+  const cards = CT.cardsInStack(state, sum.stackId);
+  const cols = cards.map(c => {
+    const own = CT.resourcesForCard(state, c.id);
+    return '<div class="form-col" data-drop="card-books" data-card-id="' + esc(c.id) + '">' +
+      '<h4>' + esc(c.formLabel || c.subjectLabel) + '</h4>' +
+      cardHTML(c) +
+      '<div class="card-books books">' +
+        (own.length ? own.map(r => bookHTML(r, 'for ' + (c.formLabel || c.subjectLabel) + ' only')).join('')
+                    : '<span class="book-note">shares the pile\'s books</span>') +
+      '</div>' +
+      '<div style="margin-top:8px"><button type="button" class="quiet" data-action="unstack" data-id="' + esc(c.id) + '">Take out of the pile</button></div>' +
+    '</div>';
+  }).join('');
+
+  return '<div class="stack-open" data-kind="stack-open" data-stack-id="' + esc(sum.stackId) + '">' +
+    '<div class="open-head">' +
+      '<div>' +
+        '<h3>' + esc(sum.subjectLabel) + '</h3>' +
+        '<p class="open-sub">' + esc(sum.forms.join(' · ')) + ' — in ' + esc(sum.loopLabel) + '</p>' +
+      '</div>' +
+      '<div class="rel-toggle">' +
+        '<button type="button" data-action="rel" data-id="' + esc(sum.stackId) + '" data-rel="together"' + (st.relationship === 'together' ? ' class="on"' : '') + '>Together</button>' +
+        '<button type="button" data-action="rel" data-id="' + esc(sum.stackId) + '" data-rel="layered"' + (st.relationship === 'layered' ? ' class="on"' : '') + '>Layered</button>' +
+        '<button type="button" data-action="close" data-id="' + esc(sum.stackId) + '">Close</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="shared-area" data-drop="stack-shared" data-stack-id="' + esc(sum.stackId) + '">' +
+      '<h4>Everyone shares</h4>' +
+      '<div class="books">' + (shared.length ? shared.map(r => bookHTML(r, 'shared book')).join('')
+        : '<span class="book-note">Drop a book here to use it with all of them.</span>') + '</div>' +
+    '</div>' +
+    '<div class="form-row">' + cols + '</div>' +
+  '</div>';
+}
+
+function renderZoneItems(container, loopId) {
+  const parts = [];
+  state.stacks.filter(s => (s.loopId || null) === loopId).forEach(s => {
+    const sum = CT.summarizeStack(state, s.id);
+    parts.push(s.expanded ? expandedStackHTML(sum) : collapsedStackHTML(sum));
+  });
+  CT.looseCards(state).filter(c => (c.loopId || null) === loopId).forEach(c => {
+    const own = CT.resourcesForCard(state, c.id);
+    parts.push('<div>' + cardHTML(c) +
+      (own.length ? '<div class="books card-books" style="margin-top:8px">' + own.map(r => bookHTML(r, 'for this card only')).join('') + '</div>' : '') +
+      '</div>');
+  });
+  container.innerHTML = parts.length ? parts.join('') : '<span class="empty-note">Nothing here yet.</span>';
+}
+
+function render() {
+  const loopsRow = document.getElementById('loops-row');
+  loopsRow.innerHTML = state.loops.map(l =>
+    '<section class="zone zone-loop" data-drop="loop" data-loop-id="' + esc(l.id) + '">' +
+      '<h2>' + esc(l.label) + '</h2>' +
+      '<div class="items" data-items-for="' + esc(l.id) + '"></div>' +
+    '</section>').join('');
+
+  renderZoneItems(document.getElementById('table-items'), null);
+  state.loops.forEach(l => {
+    renderZoneItems(loopsRow.querySelector('[data-items-for="' + l.id + '"]'), l.id);
+  });
+
+  const tray = CT.trayResources(state);
+  document.getElementById('tray-items').innerHTML =
+    tray.length ? tray.map(r => bookHTML(r, 'not placed')).join('') : '<span class="empty-note">Every book is placed.</span>';
+}
+
+// ---------------------------------------------------------------------------
+// Applying a drop — the one place that decides what a gesture means
+// ---------------------------------------------------------------------------
+
+// Returns a target descriptor for an element under the pointer, or null.
+function dropTargetFor(el, drag) {
+  while (el && el !== document.body) {
+    const kind = el.getAttribute && el.getAttribute('data-drop');
+    if (kind && accepts(kind, el, drag)) {
+      return { kind, el, cardId: el.getAttribute('data-card-id'), stackId: el.getAttribute('data-stack-id'), loopId: el.getAttribute('data-loop-id') };
+    }
+    el = el.parentElement;
+  }
+  return null;
+}
+
+function accepts(kind, el, drag) {
+  if (drag.kind === 'resource') {
+    return kind === 'tray' || kind === 'stack-shared' || kind === 'card' || kind === 'card-books';
+  }
+  if (drag.kind === 'card') {
+    if (kind === 'card') return el.getAttribute('data-card-id') !== drag.id;
+    if (kind === 'stack') return CT.findCard(state, drag.id).stackId !== el.getAttribute('data-stack-id');
+    return kind === 'loop' || kind === 'table';
+  }
+  if (drag.kind === 'stack') {
+    return kind === 'loop' || kind === 'table';
+  }
+  return false;
+}
+
+function applyDrop(drag, target) {
+  if (!target) return;
+  if (drag.kind === 'resource') {
+    const r = CT.findResource(state, drag.id);
+    if (target.kind === 'tray') return commit(CT.detachResource(state, drag.id), r.title + ' returned to the tray.');
+    if (target.kind === 'stack-shared') return commit(CT.attachResourceToStack(state, drag.id, target.stackId), r.title + ' is now shared by the whole pile.');
+    // dropped on a single card — Form-specific
+    const c = CT.findCard(state, target.cardId);
+    return commit(CT.attachResourceToCard(state, drag.id, target.cardId), r.title + ' is now just for ' + cardName(c) + '.');
+  }
+  if (drag.kind === 'card') {
+    if (target.kind === 'card') {
+      const other = CT.findCard(state, target.cardId);
+      if (other.stackId) return commit(CT.addCardToStack(state, drag.id, other.stackId), 'Added to the pile.');
+      return commit(CT.createStackFromCards(state, drag.id, other.id), 'They are now taught together.');
+    }
+    if (target.kind === 'stack') return commit(CT.addCardToStack(state, drag.id, target.stackId), 'Added to the pile.');
+    const loopId = target.kind === 'loop' ? target.loopId : null;
+    let next = state;
+    const card = CT.findCard(state, drag.id);
+    if (card.stackId) next = CT.removeCardFromStack(next, drag.id);
+    next = CT.moveCardToLoop(next, drag.id, loopId);
+    return commit(next, loopId ? 'Moved into ' + CT.findLoop(state, loopId).label + '.' : 'Back on the table.');
+  }
+  if (drag.kind === 'stack') {
+    const loopId = target.kind === 'loop' ? target.loopId : null;
+    return commit(CT.moveStackToLoop(state, drag.id, loopId), loopId ? 'The whole pile moved into ' + CT.findLoop(state, loopId).label + '.' : 'The pile is back on the table.');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pointer-event drag. Works for mouse, pen and touch; gives us a real ghost.
+// ---------------------------------------------------------------------------
+
+const ghost = document.getElementById('drag-ghost');
+let drag = null;
+
+function draggableFrom(el) {
+  while (el && el !== document.body) {
+    if (el.getAttribute) {
+      const k = el.getAttribute('data-kind');
+      if (k === 'card') return { kind: 'card', id: el.getAttribute('data-card-id'), el };
+      if (k === 'stack') return { kind: 'stack', id: el.getAttribute('data-stack-id'), el };
+      if (k === 'resource') return { kind: 'resource', id: el.getAttribute('data-res-id'), el };
+    }
+    el = el.parentElement;
+  }
+  return null;
+}
+
+document.addEventListener('pointerdown', ev => {
+  if (ev.button != null && ev.button !== 0) return;
+  if (ev.target.closest && ev.target.closest('button')) return;   // buttons keep working
+  const d = draggableFrom(ev.target);
+  if (!d) return;
+  drag = { kind: d.kind, id: d.id, el: d.el, startX: ev.clientX, startY: ev.clientY, active: false, pointerId: ev.pointerId };
+  try { d.el.setPointerCapture(ev.pointerId); } catch (e) { /* capture is a nicety */ }
+  ev.preventDefault();
+});
+
+document.addEventListener('pointermove', ev => {
+  if (!drag) return;
+  if (!drag.active) {
+    if (Math.abs(ev.clientX - drag.startX) < 5 && Math.abs(ev.clientY - drag.startY) < 5) return;
+    drag.active = true;
+    const clone = drag.el.cloneNode(true);
+    clone.classList.remove('selected');
+    clone.style.width = drag.el.offsetWidth + 'px';
+    ghost.innerHTML = '';
+    ghost.appendChild(clone);
+    ghost.hidden = false;
+    drag.el.classList.add('dragging');
+    document.body.classList.add('dragging-now');
+  }
+  ghost.style.transform = 'translate(' + ev.clientX + 'px,' + ev.clientY + 'px) translate(-50%,-50%) rotate(-2deg)';
+  ghost.hidden = true;
+  const under = document.elementFromPoint(ev.clientX, ev.clientY);
+  ghost.hidden = false;
+  const target = under ? dropTargetFor(under, drag) : null;
+  document.querySelectorAll('.drop-valid').forEach(n => n.classList.remove('drop-valid'));
+  if (target) target.el.classList.add('drop-valid');
+  drag.target = target;
+});
+
+function endDrag(ev) {
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  ghost.hidden = true;
+  ghost.innerHTML = '';
+  document.body.classList.remove('dragging-now');
+  document.querySelectorAll('.drop-valid').forEach(n => n.classList.remove('drop-valid'));
+  if (d.el) d.el.classList.remove('dragging');
+  if (!d.active) { selectFallback(d); return; }
+  let target = d.target;
+  if (ev && ev.clientX != null) {
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
+    if (under) target = dropTargetFor(under, d) || target;
+  }
+  applyDrop(d, target);
+}
+
+document.addEventListener('pointerup', endDrag);
+document.addEventListener('pointercancel', () => { if (drag) { drag.active = false; endDrag(null); } });
+
+// ---------------------------------------------------------------------------
+// Click / keyboard fallback: select a thing, then choose where it goes.
+// ---------------------------------------------------------------------------
+
+const menu = document.getElementById('menu');
+
+function selectFallback(d) {
+  selected = { kind: d.kind, id: d.id };
+  render();
+}
+
+function menuItems(kind, id) {
+  const items = [];
+  if (kind === 'card') {
+    const card = CT.findCard(state, id);
+    CT.looseCards(state).filter(c => c.id !== id).forEach(c => {
+      items.push(['Teach together with ' + cardName(c), () => commit(CT.createStackFromCards(state, id, c.id), 'They are now taught together.')]);
+    });
+    state.stacks.forEach(s => {
+      if (card.stackId === s.id) return;
+      items.push(['Add to the ' + s.subjectLabel + ' pile', () => commit(CT.addCardToStack(state, id, s.id), 'Added to the pile.')]);
+    });
+    if (card.stackId) items.push(['Take out of the pile', () => commit(CT.removeCardFromStack(state, id), 'Taken out of the pile.')]);
+    state.loops.forEach(l => items.push(['Move to ' + l.label, () => {
+      let next = state;
+      if (CT.findCard(state, id).stackId) next = CT.removeCardFromStack(next, id);
+      commit(CT.moveCardToLoop(next, id, l.id), 'Moved into ' + l.label + '.');
+    }]));
+    items.push(['Put back on the table', () => {
+      let next = state;
+      if (CT.findCard(state, id).stackId) next = CT.removeCardFromStack(next, id);
+      commit(CT.moveCardToLoop(next, id, null), 'Back on the table.');
+    }]);
+  } else if (kind === 'stack') {
+    state.loops.forEach(l => items.push(['Move the whole pile to ' + l.label, () => commit(CT.moveStackToLoop(state, id, l.id), 'The whole pile moved into ' + l.label + '.')]));
+    items.push(['Put the pile back on the table', () => commit(CT.moveStackToLoop(state, id, null), 'The pile is back on the table.')]);
+    items.push(['Open', () => commit(CT.setStackExpanded(state, id, true))]);
+  } else if (kind === 'resource') {
+    state.stacks.forEach(s => items.push(['Share across the ' + s.subjectLabel + ' pile', () => commit(CT.attachResourceToStack(state, id, s.id), 'Now shared by the whole pile.')]));
+    state.cards.forEach(c => items.push(['Give to ' + cardName(c) + ' only', () => commit(CT.attachResourceToCard(state, id, c.id), 'Now just for ' + cardName(c) + '.')]));
+    items.push(['Return to the tray', () => commit(CT.detachResource(state, id), 'Returned to the tray.')]);
+  }
+  return items;
+}
+
+function openMenu(kind, id, anchor) {
+  const items = menuItems(kind, id);
+  menu.innerHTML = '<div class="mtitle">Move this</div>';
+  items.forEach(([label, fn]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.addEventListener('click', () => { closeMenu(); fn(); });
+    menu.appendChild(b);
+  });
+  menu.hidden = false;
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = Math.min(r.left, window.innerWidth - menu.offsetWidth - 12) + 'px';
+  menu.style.top = Math.min(r.bottom + 6, window.innerHeight - menu.offsetHeight - 12) + 'px';
+  const first = menu.querySelector('button');
+  if (first) first.focus();
+}
+
+function closeMenu() { menu.hidden = true; menu.innerHTML = ''; }
+
+document.addEventListener('click', ev => {
+  const m = ev.target.closest && ev.target.closest('[data-menu]');
+  if (m) { ev.stopPropagation(); openMenu(m.getAttribute('data-menu'), m.getAttribute('data-id'), m); return; }
+  if (!ev.target.closest || !ev.target.closest('#menu')) closeMenu();
+
+  const a = ev.target.closest && ev.target.closest('[data-action]');
+  if (!a) return;
+  const action = a.getAttribute('data-action');
+  const id = a.getAttribute('data-id');
+  if (action === 'open') commit(CT.setStackExpanded(state, id, true));
+  else if (action === 'close') commit(CT.setStackExpanded(state, id, false));
+  else if (action === 'rel') commit(CT.setStackRelationship(state, id, a.getAttribute('data-rel')));
+  else if (action === 'unstack') commit(CT.removeCardFromStack(state, id), 'Taken out of the pile.');
+});
+
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape') { closeMenu(); selected = null; render(); return; }
+  if (ev.key !== 'Enter' && ev.key !== ' ') return;
+  const d = draggableFrom(ev.target);
+  if (!d || (ev.target.closest && ev.target.closest('button'))) return;
+  ev.preventDefault();
+  openMenu(d.kind, d.id, d.el);
+});
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+  if (!window.confirm('Start this prototype over? Only the card table is cleared — your real plan is untouched.')) return;
+  clearCardTableState();
+  state = CT.buildDefaultCardTableState();
+  render();
+  saver.saveNow();
+});
+
+render();
+
+// A small hook for the browser smoke test only.
+window.__cardTable = { get state() { return state; }, flush: () => saver.flush() };
+</script>
+</body>
+</html>

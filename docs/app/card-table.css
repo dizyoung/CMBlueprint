@@ -1,0 +1,229 @@
+/* Card Table prototype — its own stylesheet. Deliberately does not import or
+   depend on shared.css, so nothing here can affect a production page. */
+
+:root {
+  --ink: #2b2b28;
+  --ink-soft: #6d6a62;
+  --paper: #f6f3ec;
+  --card: #fffdf8;
+  --rule: #cfc9bb;
+  --edge: rgba(43, 43, 40, 0.14);
+  --accent: #7a5c3e;
+  --loop-thinking: #e8eef0;
+  --loop-beauty: #f3ecec;
+  --valid: #3f7a52;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.5 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.page { max-width: 1080px; margin: 0 auto; padding: 32px 24px 96px; }
+
+header.tabletop-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 16px;
+  margin-bottom: 8px;
+}
+header.tabletop-head h1 { font-size: 26px; font-weight: 500; margin: 0; letter-spacing: 0.01em; }
+.lede { color: var(--ink-soft); margin: 0 0 28px; max-width: 62ch; font-size: 15px; }
+
+.save-status { font-size: 13px; font-family: system-ui, sans-serif; color: var(--ink-soft); }
+.save-status.status-saved { color: var(--valid); }
+.save-status.status-failed { color: #a33; font-weight: 600; }
+
+button {
+  font: inherit; font-size: 14px; cursor: pointer;
+  background: var(--card); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: 6px; padding: 5px 12px;
+}
+button:hover { border-color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.quiet { background: transparent; border-color: transparent; color: var(--ink-soft); }
+button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ---------------- zones ---------------- */
+
+.zone {
+  border-radius: 12px;
+  padding: 18px 20px 22px;
+  margin-bottom: 26px;
+  min-height: 132px;
+  border: 1px solid transparent;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.zone > h2 {
+  font-size: 13px; text-transform: uppercase; letter-spacing: 0.13em;
+  font-family: system-ui, sans-serif; font-weight: 600;
+  color: var(--ink-soft); margin: 0 0 14px;
+}
+.zone .hint { font-size: 13px; color: var(--ink-soft); font-family: system-ui, sans-serif; margin: 0 0 12px; }
+.zone-table { background: rgba(255,255,255,0.5); border: 1px dashed var(--rule); }
+.zone-loop { background: var(--loop-thinking); }
+.zone-loop[data-loop-id="loop-beauty"] { background: var(--loop-beauty); }
+.zone-tray { background: rgba(122, 92, 62, 0.07); border: 1px dashed var(--rule); min-height: 100px; }
+
+.loops-row { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+@media (max-width: 720px) { .loops-row { grid-template-columns: 1fr; } }
+
+.zone.drop-valid { border-color: var(--valid); background: #e9f3ec; }
+
+.items { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; }
+.empty-note { color: var(--ink-soft); font-size: 13px; font-style: italic; font-family: system-ui, sans-serif; }
+
+/* ---------------- index cards ---------------- */
+
+.card {
+  position: relative;
+  width: 208px; min-height: 118px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  box-shadow: 0 1px 0 var(--edge), 0 6px 14px -10px rgba(0,0,0,0.5);
+  padding: 14px 14px 12px;
+  cursor: grab;
+}
+.card::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 34px;
+  border-top: 1px solid #d9c9c9;
+}
+.card .subject { font-size: 18px; }
+.card .form { font-size: 13px; color: var(--ink-soft); font-family: system-ui, sans-serif; margin-top: 16px; }
+.card.drop-valid { border-color: var(--valid); box-shadow: 0 0 0 3px rgba(63,122,82,0.28); }
+.card.selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(122,92,62,0.25); }
+.card.dragging { opacity: 0.35; }
+
+.card-tools { position: absolute; right: 6px; top: 6px; }
+.card-tools button { padding: 1px 7px; font-size: 13px; line-height: 1.4; }
+
+/* ---------------- stacks ---------------- */
+
+.stack { width: 258px; cursor: grab; }
+.stack.dragging { opacity: 0.35; }
+.stack.drop-valid .stack-pile { box-shadow: 0 0 0 3px rgba(63,122,82,0.28); border-radius: 6px; }
+
+.stack-pile { position: relative; height: 126px; margin-bottom: 10px; }
+.stack-pile .leaf {
+  position: absolute;
+  width: 208px; height: 104px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  box-shadow: 0 1px 0 var(--edge), 0 6px 14px -12px rgba(0,0,0,0.55);
+  padding: 8px 12px;
+  font-size: 13px; font-family: system-ui, sans-serif; color: var(--ink-soft);
+  overflow: hidden;
+}
+/* Together: tightly clipped — reads as one object. */
+.stack-pile.rel-together .leaf { left: calc(var(--i) * 4px); top: calc(var(--i) * 3px); }
+/* Layered: visibly staggered so each Form's own edge shows. */
+.stack-pile.rel-layered .leaf { left: calc(var(--i) * 22px); top: calc(var(--i) * 14px); }
+
+.stack-summary {
+  background: rgba(255,255,255,0.72);
+  border: 1px solid var(--rule); border-radius: 8px;
+  padding: 10px 12px;
+  font-family: system-ui, sans-serif; font-size: 13px;
+}
+.stack-summary .headline { font-family: inherit; font-size: 15px; color: var(--ink); margin-bottom: 4px; }
+.stack-summary .facts { color: var(--ink-soft); line-height: 1.7; }
+.stack-summary .facts span { white-space: nowrap; }
+.stack-summary .unresolved { color: var(--accent); font-weight: 600; }
+.stack-summary .actions { margin-top: 10px; display: flex; gap: 8px; }
+
+/* expanded */
+.stack-open {
+  width: 100%;
+  background: rgba(255,255,255,0.78);
+  border: 1px solid var(--rule); border-radius: 12px;
+  padding: 20px 22px 22px;
+}
+.stack-open h3 { margin: 0 0 4px; font-size: 20px; font-weight: 500; }
+.stack-open .open-sub { font-family: system-ui, sans-serif; font-size: 13px; color: var(--ink-soft); margin: 0 0 18px; }
+.open-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.rel-toggle { display: inline-flex; gap: 6px; }
+
+.shared-area {
+  border: 1px dashed var(--rule); border-radius: 8px;
+  padding: 12px 14px; margin: 16px 0 20px;
+  background: rgba(122,92,62,0.05);
+}
+.shared-area h4, .form-col h4 {
+  font-family: system-ui, sans-serif; font-size: 12px; letter-spacing: 0.11em;
+  text-transform: uppercase; color: var(--ink-soft); font-weight: 600; margin: 0 0 8px;
+}
+.shared-area.drop-valid, .form-col.drop-valid { border-color: var(--valid); background: #eaf4ed; }
+
+.form-row { display: flex; flex-wrap: wrap; gap: 16px; }
+.form-col {
+  border: 1px dashed transparent; border-radius: 8px; padding: 8px;
+}
+.form-col .card { width: 196px; }
+.form-col .card-books { margin-top: 8px; }
+
+/* ---------------- resources: small book cards, beneath the pile ---------- */
+
+.books { display: flex; flex-wrap: wrap; gap: 8px; }
+.book {
+  display: inline-block;
+  background: #fbf6ea;
+  border: 1px solid #d8cbb2;
+  border-left: 5px solid var(--accent);
+  border-radius: 3px;
+  padding: 5px 10px;
+  font-family: system-ui, sans-serif; font-size: 12.5px;
+  color: #4a3d2c;
+  cursor: grab;
+  max-width: 220px;
+}
+.book.dragging { opacity: 0.35; }
+.book.selected { box-shadow: 0 0 0 3px rgba(122,92,62,0.25); }
+.book .detach { margin-left: 8px; color: var(--ink-soft); }
+.book-note { font-family: system-ui, sans-serif; font-size: 12px; color: var(--ink-soft); font-style: italic; }
+
+.stack-books { margin-top: -4px; margin-bottom: 8px; }
+
+/* ---------------- drag ghost ---------------- */
+
+#drag-ghost {
+  position: fixed; left: 0; top: 0; z-index: 900;
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(-2deg);
+  opacity: 0.94;
+  filter: drop-shadow(0 12px 18px rgba(0,0,0,0.28));
+}
+#drag-ghost .card, #drag-ghost .book, #drag-ghost .stack { cursor: grabbing; }
+
+body.dragging-now { cursor: grabbing; }
+
+/* ---------------- menu (keyboard / click fallback) ---------------- */
+
+#menu {
+  position: fixed; z-index: 950;
+  background: var(--card); border: 1px solid var(--rule); border-radius: 8px;
+  box-shadow: 0 14px 30px -14px rgba(0,0,0,0.5);
+  padding: 6px; min-width: 220px; max-height: 70vh; overflow: auto;
+  font-family: system-ui, sans-serif;
+}
+#menu[hidden] { display: none; }
+#menu .mtitle {
+  font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink-soft); padding: 8px 10px 4px;
+}
+#menu button {
+  display: block; width: 100%; text-align: left; border: 0; background: transparent;
+  padding: 7px 10px; border-radius: 5px; font-size: 14px;
+}
+#menu button:hover { background: rgba(122,92,62,0.12); }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
