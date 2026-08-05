@@ -3437,6 +3437,343 @@ test('the archived-bucket helpers tolerate {} and missing optional arrays', () =
   assert.equal(A.describeLoopDeleteBlocked({ total: 0 }), '');
 });
 
+// ---------------------------------------------------------------------------
+// Per-loop set-aside, and moving strands out of a set-aside loop.
+// Name-free throughout: ids and neutral labels only.
+// ---------------------------------------------------------------------------
+const MV_A = M.FEAST_LIBRARY[0].id;
+const MV_A_LABEL = M.FEAST_LIBRARY[0].label;
+const MV_B = M.FEAST_LIBRARY[1].id;
+
+function twoLoopState(extra) {
+  return Object.assign({
+    appStateVersion: 1,
+    students: [], groups: [], subjectColumns: [], cards: [],
+    loops: [
+      { id: 'lp_a', title: 'Bucket A', active: true, rhythmDayIds: ['mon'] },
+      { id: 'lp_b', title: 'Bucket B', active: true, rhythmDayIds: [] },
+      { id: 'lp_c', title: 'Bucket C', rhythmDayIds: [] }
+    ],
+    loopItems: [], sequences: [], sequenceItems: [], resources: [], resourceUses: [],
+    strandAssignments: [],
+    weeklyRhythm: { days: [], blocks: [], assignments: [] },
+    setupPrototype: {}
+  }, extra || {});
+}
+
+function saOn(loopId, strandId, fields) {
+  return Object.assign({
+    id: 'sa_' + strandId, strandId: strandId, strandLabel: 'Strand ' + strandId,
+    assignmentMode: 'loop', loopId: loopId, groupId: null, studentIds: [],
+    coopProvider: '', workType: null, mayOccurOnLightDays: false, notes: '',
+    sortOrder: 0, createdBy: A.FEAST_PROTOTYPE_CREATED_BY
+  }, fields || {});
+}
+
+test('setAsideLoopBucket archives only the named loop and leaves the others active', () => {
+  const st = twoLoopState();
+  const next = A.setAsideLoopBucket(st, 'lp_a', { confirmed: true });
+  assert.deepEqual(next.loops.map((l) => l.id + ':' + String(l.active)), ['lp_a:false', 'lp_b:true', 'lp_c:undefined']);
+  assert.deepEqual(A.activeLoops(next).map((l) => l.id), ['lp_b', 'lp_c']);
+  assert.deepEqual(A.getArchivedLoopBuckets(next).map((b) => b.loopId), ['lp_a']);
+  // Pure: the original is untouched.
+  assert.equal(A.activeLoops(st).length, 3);
+});
+
+test('setAsideLoopBucket keeps the loop, its stable id, and its fields', () => {
+  const next = A.setAsideLoopBucket(twoLoopState(), 'lp_a', { confirmed: true });
+  assert.equal(next.loops.length, 3);
+  const loop = next.loops.find((l) => l.id === 'lp_a');
+  assert.ok(loop);
+  assert.equal(loop.title, 'Bucket A');
+  assert.deepEqual(loop.rhythmDayIds, ['mon']);
+  // The same bucket can be restored by that same id.
+  assert.equal(A.restoreLoopBucket(next, 'lp_a').loops.find((l) => l.id === 'lp_a').active, true);
+});
+
+test('setAsideLoopBucket requires opts.confirmed and marks the need non-enumerably', () => {
+  const st = twoLoopState();
+  const next = A.setAsideLoopBucket(st, 'lp_a');
+  assert.equal(next.loopSetAsideConfirmationRequired, true);
+  assert.deepEqual(A.activeLoops(next).map((l) => l.id), ['lp_a', 'lp_b', 'lp_c']);
+  assert.equal(Object.prototype.propertyIsEnumerable.call(next, 'loopSetAsideConfirmationRequired'), false);
+  assert.equal(Object.keys(next).indexOf('loopSetAsideConfirmationRequired'), -1);
+  assert.equal(JSON.parse(JSON.stringify(next)).loopSetAsideConfirmationRequired, undefined);
+  assert.equal(A.setAsideLoopBucket(st, 'lp_a', {}).loopSetAsideConfirmationRequired, true);
+  assert.equal(A.setAsideLoopBucket(st, 'lp_a', { confirmed: true }).loopSetAsideConfirmationRequired, false);
+});
+
+test('setAsideLoopBucket leaves all six reference surfaces exactly as they were', () => {
+  const st = twoLoopState({
+    strandAssignments: [saOn('lp_a', MV_A)],
+    cards: [
+      { id: 'cd_1', loopId: 'lp_a' },
+      { id: 'cd_2', scheduleConfig: { loopId: 'lp_a' } }
+    ],
+    loopItems: [{ id: 'li_1', loopId: 'lp_a' }],
+    resourceUses: [{ id: 'ru_1', resourceId: 'rs_1', loopId: 'lp_a' }],
+    weeklyRhythm: { days: [], blocks: [], assignments: [{ id: 'ra_1', assignmentType: 'loop', referencedId: 'lp_a' }] }
+  });
+  const before = A.getLoopReferences(st, 'lp_a');
+  assert.equal(before.total, 6);
+  const next = A.setAsideLoopBucket(st, 'lp_a', { confirmed: true });
+  const after = A.getLoopReferences(next, 'lp_a');
+  assert.deepEqual(after.strandAssignmentIds, before.strandAssignmentIds);
+  assert.deepEqual(after.cardIds, before.cardIds);
+  assert.deepEqual(after.scheduleConfigCardIds, before.scheduleConfigCardIds);
+  assert.deepEqual(after.loopItemIds, before.loopItemIds);
+  assert.deepEqual(after.resourceUseIds, before.resourceUseIds);
+  assert.deepEqual(after.rhythmAssignmentIds, before.rhythmAssignmentIds);
+  assert.equal(after.total, 6);
+  assert.equal(after.canDeletePermanently, false);
+});
+
+test('setAsideLoopBucket invalidates bucket review derivedly and never sets noLoopsChosen', () => {
+  let st = twoLoopState();
+  A.markLoopBucketsReviewed(st);
+  assert.equal(A.getLoopSortingProgress(st).bucketsReviewed, true);
+  const fingerprintBefore = A.loopBucketFingerprint(st);
+
+  const next = A.setAsideLoopBucket(st, 'lp_a', { confirmed: true });
+  // No stamp is written — the fingerprint itself changed, so the derived check
+  // is enough. (restoreLoopBucket needs a stamp; archiving never does.)
+  assert.notEqual(A.loopBucketFingerprint(next), fingerprintBefore);
+  assert.equal(next.setupPrototype.loopBucketsFingerprint, fingerprintBefore);
+  assert.equal(next.setupPrototype.loopBucketsReviewed, true);
+  assert.equal(A.getLoopSortingProgress(next).bucketsReviewed, false);
+  assert.equal(next.setupPrototype.noLoopsChosen, undefined);
+  assert.equal(A.getLoopSortingProgress(next).noLoopsChosen, false);
+});
+
+test('the global set-aside still archives every active loop bucket', () => {
+  const next = A.setNoLoopsChosen(twoLoopState(), true, { confirmed: true });
+  assert.deepEqual(A.activeLoops(next).map((l) => l.id), []);
+  assert.deepEqual(A.getArchivedLoopBuckets(next).map((b) => b.loopId), ['lp_a', 'lp_b', 'lp_c']);
+  assert.equal(next.setupPrototype.noLoopsChosen, true);
+});
+
+test('describeLoopSetAsideImpact separates strand count from other references and agrees with getLoopReferences', () => {
+  const st = twoLoopState({
+    strandAssignments: [saOn('lp_a', MV_A), saOn('lp_a', MV_B), saOn('lp_b', 'strand-other')],
+    cards: [{ id: 'cd_1', loopId: 'lp_a' }],
+    loopItems: [{ id: 'li_1', loopId: 'lp_a' }],
+    weeklyRhythm: { days: [], blocks: [], assignments: [{ id: 'ra_1', assignmentType: 'loop', referencedId: 'lp_a' }] }
+  });
+  const impact = A.describeLoopSetAsideImpact(st, 'lp_a');
+  const refs = A.getLoopReferences(st, 'lp_a');
+  assert.equal(impact.loopId, 'lp_a');
+  assert.equal(impact.title, 'Bucket A');
+  assert.equal(impact.strandCount, 2);
+  assert.equal(impact.otherReferenceCount, 3);
+  assert.equal(impact.strandCount + impact.otherReferenceCount, refs.total);
+  assert.equal(impact.references.total, refs.total);
+  assert.equal(impact.strandLabels.length, 2);
+  assert.ok(impact.message.includes('Bucket A'));
+  assert.ok(/2 strands/.test(impact.message));
+  assert.ok(/3 other references/.test(impact.message));
+  assert.ok(/Nothing is deleted/.test(impact.message));
+});
+
+test('a strand moves off an archived loop onto an active one without restoring anything', () => {
+  const st = A.setAsideLoopBucket(twoLoopState({ strandAssignments: [saOn('lp_a', MV_A)] }), 'lp_a', { confirmed: true });
+  assert.deepEqual(A.getArchivedLoopStrandGroups(st).map((g) => g.loopId), ['lp_a']);
+
+  A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, 'lp_b');
+  assert.deepEqual(A.getArchivedLoopStrandGroups(st), []);
+  assert.equal(A.getLoopBucketContents(st, 'lp_b').length, 1);
+  assert.equal(A.getLoopBucketContents(st, 'lp_a').length, 0);
+  // The bucket itself is still set aside, and still listed in Setup.
+  assert.equal(st.loops.find((l) => l.id === 'lp_a').active, false);
+  assert.deepEqual(A.getArchivedLoopBuckets(st).map((b) => b.loopId), ['lp_a']);
+});
+
+test('a strand returns to Unsorted from an archived loop, which stays archived', () => {
+  const st = A.setAsideLoopBucket(twoLoopState({ strandAssignments: [saOn('lp_a', MV_A)] }), 'lp_a', { confirmed: true });
+  A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, null);
+  assert.deepEqual(A.getArchivedLoopStrandGroups(st), []);
+  const progress = A.getLoopSortingProgress(st);
+  assert.ok(progress.unsortedStrandIds.indexOf(MV_A) > -1);
+  assert.equal(st.loops.find((l) => l.id === 'lp_a').active, false);
+  assert.deepEqual(A.getArchivedLoopBuckets(st).map((b) => b.loopId), ['lp_a']);
+});
+
+test('audience and unrelated choices survive both loop -> loop and loop -> unsorted', () => {
+  const st = twoLoopState({
+    strandAssignments: [saOn('lp_a', MV_A, {
+      workType: 'independent', mayOccurOnLightDays: true, notes: 'a note', sortOrder: 7
+    })]
+  });
+  A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, 'lp_b');
+  let sa = st.strandAssignments[0];
+  assert.equal(sa.assignmentMode, 'loop');
+  assert.equal(sa.loopId, 'lp_b');
+  assert.equal(sa.workType, 'independent');
+  assert.equal(sa.mayOccurOnLightDays, true);
+  assert.equal(sa.notes, 'a note');
+  assert.equal(sa.sortOrder, 7);
+  assert.equal(sa.id, 'sa_' + MV_A);
+  assert.equal(sa.createdBy, A.FEAST_PROTOTYPE_CREATED_BY);
+
+  A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, null);
+  assert.equal(st.strandAssignments.length, 1, 'returning to Unsorted must KEEP the record');
+  sa = st.strandAssignments[0];
+  assert.equal(sa.assignmentMode, null);
+  assert.equal(sa.loopId, null);
+  assert.equal(sa.workType, 'independent');
+  assert.equal(sa.mayOccurOnLightDays, true);
+  assert.equal(sa.notes, 'a note');
+  assert.equal(sa.id, 'sa_' + MV_A);
+});
+
+test('a strand assigned to a group then moved between loops never resurrects a stale groupId', () => {
+  const st = twoLoopState({ groups: [{ id: 'grp_1', label: 'A group', studentIds: [] }] });
+  A.setStrandAssignmentForStrand(st, MV_A, MV_A_LABEL, { assignmentMode: 'custom-group', groupId: 'grp_1' });
+  A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, 'lp_a');
+  assert.equal(st.strandAssignments[0].groupId, null);
+  A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, 'lp_b');
+  assert.equal(st.strandAssignments[0].groupId, null);
+  A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, null);
+  assert.equal(st.strandAssignments[0].groupId, null);
+  assert.deepEqual(st.strandAssignments[0].studentIds, []);
+});
+
+test('both the archived groups and the bucket contents reflect a move immediately', () => {
+  const st = A.setAsideLoopBucket(twoLoopState({
+    strandAssignments: [saOn('lp_a', MV_A), saOn('lp_a', MV_B)]
+  }), 'lp_a', { confirmed: true });
+  assert.equal(A.getArchivedLoopStrandGroups(st)[0].strands.length, 2);
+  assert.equal(A.getLoopBucketContents(st, 'lp_b').length, 0);
+
+  A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, 'lp_b');
+  assert.equal(A.getArchivedLoopStrandGroups(st)[0].strands.length, 1);
+  assert.deepEqual(A.getArchivedLoopStrandGroups(st)[0].strands.map((s) => s.strandId), [MV_B]);
+  assert.equal(A.getLoopBucketContents(st, 'lp_b').length, 1);
+  assert.equal(A.getLoopBucketContents(st, 'lp_a').length, 1);
+});
+
+test('getArchivedLoopStrandGroups omits empty archived loops and every active loop', () => {
+  const st = twoLoopState({
+    loops: [
+      { id: 'lp_empty', title: 'Empty set-aside', active: false, rhythmDayIds: [] },
+      { id: 'lp_full', title: 'Full set-aside', active: false, rhythmDayIds: ['tue'] },
+      { id: 'lp_live', title: 'In use', active: true }
+    ],
+    strandAssignments: [saOn('lp_full', MV_A), saOn('lp_live', MV_B)]
+  });
+  const groups = A.getArchivedLoopStrandGroups(st);
+  assert.deepEqual(groups.map((g) => g.loopId), ['lp_full']);
+  assert.equal(groups[0].title, 'Full set-aside');
+  assert.deepEqual(groups[0].rhythmDayIds, ['tue']);
+  assert.deepEqual(groups[0].strands.map((s) => s.strandId), [MV_A]);
+  assert.equal(groups[0].strands[0].label, MV_A_LABEL);
+  assert.ok(groups[0].strands[0].formLabel.length > 0);
+  assert.ok(groups[0].strands[0].columnLabel.length > 0);
+  // The empty archived bucket is still listed for Setup, just not here.
+  assert.deepEqual(A.getArchivedLoopBuckets(st).map((b) => b.loopId), ['lp_empty', 'lp_full']);
+});
+
+test('moving a strand resets loop SORTING review and leaves bucket review alone', () => {
+  const st = A.setAsideLoopBucket(twoLoopState({ strandAssignments: [saOn('lp_a', MV_A)] }), 'lp_a', { confirmed: true });
+  A.markLoopBucketsReviewed(st);
+  st.setupPrototype.loopSortingReviewed = true;
+  const bucketFingerprint = st.setupPrototype.loopBucketsFingerprint;
+  assert.equal(A.getLoopSortingProgress(st).bucketsReviewed, true);
+
+  // Same call shape the page makes: move, then clear sorting only.
+  A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, 'lp_b');
+  st.setupPrototype.loopSortingReviewed = false;
+
+  assert.equal(A.getLoopSortingProgress(st).sortingReviewed, false);
+  assert.equal(st.setupPrototype.loopBucketsReviewed, true);
+  assert.equal(st.setupPrototype.loopBucketsFingerprint, bucketFingerprint);
+  assert.equal(A.getLoopSortingProgress(st).bucketsReviewed, true);
+});
+
+test('clearing the last strand off an archived loop unlocks the confirmed permanent delete', () => {
+  const st = A.setAsideLoopBucket(twoLoopState({ strandAssignments: [saOn('lp_a', MV_A)] }), 'lp_a', { confirmed: true });
+  assert.equal(A.getLoopReferences(st, 'lp_a').canDeletePermanently, false);
+  A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, 'lp_b');
+  assert.equal(A.getLoopReferences(st, 'lp_a').canDeletePermanently, true);
+  const deleted = A.deleteLoopBucketPermanently(st, 'lp_a', { confirmed: true });
+  assert.deepEqual(deleted.loops.map((l) => l.id), ['lp_b', 'lp_c']);
+  // The moved strand is untouched by the delete.
+  assert.equal(deleted.strandAssignments[0].loopId, 'lp_b');
+});
+
+test('a loop referenced by any one of the other five surfaces stays undeletable with zero strands', () => {
+  const surfaces = [
+    { cards: [{ id: 'cd_1', loopId: 'lp_a' }] },
+    { cards: [{ id: 'cd_2', scheduleConfig: { loopId: 'lp_a' } }] },
+    { loopItems: [{ id: 'li_1', loopId: 'lp_a' }] },
+    { resourceUses: [{ id: 'ru_1', resourceId: 'rs_1', loopId: 'lp_a' }] },
+    { weeklyRhythm: { days: [], blocks: [], assignments: [{ id: 'ra_1', assignmentType: 'loop', referencedId: 'lp_a' }] } }
+  ];
+  surfaces.forEach((surface) => {
+    const st = A.setAsideLoopBucket(twoLoopState(Object.assign({
+      strandAssignments: [saOn('lp_a', MV_A)]
+    }, surface)), 'lp_a', { confirmed: true });
+    A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, null);
+    const refs = A.getLoopReferences(st, 'lp_a');
+    assert.equal(refs.strandCount, 0);
+    assert.equal(refs.total, 1);
+    assert.equal(refs.canDeletePermanently, false);
+    assert.equal(A.deleteLoopBucketPermanently(st, 'lp_a', { confirmed: true }).loops.length, 3);
+  });
+});
+
+test('moveStrandLoopAssignment keeps exactly one assignment per strand', () => {
+  const st = twoLoopState();
+  A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, 'lp_a');
+  assert.equal(st.strandAssignments.length, 1);
+  A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, 'lp_b');
+  A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, null);
+  A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, 'lp_a');
+  assert.equal(st.strandAssignments.length, 1);
+  assert.equal(st.strandAssignments.filter((sa) => sa.strandId === MV_A).length, 1);
+  A.moveStrandLoopAssignment(st, MV_B, 'Strand B', 'lp_a');
+  assert.equal(st.strandAssignments.length, 2);
+});
+
+test('resetPrototypeStrandAssignments still removes a record left behind by a return to Unsorted', () => {
+  const st = twoLoopState();
+  A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, 'lp_a');
+  A.moveStrandLoopAssignment(st, MV_A, MV_A_LABEL, null);
+  assert.equal(st.strandAssignments.length, 1);
+  assert.equal(st.strandAssignments[0].createdBy, A.FEAST_PROTOTYPE_CREATED_BY);
+  assert.deepEqual(A.resetPrototypeStrandAssignments(st).strandAssignments, []);
+
+  // A record the main app made is preserved even after being returned to Unsorted.
+  const appState = twoLoopState({
+    strandAssignments: [saOn('lp_a', MV_B, { id: 'sa_app', createdBy: null })]
+  });
+  A.moveStrandLoopAssignment(appState, MV_B, 'Strand B', null);
+  assert.equal(A.resetPrototypeStrandAssignments(appState).strandAssignments.length, 1);
+});
+
+test('the per-loop set-aside helpers tolerate {} and missing optional arrays', () => {
+  assert.deepEqual(A.getArchivedLoopStrandGroups({}), []);
+  assert.deepEqual(A.getArchivedLoopStrandGroups(undefined), []);
+  assert.deepEqual(A.getArchivedLoopStrandGroups({ loops: [{ id: 'lp_x', active: false }] }), []);
+
+  const bare = A.describeLoopSetAsideImpact({}, 'lp_missing');
+  assert.equal(bare.strandCount, 0);
+  assert.equal(bare.otherReferenceCount, 0);
+  assert.equal(bare.title, 'Untitled loop');
+  assert.deepEqual(bare.strandLabels, []);
+  assert.equal(A.describeLoopSetAsideImpact(undefined, 'lp_missing').references.total, 0);
+
+  assert.deepEqual(A.setAsideLoopBucket({}, 'lp_missing', { confirmed: true }).loops, []);
+  assert.equal(A.setAsideLoopBucket(undefined, 'lp_missing').loopSetAsideConfirmationRequired, true);
+
+  assert.equal(A.moveStrandLoopAssignment(undefined, MV_A, MV_A_LABEL, 'lp_a'), null);
+  const empty = {};
+  A.moveStrandLoopAssignment(empty, MV_A, MV_A_LABEL, 'lp_a');
+  assert.equal(empty.strandAssignments.length, 1);
+  // Returning an unrecorded strand to Unsorted invents nothing.
+  const none = {};
+  assert.equal(A.moveStrandLoopAssignment(none, MV_A, MV_A_LABEL, null), null);
+  assert.deepEqual(none.strandAssignments, []);
+});
 
 for (const t of tests) {
   try {

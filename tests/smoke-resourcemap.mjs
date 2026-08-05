@@ -928,6 +928,121 @@ const SKEY = 'cmblueprint.familySchoolMap.v1';
 }
 
 
+// --- Per-loop set aside, and moving strands out of a set-aside loop ---
+{
+  const M = await import('../lib/familyMap.mjs');
+  const sp = await browser.newPage();
+  const errs = [];
+  sp.on('pageerror', e => errs.push(e.message));
+  sp.on('dialog', async d => { await d.accept(); });
+
+  const STRAND = M.FEAST_LIBRARY[0];
+  const seed = () => ({
+    appStateVersion: 1, subjectColumns: [], cards: [], loopItems: [],
+    resources: [], resourceUses: [], groups: [], outsideCommitments: [],
+    students: [{
+      id: 'stu_p', name: 'Peri', active: true, gradeBand: 'form2', gradeBandConfirmed: true,
+      dayCapacity: { mon: 'full', tue: 'full', wed: 'full', thu: 'full', fri: 'full' },
+      dayCapacityExplicit: { mon: true, tue: true, wed: true, thu: true, fri: true }
+    }],
+    loops: [
+      { id: 'lp_one', title: 'First bucket', active: true, rhythmDayIds: [] },
+      { id: 'lp_two', title: 'Second bucket', active: true, rhythmDayIds: [] }
+    ],
+    strandAssignments: [{
+      id: 'sa_p', strandId: STRAND.id, strandLabel: STRAND.label,
+      assignmentMode: 'loop', loopId: 'lp_one', groupId: null, studentIds: [],
+      workType: 'independent', mayOccurOnLightDays: true, notes: '', createdBy: 'feast-prototype'
+    }],
+    setupPrototype: { groupsReviewed: true, availabilityReviewed: true }
+  });
+
+  async function loadPage(url, state) {
+    await sp.goto(url);
+    await sp.evaluate(([k, v]) => localStorage.setItem(k, v), [SKEY, JSON.stringify(state)]);
+    await sp.goto(url);
+    await sp.waitForLoadState('networkidle');
+    await sp.waitForTimeout(400);
+  }
+
+  await loadPage(SETUP_URL, seed());
+  await sp.click('[data-action="goto-step"][data-step="rhythm"]');
+  await sp.waitForTimeout(300);
+  ok('Setup offers "Set aside this loop" on every active loop card',
+    (await sp.$$eval('[data-action="set-aside-loop"]', els => els.length)) === 2);
+  ok('The global control reads "Set aside all loop buckets for this year"',
+    (await sp.$eval('.global-loop-control', el => el.textContent)).includes('Set aside all loop buckets for this year'));
+  ok('The global control sits in its own block, apart from the loop cards',
+    (await sp.$$eval('.global-loop-control .loop-card', els => els.length)) === 0);
+  ok('Active loop cards link to Feast for strand review',
+    (await sp.$$eval('[data-action="review-loop-strands"]', els => els.map(e => e.getAttribute('href'))))[0]
+      === './feast-prototype.html#loop=lp_one');
+
+  await sp.click('[data-action="set-aside-loop"][data-id="lp_one"]');
+  await sp.waitForTimeout(1000);
+  ok('Setting one loop aside leaves the other active',
+    (await sp.$$eval('.loop-card:not(.set-aside-card)', els => els.map(e => e.getAttribute('data-loop-id'))))
+      .join(',') === 'lp_two');
+  ok('The set-aside loop appears under Set Aside Loops',
+    (await sp.$$eval('.set-aside-card', els => els.map(e => e.getAttribute('data-loop-id')))).join(',') === 'lp_one');
+  ok('Setting one loop aside does not tick the global control',
+    (await sp.$eval('input[data-action="no-loops-chosen"]', el => el.checked)) === false);
+  ok('A set-aside loop with strands offers "Review and move strands"',
+    (await sp.$$eval('.set-aside-card [data-action="review-loop-strands"]', els => els.length)) === 1);
+  ok('A set-aside loop with strands offers no permanent delete yet',
+    (await sp.$$eval('[data-action="delete-loop-permanently"]', els => els.length)) === 0);
+
+  // Feast: the strand is reachable, and moves without restoring the bucket.
+  await sp.goto(FEAST_URL + '#loop=lp_one');
+  await sp.waitForLoadState('networkidle');
+  await sp.waitForTimeout(500);
+  const archText = await sp.$eval('#archived-panel', el => el.textContent);
+  ok('Feast shows the "Strands in Set-Aside Loops" panel', archText.includes('Strands in Set-Aside Loops'));
+  ok('The set-aside loop is named there', archText.includes('First bucket'));
+  ok('Its strand is listed there', archText.includes(STRAND.label));
+  ok('The deep link focuses the right group',
+    (await sp.$$eval('.archived-group.is-focused', els => els.map(e => e.getAttribute('data-loop-id')))).join(',') === 'lp_one');
+  ok('The destination bucket starts empty',
+    (await sp.$eval('.loop-bucket[data-loop-id="lp_two"]', el => el.textContent)).includes('0 strands'));
+
+  await sp.selectOption('.archived-group[data-loop-id="lp_one"] select[data-role="archived-move"]', 'lp_two');
+  await sp.waitForTimeout(1000);
+  ok('Moving the last strand out removes the set-aside group from the panel',
+    (await sp.$$eval('.archived-group', els => els.length)) === 0);
+  ok('The destination bucket count updates immediately',
+    (await sp.$eval('.loop-bucket[data-loop-id="lp_two"]', el => el.textContent)).includes('1 strand'));
+  const savedAfterMove = JSON.parse(await sp.evaluate(k => localStorage.getItem(k), SKEY));
+  ok('The source loop is still set aside after the move',
+    savedAfterMove.loops.find(l => l.id === 'lp_one').active === false);
+  ok('Unrelated choices survive the move',
+    savedAfterMove.strandAssignments[0].workType === 'independent' &&
+    savedAfterMove.strandAssignments[0].mayOccurOnLightDays === true);
+
+  // Back in Setup the now-empty set-aside loop can be deleted for good.
+  await sp.goto(SETUP_URL);
+  await sp.waitForLoadState('networkidle');
+  await sp.waitForTimeout(400);
+  await sp.click('[data-action="goto-step"][data-step="rhythm"]');
+  await sp.waitForTimeout(300);
+  ok('The emptied set-aside loop is still listed in Setup',
+    (await sp.$$eval('.set-aside-card', els => els.map(e => e.getAttribute('data-loop-id')))).join(',') === 'lp_one');
+  ok('An emptied set-aside loop offers no "Review and move strands"',
+    (await sp.$$eval('.set-aside-card [data-action="review-loop-strands"]', els => els.length)) === 0);
+  ok('An emptied set-aside loop can now be deleted permanently',
+    (await sp.$$eval('[data-action="delete-loop-permanently"]', els => els.length)) === 1);
+  await sp.$eval('.set-aside-loops', el => { el.open = true; });
+  await sp.click('[data-action="delete-loop-permanently"][data-id="lp_one"]');
+  await sp.waitForTimeout(1000);
+  ok('The emptied set-aside loop is gone once deleted',
+    (await sp.$$eval('.set-aside-card', els => els.length)) === 0);
+
+  ok('No JS errors through the per-loop set-aside and archived-strand move path', errs.length === 0);
+  if (errs.length) errs.forEach(e => console.log('  JS error:', e));
+  await sp.evaluate(k => localStorage.removeItem(k), SKEY);
+  await sp.close();
+}
+
+
 await browser.close();
 console.log('\n' + passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total');
 if (failed > 0) process.exit(1);

@@ -97,6 +97,17 @@
   .chip-loop-row { display: flex; gap: 4px; align-items: center; }
   .chip-loop-row label { font-size: 11px; color: var(--muted); }
 
+  /* ---- Strands in set-aside loops ---- */
+  .archived-group {
+    border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 10px;
+    background: var(--milk-white); padding: 10px 12px; margin-bottom: 10px;
+  }
+  .archived-group.is-focused { border-left-color: var(--wonder-marine); outline: 2px solid var(--lagoon-light); }
+  .archived-group h3 { margin: 0 0 4px; font-size: 13px; }
+  .archived-strand { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12px; padding: 3px 0; }
+  .archived-strand .as-label { font-weight: 600; }
+  .archived-strand .as-meta { color: var(--muted); font-size: 11px; }
+
   /* ---- Side panels ---- */
   .panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
   @media (max-width: 900px) { .panel-grid { grid-template-columns: 1fr; } }
@@ -183,6 +194,7 @@
 
 <div class="panel sort-panel" id="unsorted-panel"></div>
 <div class="panel sort-panel" id="buckets-panel"></div>
+<div class="panel sort-panel" id="archived-panel" style="display:none;"></div>
 
 <div id="feast-grid"></div>
 
@@ -277,7 +289,10 @@ var REQUIRED_EXPORTS = [
   { name: 'getLoopSortingProgress', ok: typeof A.getLoopSortingProgress === 'function' },
   { name: 'getLoopBucketContents', ok: typeof A.getLoopBucketContents === 'function' },
   { name: 'migrateSetupPrototypeState', ok: typeof A.migrateSetupPrototypeState === 'function' },
-  { name: 'createLoopBucket', ok: typeof A.createLoopBucket === 'function' }
+  { name: 'createLoopBucket', ok: typeof A.createLoopBucket === 'function' },
+  { name: 'moveStrandLoopAssignment', ok: typeof A.moveStrandLoopAssignment === 'function' },
+  { name: 'getArchivedLoopStrandGroups', ok: typeof A.getArchivedLoopStrandGroups === 'function' },
+  { name: 'restoreLoopBucket', ok: typeof A.restoreLoopBucket === 'function' }
 ];
 function missingExports() {
   return REQUIRED_EXPORTS.filter(function (e) { return !e.ok; }).map(function (e) { return e.name; });
@@ -507,6 +522,71 @@ function renderBuckets() {
   document.getElementById('buckets-panel').innerHTML = html;
 }
 
+// ---------------------------------------------------------------------------
+// Strands in Set-Aside Loops.
+//
+// A bucket can be set aside while strands are still sorted into it. Those
+// strands must stay reachable — and moving one out must NOT require putting the
+// bucket back in use. Rendered only when at least one set-aside bucket still
+// holds a strand.
+// ---------------------------------------------------------------------------
+function renderArchivedGroups() {
+  var el = document.getElementById('archived-panel');
+  if (!el) return;
+  var groups = arr(A.getArchivedLoopStrandGroups(state));
+  if (!groups.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = '';
+
+  var active = loops();
+  var html = '<h2 class="section-title">Strands in Set-Aside Loops' +
+    '<span class="count-pill">' + groups.length + '</span></h2>';
+  html += '<p class="sub" style="margin:0;">These buckets were set aside, not deleted. Strands sorted into them ' +
+    'are still linked. You can move a strand somewhere else without restoring the bucket.</p>';
+
+  groups.forEach(function (g) {
+    html += '<div class="archived-group" id="archived-loop-' + escH(g.loopId) + '" data-loop-id="' + escH(g.loopId) + '">';
+    html += '<h3>' + escH(g.title) + ' <span class="hint">' + g.strands.length + ' strand' +
+      (g.strands.length === 1 ? '' : 's') + ' still in this set-aside loop</span></h3>';
+    g.strands.forEach(function (s) {
+      html += '<div class="archived-strand" data-strand-id="' + escH(s.strandId) + '">' +
+        '<span class="as-label">' + escH(s.label) + '</span>' +
+        '<span class="as-meta">' + escH(s.formLabel) + (s.columnLabel ? ' · ' + escH(s.columnLabel) : '') + '</span>' +
+        '<label class="as-meta">Move to an active loop</label>' +
+        '<select data-role="archived-move" data-strand="' + escH(s.strandId) + '" aria-label="Move to an active loop">' +
+        '<option value="" selected>Move to…</option>' +
+        active.map(function (o) {
+          return '<option value="' + escH(o.id) + '">' + escH(o.title || 'Untitled loop') + '</option>';
+        }).join('') +
+        '</select>' +
+        '<button type="button" data-role="archived-unsort" data-strand="' + escH(s.strandId) +
+        '">Return to Unsorted</button>' +
+        '</div>';
+    });
+    html += '<div class="new-loop-row"><button type="button" data-role="archived-restore" data-loop="' +
+      escH(g.loopId) + '">Restore this loop</button>' +
+      '<span class="hint">Brings the same bucket back into use. Moving a strand out does not need this.</span></div>';
+    html += '</div>';
+  });
+  el.innerHTML = html;
+}
+
+// Deep link by STABLE loop id: #loop=<loopId>. An archived loop that still has
+// strands focuses its group; an active loop scrolls to its bucket. An unknown
+// or missing id simply renders the page normally.
+function focusDeepLinkedLoop() {
+  var m = /^#loop=(.+)$/.exec(window.location.hash || '');
+  if (!m) return;
+  var loopId = decodeURIComponent(m[1]);
+  var target = document.querySelector('.archived-group[data-loop-id="' + (window.CSS && CSS.escape ? CSS.escape(loopId) : loopId) + '"]');
+  if (target) {
+    target.classList.add('is-focused');
+  } else {
+    target = document.querySelector('.loop-bucket[data-loop-id="' + (window.CSS && CSS.escape ? CSS.escape(loopId) : loopId) + '"]');
+  }
+  if (!target) return;
+  try { target.scrollIntoView({ block: 'center' }); } catch (e) { /* older browsers */ }
+}
+
 function renderGrid(rows) {
   var html = '';
   FEAST_FORMS.forEach(function (form) {
@@ -598,14 +678,18 @@ function render() {
     document.getElementById('buckets-panel').innerHTML = '';
     document.getElementById('preview-panel').innerHTML = '';
     document.getElementById('still-panel').innerHTML = '';
+    var ap = document.getElementById('archived-panel');
+    if (ap) { ap.innerHTML = ''; ap.style.display = 'none'; }
     return;
   }
   var rows = arr(A.buildFeastRows(state));
   renderUnsorted(rows);
   renderBuckets();
+  renderArchivedGroups();
   renderGrid(rows);
   renderPreview();
   renderStillToPlace(rows);
+  focusDeepLinkedLoop();
 }
 
 // ---------------------------------------------------------------------------
@@ -633,12 +717,10 @@ function setupPrototypeObj() {
 // Drag-and-drop itself is deliberately NOT implemented here.
 function moveStrandToLoop(strandId, loopId) {
   if (!strandId) return;
-  if (loopId) {
-    A.setStrandAssignmentForStrand(state, strandId, strandLabelFor(strandId), { assignmentMode: 'loop', loopId: loopId });
-  } else {
-    // null = take out of loop. Back to undecided, so it shows as unsorted again.
-    A.setStrandAssignmentForStrand(state, strandId, strandLabelFor(strandId), { assignmentMode: null });
-  }
+  // One mover for every loop move, including out of a loop entirely. It rewrites
+  // only the loop membership, so the work type, the light-day opt-in, and any
+  // notes already recorded for this strand survive the move.
+  A.moveStrandLoopAssignment(state, strandId, strandLabelFor(strandId), loopId || null);
   // Reviewed means reviewed-as-it-is-now: any membership change asks again.
   // This is SORTING only — loopBucketsReviewed (a Setup decision about bucket
   // structure) is deliberately left untouched.
@@ -646,6 +728,29 @@ function moveStrandToLoop(strandId, loopId) {
   markDirtyAndSave();
   render();
 }
+
+// Moving a strand out of a set-aside bucket never restores that bucket — it
+// stays set aside, and simply holds one strand fewer.
+document.getElementById('archived-panel').addEventListener('change', function (ev) {
+  var el = ev.target;
+  var role = el.getAttribute && el.getAttribute('data-role');
+  if (role !== 'archived-move') return;
+  if (!el.value) return;
+  moveStrandToLoop(el.getAttribute('data-strand'), el.value);
+});
+
+document.getElementById('archived-panel').addEventListener('click', function (ev) {
+  var el = ev.target.closest('[data-role]');
+  if (!el) return;
+  var role = el.getAttribute('data-role');
+  if (role === 'archived-unsort') { moveStrandToLoop(el.getAttribute('data-strand'), null); return; }
+  if (role === 'archived-restore') {
+    // The same bucket comes back with the same id — nothing linked to it moves.
+    state = normalize(A.restoreLoopBucket(state, el.getAttribute('data-loop')));
+    markDirtyAndSave();
+    render();
+  }
+});
 
 // Panels are re-rendered wholesale, so listen on the containers, not the nodes.
 ['unsorted-panel', 'buckets-panel'].forEach(function (panelId) {
@@ -733,7 +838,8 @@ document.getElementById('feast-grid').addEventListener('change', function (ev) {
     if (v === 'coop') { applyDecision(strandId, { assignmentMode: 'coop-outside' }); return; }
     if (v.indexOf('group:') === 0) { applyDecision(strandId, { assignmentMode: 'custom-group', groupId: v.slice(6) }); return; }
     if (v.indexOf('student:') === 0) { applyDecision(strandId, { assignmentMode: 'individual', studentIds: [v.slice(8)] }); return; }
-    if (v.indexOf('loop:') === 0) { applyDecision(strandId, { assignmentMode: 'loop', loopId: v.slice(5) }); return; }
+    // Choosing a loop here is a strand MOVE, so it goes through the mover too.
+    if (v.indexOf('loop:') === 0) { moveStrandToLoop(strandId, v.slice(5)); return; }
   }
 });
 

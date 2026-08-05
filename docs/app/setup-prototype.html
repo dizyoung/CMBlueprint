@@ -79,6 +79,17 @@
     border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 10px;
     background: var(--milk-white); padding: 10px 12px; margin-bottom: 10px;
   }
+  /* The one global loop answer, kept visually apart from the per-loop actions:
+     its own block, above the line, so it can never read as a card action. */
+  .global-loop-control {
+    border-top: 2px solid var(--border); margin: 16px 0 0; padding: 12px 12px 10px;
+    background: var(--field-mint); border-radius: 0 0 10px 10px;
+  }
+  .global-loop-control .global-label { font-size: 11px; font-weight: 700; letter-spacing: 0.4px; color: var(--muted); }
+  .loop-card-actions { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .loop-card-actions a.loop-link {
+    font-size: 12px; color: var(--navy-story); text-decoration: underline;
+  }
   .capacity-legend { font-size: 11px; color: var(--muted); margin: 4px 0 0; }
   .guide ol { margin: 6px 0 0; padding-left: 20px; font-size: 13px; }
   .guide li { margin-bottom: 3px; }
@@ -208,7 +219,9 @@ var REQUIRED_EXPORTS = [
   { name: 'getArchivedLoopBuckets', ok: typeof A.getArchivedLoopBuckets === 'function' },
   { name: 'getLoopReferences', ok: typeof A.getLoopReferences === 'function' },
   { name: 'restoreLoopBucket', ok: typeof A.restoreLoopBucket === 'function' },
-  { name: 'deleteLoopBucketPermanently', ok: typeof A.deleteLoopBucketPermanently === 'function' }
+  { name: 'deleteLoopBucketPermanently', ok: typeof A.deleteLoopBucketPermanently === 'function' },
+  { name: 'describeLoopSetAsideImpact', ok: typeof A.describeLoopSetAsideImpact === 'function' },
+  { name: 'setAsideLoopBucket', ok: typeof A.setAsideLoopBucket === 'function' }
 ];
 function missingExports() {
   return REQUIRED_EXPORTS.filter(function (e) { return !e.ok; }).map(function (e) { return e.name; });
@@ -625,6 +638,12 @@ function setAsideLoopsHTML() {
       (b.strandCount === 1 ? '' : 's') + ' still linked to it.</div>';
     html += '<div class="row-actions">' +
       '<button type="button" class="accent" data-action="restore-loop" data-id="' + escH(b.loopId) + '">Restore</button>';
+    // Only offered when there is actually something to move.
+    if (b.strandCount > 0) {
+      html += '<a class="loop-link" data-action="review-loop-strands" data-id="' + escH(b.loopId) +
+        '" href="./feast-prototype.html#loop=' + encodeURIComponent(b.loopId) +
+        '">Review and move strands</a>';
+    }
     if (b.canDeletePermanently) {
       html += '<button type="button" class="danger" data-action="delete-loop-permanently" data-id="' +
         escH(b.loopId) + '">Delete permanently</button>';
@@ -655,13 +674,29 @@ function renderRhythmStep() {
     html += '<div><input type="text" data-action="loop-title" data-id="' + escH(l.id) + '" value="' + escH(l.title || '') + '" placeholder="Loop name"></div>';
     html += '<div style="margin-top:6px;">May occur on: ' + weekdayChecksHTML('loop-day', l.id, arr(l.rhythmDayIds)) +
       ' <span class="hint">optional</span></div>';
+    // Per-loop actions. Renaming is the title input above — it re-opens bucket
+    // review by itself through the fingerprint, so it needs no button here.
+    var impact = A.describeLoopSetAsideImpact(state, l.id);
+    html += '<div class="loop-card-actions">' +
+      '<a class="loop-link" data-action="review-loop-strands" data-id="' + escH(l.id) + '" href="./feast-prototype.html#loop=' +
+      encodeURIComponent(l.id) + '">Review strands</a>' +
+      '<button type="button" data-action="set-aside-loop" data-id="' + escH(l.id) + '">Set aside this loop</button>' +
+      '<span class="hint">' + impact.strandCount + ' strand' + (impact.strandCount === 1 ? '' : 's') +
+      ' sorted in · ' + impact.otherReferenceCount + ' other reference' +
+      (impact.otherReferenceCount === 1 ? '' : 's') + '</span>' +
+      '</div>';
     html += '</div>';
   });
   html += '<div class="row-actions"><button type="button" class="accent" data-action="add-loop">Create a loop bucket</button></div>';
-  // "No loops this year" is a valid, explicit answer — not an empty state.
-  html += '<div class="row-actions"><label class="daybox">' +
+  // "No loops this year" is a valid, explicit answer — not an empty state. It is
+  // the ONE global answer on this page, so it sits in its own block below the
+  // divider rather than among the per-loop actions.
+  html += '<div class="global-loop-control"><div class="global-label">FOR THE WHOLE YEAR</div>' +
+    '<label class="daybox">' +
     '<input type="checkbox" data-action="no-loops-chosen"' + (sorting.noLoopsChosen ? ' checked' : '') + '> ' +
-    'We will not use loops this year.</label></div>';
+    'Set aside all loop buckets for this year</label>' +
+    '<p class="hint" style="margin:4px 0 0;">This is a global answer — it sets aside every bucket at once. ' +
+    'To set aside just one, use "Set aside this loop" on that bucket.</p></div>';
   if (archivedCount) {
     html += '<p class="hint">' + archivedCount + ' loop bucket' + (archivedCount === 1 ? '' : 's') +
       ' set aside. Nothing was deleted. Unticking the box above does not bring them back on its own — ' +
@@ -923,6 +958,19 @@ document.addEventListener('click', function (ev) {
     // The ONE creation path. It also clears "no loops this year", so the two
     // answers can never contradict each other.
     state = ensureShape(A.createLoopBucket(state, 'New loop'));
+    commit();
+    return;
+  }
+
+  if (action === 'set-aside-loop') {
+    // One bucket only. The confirm names it, says how many strands and how many
+    // other references are involved, and states plainly that nothing is deleted.
+    var sImpact = A.describeLoopSetAsideImpact(state, id);
+    if (!window.confirm(sImpact.message)) return;
+    var setAside = A.setAsideLoopBucket(state, id, { confirmed: true });
+    if (setAside.loopSetAsideConfirmationRequired) return;
+    state = ensureShape(setAside);
+    revealSetAsideLoops = true;
     commit();
     return;
   }
