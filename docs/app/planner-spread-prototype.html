@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Planner Spread Prototype</title>
+<link rel="stylesheet" href="./planner-spread.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+
+<div class="proto-top">
+  <span class="proto-badge">Prototype</span>
+  <h1 class="spread-title hand">This week</h1>
+  <p class="proto-note">
+    A paper-planner spread where work sits on real dates. Grab a line and drop it on another day.
+    Grab a day's heading and drop it on another day to move the whole day — you will be asked whether
+    everything after it should flow forward, or whether the two days should just double up.
+    <strong>This is a prototype and is saved separately from your real plan</strong> — nothing you do here
+    touches your Family School Map, your subjects, or your weekly rhythm.
+  </p>
+</div>
+
+<div class="week-bar">
+  <button type="button" class="planner-btn" id="prev-week">&#8592; Previous week</button>
+  <span class="week-label hand" id="week-label">&nbsp;</span>
+  <button type="button" class="planner-btn" id="next-week">Next week &#8594;</button>
+  <button type="button" class="planner-btn quiet" id="this-week">This week</button>
+</div>
+
+<div class="save-row">
+  <span class="planner-save-status" id="planner-save-status">Not saved yet</span>
+  <button type="button" class="planner-btn quiet" id="save-now">Save now</button>
+  <button type="button" class="planner-btn quiet" id="reset-proto">Start this prototype over</button>
+  <span id="school-day-toggles" style="display:inline-flex;gap:10px;flex-wrap:wrap;font-size:12px;color:#7b7466;"></span>
+</div>
+
+<div id="undo-bar" aria-live="polite"></div>
+
+<main class="spread" id="spread" aria-label="Week spread"></main>
+
+<div class="move-panel" id="move-panel" aria-live="polite"></div>
+
+<p class="sr-only" id="live-region" role="status" aria-live="polite"></p>
+
+<script type="module">
+import {
+  buildDefaultPlannerState, daysForSpread, moveTask, shiftDay, undoLastShift,
+  canUndo, undoDescription, addTask, editTaskTitle, deleteTask, toggleDone,
+  setWeekStart, shiftWeek, todayISO, mondayOf, humanDate, weekdayLabel, addDays,
+  isSchoolDay, normalizeState
+} from '../../lib/plannerSpread.mjs';
+import { loadPlannerState, createPlannerSaver } from './plannerSpreadStore.mjs';
+
+// ---------------------------------------------------------------- state ---
+const loaded = loadPlannerState();
+let state = loaded.state;
+
+const saver = createPlannerSaver({
+  getState: () => state,
+  statusEl: document.getElementById('planner-save-status')
+});
+saver.installUnloadFlush();
+if (loaded.source === 'saved') saver.adoptStoredSavedAt(); else saver.render();
+
+function commit(next, { save = true } = {}) {
+  state = next;
+  render();
+  if (save) saver.scheduleSave();
+}
+
+function say(msg) {
+  document.getElementById('live-region').textContent = msg;
+}
+
+// --------------------------------------------------------------- render ---
+const spreadEl = document.getElementById('spread');
+let editingTaskId = null;
+let addingOnDate = null;
+let selected = null;   // { kind: 'task'|'day', id|date }
+
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function render() {
+  const days = daysForSpread(state);
+  const s = normalizeState(state);
+
+  document.getElementById('week-label').textContent =
+    'Week of ' + humanDate(s.weekStartDate) + ' – ' + humanDate(addDays(s.weekStartDate, 4));
+
+  spreadEl.innerHTML = days.map(day => {
+    const cls = ['day-col'];
+    if (!day.isSchoolDay) cls.push('not-school-day');
+    if (day.weekdayKey === 'sat' || day.weekdayKey === 'sun') cls.push('is-weekend');
+
+    const head =
+      '<div class="day-head" data-day-grip="' + day.date + '" tabindex="0" role="button" ' +
+        'aria-label="' + esc(day.weekdayLabel) + ' ' + esc(day.humanDate) +
+        ' — grab to move this whole day. Press m to move it with the keyboard.">' +
+        '<span class="weekday hand">' + esc(day.weekdayLabel) + '</span>' +
+        '<span class="written-date hand">' + esc(day.humanDate) +
+          (day.isSchoolDay ? '' : ' <span class="day-off">· no school today</span>') + '</span>' +
+        '<span class="grip-hint">drag this heading to move the day</span>' +
+      '</div>';
+
+    const lines = day.tasks.length
+      ? day.tasks.map(t => {
+          if (t.id === editingTaskId) {
+            return '<div style="padding:4px 12px;"><input class="line-input hand" data-edit-task="' + esc(t.id) +
+                   '" value="' + esc(t.title) + '" aria-label="Edit this line"></div>';
+          }
+          return '<button type="button" class="task-line hand' + (t.done ? ' is-done' : '') +
+                 (selected && selected.kind === 'task' && selected.id === t.id ? ' is-selected' : '') +
+                 '" data-task-id="' + esc(t.id) + '" data-task-date="' + esc(t.date) + '" ' +
+                 'aria-pressed="' + (t.done ? 'true' : 'false') + '">' +
+                 '<span class="t-title">' + esc(t.title) + '</span>' +
+                 (t.who ? '<span class="t-who">' + esc(t.who) + '</span>' : '') +
+                 '</button>';
+        }).join('')
+      : '<div class="day-empty">nothing written here yet</div>';
+
+    const adder = addingOnDate === day.date
+      ? '<div class="day-add"><input class="line-input hand" data-add-on="' + day.date +
+        '" placeholder="write a line…" aria-label="Add a line to ' + esc(day.weekdayLabel) + '"></div>'
+      : '<div class="day-add"><button type="button" class="add-link" data-add-btn="' + day.date + '">+ add a line</button></div>';
+
+    return '<section class="' + cls.join(' ') + '" data-date="' + day.date + '">' +
+             head + '<div class="day-lines" data-lines="' + day.date + '">' + lines + '</div>' + adder +
+           '</section>';
+  }).join('');
+
+  renderUndo();
+  renderMovePanel();
+  renderSchoolDayToggles();
+
+  const edit = spreadEl.querySelector('[data-edit-task]');
+  if (edit) { edit.focus(); edit.select(); }
+  const add = spreadEl.querySelector('[data-add-on]');
+  if (add) add.focus();
+}
+
+function renderUndo() {
+  const bar = document.getElementById('undo-bar');
+  if (!canUndo(state)) { bar.innerHTML = ''; return; }
+  bar.innerHTML = '<span class="undo-inner"><span id="undo-text">' + esc(undoDescription(state)) +
+                  '</span><button type="button" id="undo-btn">Undo</button></span>';
+}
+
+function renderSchoolDayToggles() {
+  const s = normalizeState(state);
+  const host = document.getElementById('school-day-toggles');
+  const labels = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat' };
+  host.innerHTML = '<span>School days:</span>' + Object.keys(labels).map(k =>
+    '<label style="display:inline-flex;gap:4px;align-items:center;">' +
+    '<input type="checkbox" data-school-day="' + k + '"' + (s.schoolDays[k] ? ' checked' : '') + '> ' +
+    labels[k] + '</label>').join('');
+}
+
+// Keyboard / click fallback: pick a task or a day, then choose a destination.
+function renderMovePanel() {
+  const panel = document.getElementById('move-panel');
+  if (!selected) {
+    panel.innerHTML = '<span class="move-inner">Dragging is the main way to move work. For the keyboard: ' +
+      'move focus to a line or a day heading and press <strong>m</strong>.</span>';
+    return;
+  }
+  const days = daysForSpread(state);
+  const s = normalizeState(state);
+  let what;
+  if (selected.kind === 'task') {
+    const t = s.tasks.find(x => x.id === selected.id);
+    if (!t) { selected = null; renderMovePanel(); return; }
+    what = 'Move “' + esc(t.title) + '” to:';
+  } else {
+    what = 'Move all of ' + esc(weekdayLabel(selected.date)) + '’s work to:';
+  }
+  const buttons = days
+    .filter(d => d.date !== (selected.kind === 'task'
+      ? (s.tasks.find(x => x.id === selected.id) || {}).date
+      : selected.date))
+    .map(d => '<button type="button" class="planner-btn" data-move-to="' + d.date + '">' +
+              esc(d.weekdayLabel) + '</button>').join('');
+  panel.innerHTML = '<span class="move-inner"><span id="move-what">' + what + '</span>' + buttons +
+    '<button type="button" class="planner-btn quiet" id="move-cancel">Cancel</button></span>';
+}
+
+// -------------------------------------------------- whole-day choice card ---
+function askDayShift(fromDate, toDate) {
+  const fromLabel = weekdayLabel(fromDate);
+  const toLabel = weekdayLabel(toDate);
+  const overlay = document.createElement('div');
+  overlay.id = 'choice-overlay';
+  overlay.innerHTML =
+    '<div id="choice-card" role="dialog" aria-modal="true" aria-labelledby="choice-title">' +
+      '<h2 class="hand" id="choice-title">Move ' + esc(fromLabel) + '’s work to ' + esc(toLabel) + '?</h2>' +
+      '<p>Choose what should happen to the work that comes after.</p>' +
+      '<div class="choice-buttons">' +
+        '<button type="button" id="choice-cascade">Flow everything after' +
+          '<span class="why">' + esc(toLabel) + '’s work and everything later moves on to its next school day.</span></button>' +
+        '<button type="button" id="choice-stack">Just add to ' + esc(toLabel) +
+          '<span class="why">Both days sit on ' + esc(toLabel) + '. Nothing else moves.</span></button>' +
+        '<button type="button" class="cancel" id="choice-cancel">Cancel</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#choice-cascade').addEventListener('click', () => {
+    close();
+    commit(shiftDay(state, fromDate, toDate, 'cascade'));
+    say('Moved ' + fromLabel + ' to ' + toLabel + ' and flowed everything after.');
+  });
+  overlay.querySelector('#choice-stack').addEventListener('click', () => {
+    close();
+    commit(shiftDay(state, fromDate, toDate, 'stack'));
+    say(fromLabel + ' now sits alongside ' + toLabel + '.');
+  });
+  overlay.querySelector('#choice-cancel').addEventListener('click', () => { close(); say('Nothing moved.'); });
+  overlay.addEventListener('click', ev => { if (ev.target === overlay) close(); });
+  document.addEventListener('keydown', function onEsc(ev) {
+    if (ev.key === 'Escape') { close(); document.removeEventListener('keydown', onEsc); }
+  });
+  overlay.querySelector('#choice-cascade').focus();
+}
+
+// --------------------------------------------------------- pointer drag ---
+// Pointer Events, not HTML5 draggable: one code path for mouse, pen and
+// touch, and full control over the ghost and the drop highlight.
+const DRAG_THRESHOLD = 7;   // px before a press becomes a drag rather than a tap
+let drag = null;            // { kind, id, fromDate, label, sub, el, startX, startY, moved, ghost }
+
+function makeGhost(label, sub) {
+  const g = document.createElement('div');
+  g.id = 'drag-ghost';
+  g.innerHTML = '<span class="hand">' + esc(label) + '</span>' +
+                (sub ? '<span class="ghost-sub">' + esc(sub) + '</span>' : '');
+  document.body.appendChild(g);
+  return g;
+}
+
+function moveGhost(x, y) {
+  if (!drag || !drag.ghost) return;
+  drag.ghost.style.transform = 'translate(' + (x + 14) + 'px,' + (y - 16) + 'px) rotate(-1.4deg)';
+}
+
+function clearHighlight() {
+  spreadEl.querySelectorAll('.day-col.drop-target').forEach(el => el.classList.remove('drop-target'));
+}
+
+function dayColAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  if (!el || !el.closest) return null;
+  return el.closest('.day-col');
+}
+
+spreadEl.addEventListener('pointerdown', ev => {
+  if (ev.button !== undefined && ev.button !== 0) return;
+  const target = ev.target && ev.target.closest ? ev.target : null;
+  if (!target) return;
+  if (target.closest('input')) return;
+
+  const taskEl = target.closest('.task-line');
+  const gripEl = target.closest('.day-head');
+  if (!taskEl && !gripEl) return;
+
+  if (taskEl) {
+    const s = normalizeState(state);
+    const t = s.tasks.find(x => x.id === taskEl.getAttribute('data-task-id'));
+    if (!t) return;
+    drag = {
+      kind: 'task', id: t.id, fromDate: t.date, label: t.title, sub: t.who,
+      el: taskEl, startX: ev.clientX, startY: ev.clientY, moved: false, ghost: null
+    };
+  } else {
+    const date = gripEl.getAttribute('data-day-grip');
+    const count = daysForSpread(state).find(d => d.date === date);
+    drag = {
+      kind: 'day', date: date, fromDate: date,
+      label: weekdayLabel(date) + '’s work',
+      sub: (count ? count.taskCount : 0) + ' line' + ((count && count.taskCount === 1) ? '' : 's'),
+      el: gripEl, startX: ev.clientX, startY: ev.clientY, moved: false, ghost: null
+    };
+  }
+  try { drag.el.setPointerCapture(ev.pointerId); } catch (e) { /* mouse without capture support */ }
+});
+
+spreadEl.addEventListener('pointermove', ev => {
+  if (!drag) return;
+  const dx = ev.clientX - drag.startX;
+  const dy = ev.clientY - drag.startY;
+  if (!drag.moved && Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD) return;
+  if (!drag.moved) {
+    drag.moved = true;
+    drag.ghost = makeGhost(drag.label, drag.sub);
+    if (drag.kind === 'task') drag.el.classList.add('is-dragging');
+  }
+  ev.preventDefault();
+  moveGhost(ev.clientX, ev.clientY);
+  clearHighlight();
+  const col = dayColAt(ev.clientX, ev.clientY);
+  if (col && col.getAttribute('data-date') !== drag.fromDate) col.classList.add('drop-target');
+});
+
+function endDrag(ev) {
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  if (d.ghost) d.ghost.remove();
+  if (d.el && d.el.classList) d.el.classList.remove('is-dragging');
+  clearHighlight();
+  try { d.el.releasePointerCapture(ev.pointerId); } catch (e) {}
+
+  if (!d.moved) {
+    // A tap, not a drag.
+    if (d.kind === 'task') {
+      commit(toggleDone(state, d.id), { save: true });
+      say('Line marked.');
+    }
+    return;
+  }
+
+  const col = dayColAt(ev.clientX, ev.clientY);
+  const toDate = col ? col.getAttribute('data-date') : null;
+  if (!toDate || toDate === d.fromDate) { say('Nothing moved.'); return; }
+
+  if (d.kind === 'task') {
+    commit(moveTask(state, d.id, toDate));
+    say('Moved to ' + weekdayLabel(toDate) + '.');
+  } else {
+    askDayShift(d.fromDate, toDate);
+  }
+}
+
+spreadEl.addEventListener('pointerup', endDrag);
+spreadEl.addEventListener('pointercancel', ev => {
+  if (!drag) return;
+  if (drag.ghost) drag.ghost.remove();
+  if (drag.el && drag.el.classList) drag.el.classList.remove('is-dragging');
+  drag = null;
+  clearHighlight();
+});
+
+// --------------------------------------------------------- keyboard etc ---
+spreadEl.addEventListener('keydown', ev => {
+  const t = ev.target;
+  if (!t || !t.closest) return;
+  if (t.matches('input.line-input')) {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      const addOn = t.getAttribute('data-add-on');
+      const editId = t.getAttribute('data-edit-task');
+      const value = t.value.trim();
+      if (addOn) {
+        addingOnDate = null;
+        if (value) commit(addTask(state, { title: value, who: '', date: addOn }));
+        else render();
+      } else if (editId) {
+        editingTaskId = null;
+        if (value) commit(editTaskTitle(state, editId, value));
+        else commit(deleteTask(state, editId));
+      }
+    } else if (ev.key === 'Escape') {
+      addingOnDate = null; editingTaskId = null; render();
+    }
+    return;
+  }
+
+  const taskEl = t.closest('.task-line');
+  const gripEl = t.closest('.day-head');
+
+  if (ev.key === 'm' || ev.key === 'M') {
+    if (taskEl) { selected = { kind: 'task', id: taskEl.getAttribute('data-task-id') }; renderMovePanel(); say('Pick a day to move this line to.'); }
+    else if (gripEl) { selected = { kind: 'day', date: gripEl.getAttribute('data-day-grip') }; renderMovePanel(); say('Pick a day to move this whole day to.'); }
+    const first = document.querySelector('#move-panel [data-move-to]');
+    if (first) first.focus();
+    return;
+  }
+  if ((ev.key === 'e' || ev.key === 'E') && taskEl) {
+    editingTaskId = taskEl.getAttribute('data-task-id');
+    render();
+    return;
+  }
+  if (gripEl && (ev.key === 'Enter' || ev.key === ' ')) ev.preventDefault();
+});
+
+spreadEl.addEventListener('dblclick', ev => {
+  const taskEl = ev.target.closest ? ev.target.closest('.task-line') : null;
+  if (!taskEl) return;
+  // A double-click undoes the done toggle the first click made, then edits.
+  editingTaskId = taskEl.getAttribute('data-task-id');
+  commit(toggleDone(state, editingTaskId), { save: false });
+});
+
+spreadEl.addEventListener('click', ev => {
+  const addBtn = ev.target.closest ? ev.target.closest('[data-add-btn]') : null;
+  if (addBtn) { addingOnDate = addBtn.getAttribute('data-add-btn'); render(); }
+});
+
+spreadEl.addEventListener('change', ev => {
+  const input = ev.target;
+  if (!input.matches || !input.matches('input.line-input')) return;
+  const addOn = input.getAttribute('data-add-on');
+  const editId = input.getAttribute('data-edit-task');
+  const value = input.value.trim();
+  if (addOn) { addingOnDate = null; if (value) commit(addTask(state, { title: value, date: addOn })); else render(); }
+  else if (editId) { editingTaskId = null; if (value) commit(editTaskTitle(state, editId, value)); else commit(deleteTask(state, editId)); }
+});
+
+// --------------------------------------------------------- page controls ---
+document.getElementById('prev-week').addEventListener('click', () => commit(shiftWeek(state, -1)));
+document.getElementById('next-week').addEventListener('click', () => commit(shiftWeek(state, 1)));
+document.getElementById('this-week').addEventListener('click', () => commit(setWeekStart(state, todayISO())));
+document.getElementById('save-now').addEventListener('click', () => saver.saveNow());
+document.getElementById('reset-proto').addEventListener('click', () => {
+  if (!window.confirm('Start this prototype over with its sample week? Your real plan is not affected.')) return;
+  commit(buildDefaultPlannerState());
+});
+
+document.getElementById('undo-bar').addEventListener('click', ev => {
+  if (!ev.target.closest('#undo-btn')) return;
+  const was = undoDescription(state);
+  commit(undoLastShift(state));
+  say('Undone: ' + was);
+});
+
+document.getElementById('move-panel').addEventListener('click', ev => {
+  const to = ev.target.closest('[data-move-to]');
+  if (to) {
+    const toDate = to.getAttribute('data-move-to');
+    if (selected.kind === 'task') { const id = selected.id; selected = null; commit(moveTask(state, id, toDate)); }
+    else { const from = selected.date; selected = null; render(); askDayShift(from, toDate); }
+    return;
+  }
+  if (ev.target.closest('#move-cancel')) { selected = null; renderMovePanel(); }
+});
+
+document.getElementById('school-day-toggles').addEventListener('change', ev => {
+  const box = ev.target.closest('[data-school-day]');
+  if (!box) return;
+  const key = box.getAttribute('data-school-day');
+  const s = normalizeState(state);
+  const nextDays = Object.assign({}, s.schoolDays);
+  nextDays[key] = box.checked;
+  commit(Object.assign({}, s, { schoolDays: nextDays }));
+});
+
+render();
+window.__plannerReady = true;
+</script>
+</body>
+</html>

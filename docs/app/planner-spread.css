@@ -1,0 +1,438 @@
+/* Planner Spread prototype — a paper planner opened to one week.
+   Standalone on purpose: this file does not import or extend shared.css, so
+   nothing here can change the look of any production page. */
+
+:root {
+  --paper: #fbf7ef;
+  --paper-edge: #f1e9da;
+  --rule: #e2d8c4;
+  --rule-soft: #ece4d4;
+  --ink: #2f3a43;
+  --ink-soft: #7b7466;
+  --pencil: #5a6b78;
+  --marine: #17626d;
+  --lagoon: #1fb6b6;
+  --poppy: #e44349;
+  --sun: #fbd060;
+  --spine: #dcd0b8;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: auto; }
+
+body {
+  margin: 0;
+  padding: 0 0 72px;
+  background:
+    radial-gradient(circle at 20% 0%, #fffdf8 0%, var(--paper) 55%, #f4eee2 100%);
+  color: var(--ink);
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* A hand-written feel without shipping a font file: a cursive stack with a
+   plain fallback, used only for the written parts (dates, task lines). */
+.hand {
+  font-family: "Bradley Hand", "Segoe Print", "Segoe Script", "Comic Sans MS",
+               "Iowan Old Style", Georgia, cursive;
+}
+
+/* ---------------------------------------------------------------- header */
+
+.proto-top {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 26px 24px 0;
+}
+
+.proto-badge {
+  display: inline-block;
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  background: var(--sun);
+  color: #5a4400;
+  border-radius: 12px;
+  padding: 5px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.proto-note {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  max-width: 62ch;
+  margin: 10px 0 0;
+}
+
+.proto-note strong { color: var(--poppy); }
+
+h1.spread-title {
+  font-size: 30px;
+  font-weight: 400;
+  margin: 14px 0 2px;
+  letter-spacing: 0.2px;
+}
+
+/* ---------------------------------------------------- week navigation bar */
+
+.week-bar {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 10px 24px 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.week-bar .week-label {
+  font-size: 17px;
+  letter-spacing: 0.2px;
+}
+
+button.planner-btn {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  background: #fffdf7;
+  border: 1px solid var(--rule);
+  color: var(--pencil);
+  border-radius: 999px;
+  padding: 7px 15px;
+  cursor: pointer;
+  min-height: 38px;
+}
+
+button.planner-btn:hover { background: #fff; border-color: var(--spine); }
+button.planner-btn:focus-visible { outline: 3px solid var(--lagoon); outline-offset: 2px; }
+button.planner-btn.primary { background: var(--marine); border-color: var(--marine); color: #fff; }
+button.planner-btn.quiet { background: transparent; }
+
+.save-row {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 10px 24px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-family: -apple-system, "Segoe UI", sans-serif;
+}
+
+.planner-save-status { font-size: 12.5px; color: var(--ink-soft); }
+.planner-save-status.is-saved { color: var(--marine); }
+.planner-save-status.is-unsaved { color: #8a6d1f; }
+.planner-save-status.is-failed { color: var(--poppy); font-weight: 700; }
+
+/* ------------------------------------------------------------- the spread */
+
+.spread {
+  max-width: 1180px;
+  margin: 18px auto 0;
+  padding: 0 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0;
+  background: transparent;
+}
+
+/* Each day is a page column with a ruled look and a faint spine on its left. */
+.day-col {
+  position: relative;
+  background: linear-gradient(180deg, #fffdf8 0%, var(--paper) 100%);
+  border-left: 1px solid var(--spine);
+  padding: 0 0 18px;
+  min-height: 420px;
+}
+
+.day-col:first-child { border-left: none; }
+.day-col.is-weekend { background: #f8f3e8; }
+.day-col.not-school-day { background: repeating-linear-gradient(
+    135deg, #f7f2e6, #f7f2e6 9px, #f3ecdd 9px, #f3ecdd 18px); }
+
+.day-col.drop-target {
+  box-shadow: inset 0 0 0 3px var(--lagoon);
+  background: #eefafa;
+}
+
+/* The day header IS the grip for moving the whole day. */
+.day-head {
+  padding: 14px 14px 10px;
+  border-bottom: 2px solid var(--rule);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.day-head:active { cursor: grabbing; }
+.day-head:focus-visible { outline: 3px solid var(--lagoon); outline-offset: -3px; }
+
+.day-head .weekday {
+  font-size: 20px;
+  letter-spacing: 0.3px;
+  display: block;
+}
+
+.day-head .written-date {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  display: block;
+  margin-top: 1px;
+}
+
+.day-head .grip-hint {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 10.5px;
+  color: #a79c88;
+  letter-spacing: 0.3px;
+  margin-top: 6px;
+  display: block;
+}
+
+.day-head .day-off {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 10.5px;
+  color: #9a8f7a;
+  font-style: italic;
+}
+
+/* Ruled lines behind the task list — the paper, not a table. */
+.day-lines {
+  padding: 6px 0 0;
+  min-height: 300px;
+  background-image: repeating-linear-gradient(
+    180deg, transparent, transparent 43px, var(--rule-soft) 43px, var(--rule-soft) 44px);
+}
+
+/* ------------------------------------------------------------ task lines */
+
+.task-line {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 14px;
+  min-height: 44px;              /* generous grab target */
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  font: inherit;
+  color: inherit;
+}
+
+.task-line:active { cursor: grabbing; }
+.task-line:hover { background: rgba(31, 182, 182, 0.07); }
+.task-line:focus-visible { outline: 3px solid var(--lagoon); outline-offset: -2px; }
+.task-line.is-selected { background: rgba(251, 208, 96, 0.3); box-shadow: inset 0 0 0 2px var(--sun); }
+.task-line.is-dragging { opacity: 0.3; }
+
+.task-line .t-title { font-size: 16.5px; letter-spacing: 0.2px; }
+.task-line .t-who {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 11px;
+  color: var(--ink-soft);
+  display: block;
+  margin-top: 1px;
+}
+
+.task-line.is-done .t-title {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--poppy);
+  color: #9d968a;
+}
+
+.day-empty {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 11.5px;
+  color: #a79c88;
+  font-style: italic;
+  padding: 12px 14px;
+}
+
+/* Inline add + inline edit */
+.day-add { padding: 8px 12px 0; }
+
+input.line-input {
+  width: 100%;
+  font: inherit;
+  font-size: 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  padding: 7px 2px;
+  color: var(--ink);
+  min-height: 40px;
+}
+
+input.line-input:focus { outline: none; border-bottom: 2px solid var(--lagoon); }
+
+.add-link {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 12px;
+  color: var(--pencil);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px 2px;
+  min-height: 38px;
+}
+
+.add-link:hover { color: var(--marine); text-decoration: underline; }
+
+/* ------------------------------------------------------------- drag ghost */
+
+#drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 60;
+  pointer-events: none;
+  background: #fffdf6;
+  border: 1px solid var(--spine);
+  border-left: 4px solid var(--lagoon);
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(47, 58, 67, 0.22);
+  padding: 9px 14px;
+  font-size: 16px;
+  max-width: 260px;
+  transform: rotate(-1.4deg);
+}
+
+#drag-ghost .ghost-sub {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 11px;
+  color: var(--ink-soft);
+  display: block;
+}
+
+/* ------------------------------------------------------- choice + undo UI */
+
+#choice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(47, 58, 67, 0.38);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+#choice-card {
+  background: var(--paper);
+  border: 1px solid var(--spine);
+  border-radius: 14px;
+  box-shadow: 0 18px 44px rgba(47, 58, 67, 0.3);
+  padding: 24px 26px;
+  max-width: 440px;
+  width: 100%;
+}
+
+#choice-card h2 { font-size: 22px; font-weight: 400; margin: 0 0 6px; }
+
+#choice-card p {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 0 0 18px;
+}
+
+.choice-buttons { display: flex; flex-direction: column; gap: 10px; }
+
+.choice-buttons button {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  text-align: left;
+  padding: 13px 16px;
+  min-height: 48px;
+  border-radius: 10px;
+  border: 1px solid var(--rule);
+  background: #fffdf7;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.choice-buttons button:hover { border-color: var(--lagoon); background: #fff; }
+.choice-buttons button:focus-visible { outline: 3px solid var(--lagoon); outline-offset: 2px; }
+.choice-buttons button .why { display: block; font-size: 11.5px; color: var(--ink-soft); margin-top: 3px; }
+.choice-buttons button.cancel { background: transparent; border-style: dashed; }
+
+#undo-bar {
+  max-width: 1180px;
+  margin: 14px auto 0;
+  padding: 0 24px;
+  font-family: -apple-system, "Segoe UI", sans-serif;
+}
+
+#undo-bar .undo-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: #fff8e2;
+  border: 1px solid var(--sun);
+  border-radius: 999px;
+  padding: 8px 10px 8px 16px;
+  font-size: 13px;
+}
+
+#undo-bar button {
+  font: inherit;
+  font-weight: 700;
+  background: var(--marine);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 7px 16px;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+#undo-bar button:focus-visible { outline: 3px solid var(--lagoon); outline-offset: 2px; }
+
+/* --------------------------------------------------------------- a11y aid */
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.move-panel {
+  max-width: 1180px;
+  margin: 16px auto 0;
+  padding: 0 24px;
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.move-panel .move-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border: 1px dashed var(--rule);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: #fffdf7;
+}
+
+@media (max-width: 760px) {
+  .spread { grid-template-columns: 1fr; padding: 0 16px; }
+  .day-col { border-left: none; border-top: 1px solid var(--spine); min-height: 0; }
+  .day-lines { min-height: 90px; }
+  .proto-top, .week-bar, .save-row, #undo-bar, .move-panel { padding-left: 16px; padding-right: 16px; }
+}
