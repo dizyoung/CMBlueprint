@@ -21,6 +21,14 @@
   </p>
 </div>
 
+<div class="week-bar" id="plan-bar">
+  <label class="hand" for="plan-student">Whose week is this?</label>
+  <select id="plan-student" aria-label="Whose week is this?"></select>
+  <button type="button" class="planner-btn" id="plan-generate">Start this week from my plan</button>
+</div>
+
+<p class="proto-note" id="plan-note" aria-live="polite"></p>
+
 <div class="week-bar">
   <button type="button" class="planner-btn" id="prev-week">&#8592; Previous week</button>
   <span class="week-label hand" id="week-label">&nbsp;</span>
@@ -51,6 +59,7 @@ import {
   isSchoolDay, normalizeState
 } from '../../lib/plannerSpread.mjs';
 import { loadPlannerState, createPlannerSaver } from './plannerSpreadStore.mjs';
+import { buildStudentWeek, listPlannableStudents, describeUnresolved } from '../../lib/plannerFromPlan.mjs';
 
 // ---------------------------------------------------------------- state ---
 const loaded = loadPlannerState();
@@ -67,6 +76,110 @@ function commit(next, { save = true } = {}) {
   state = next;
   render();
   if (save) saver.scheduleSave();
+}
+
+// ---------------------------------------------- the saved plan, READ-ONLY ---
+// This page reads the real plan and never, under any circumstance, writes it.
+// The key is spelled out here rather than imported so no code path on this
+// prototype page can reach the production save bar at all. The only keys this
+// page ever writes are the prototype's own two, inside plannerSpreadStore.mjs.
+const REAL_PLAN_KEY = 'cmblueprint.familySchoolMap.v1';
+
+function readRealPlan() {
+  let raw = null;
+  try { raw = localStorage.getItem(REAL_PLAN_KEY); } catch (e) { return null; }
+  if (!raw) return null;
+  let parsed = null;
+  try { parsed = JSON.parse(raw); } catch (e) { return null; }
+  if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.students)) return null;
+  return parsed;
+}
+
+// taskId -> a quiet aside about the day it sits on. Derived at generation time
+// and held only in memory, so it is never part of what gets saved.
+let capacityNotes = {};
+let chosenStudentId = '';
+
+function planNote(text) {
+  document.getElementById('plan-note').textContent = text || '';
+}
+
+function renderStudentChooser() {
+  const sel = document.getElementById('plan-student');
+  const plan = readRealPlan();
+  const students = plan ? listPlannableStudents(plan) : [];
+  if (students.length && !students.some(s => s.id === chosenStudentId)) chosenStudentId = students[0].id;
+  if (!students.length) chosenStudentId = '';
+  sel.innerHTML = '<option value="">Sample week</option>' + students.map(s =>
+    '<option value="' + esc(s.id) + '"' + (s.id === chosenStudentId ? ' selected' : '') + '>' +
+    esc(s.name) + '</option>').join('');
+  sel.value = chosenStudentId;
+  if (!plan) {
+    planNote('No saved plan was found in this browser yet, so the sample week is showing. ' +
+      'Once your learners and your Weekly Rhythm are filled in, their weeks can be started from here.');
+  }
+}
+
+function askStartFromPlan(name, onYes) {
+  const overlay = document.createElement('div');
+  overlay.id = 'plan-confirm-overlay';
+  overlay.innerHTML =
+    '<div id="plan-confirm-card" role="dialog" aria-modal="true" aria-labelledby="plan-confirm-title">' +
+      '<h2 class="hand" id="plan-confirm-title">Start ' + esc(name) + '’s week over from your plan?</h2>' +
+      '<p>Any moves you have made on this spread will be replaced by the week your plan suggests. ' +
+      'Your plan itself is only read — nothing here changes it.</p>' +
+      '<div class="choice-buttons">' +
+        '<button type="button" class="planner-btn" id="plan-confirm-yes">Start it over</button>' +
+        '<button type="button" class="planner-btn quiet" id="plan-confirm-no">Keep this spread</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#plan-confirm-yes').addEventListener('click', () => { close(); onYes(); });
+  overlay.querySelector('#plan-confirm-no').addEventListener('click', () => { close(); say('Nothing changed.'); });
+  overlay.addEventListener('click', ev => { if (ev.target === overlay) close(); });
+  document.addEventListener('keydown', function onEsc(ev) {
+    if (ev.key === 'Escape') { close(); document.removeEventListener('keydown', onEsc); }
+  });
+  overlay.querySelector('#plan-confirm-yes').focus();
+}
+
+function startFromPlan() {
+  const plan = readRealPlan();
+  if (!plan) {
+    planNote('No saved plan was found in this browser yet, so the sample week is still showing. ' +
+      'Fill in your learners and place their work in the Weekly Rhythm first.');
+    return;
+  }
+  if (!chosenStudentId) {
+    planNote('Choose whose week this is first, then start it from your plan.');
+    return;
+  }
+  const students = listPlannableStudents(plan);
+  const chosen = students.find(s => s.id === chosenStudentId);
+  const name = chosen ? chosen.name : 'this learner';
+  const weekStart = normalizeState(state).weekStartDate;
+  const week = buildStudentWeek(plan, { studentId: chosenStudentId, weekStartDate: weekStart });
+
+  if (!week.tasks.length) {
+    planNote('Nothing of ' + name + '’s is placed in your Weekly Rhythm yet, so the spread is left as it is. ' +
+      'Place their work in the Weekly Rhythm first, then come back and start the week from here.');
+    return;
+  }
+
+  askStartFromPlan(name, () => {
+    const report = week.report || { counts: {}, unresolved: [] };
+    capacityNotes = {};
+    week.tasks.forEach(t => { if (t.capacityNote) capacityNotes[t.id] = t.capacityNote; });
+    commit(normalizeState(week));
+    const placed = week.tasks.length;
+    let msg = name + '’s week is on the spread — ' + placed + ' line' + (placed === 1 ? '' : 's') +
+      ' placed from your Weekly Rhythm. Adjust it freely; nothing here goes back to your plan.';
+    const quiet = describeUnresolved(report);
+    if (quiet) msg += ' ' + quiet;
+    planNote(msg);
+    say(name + '’s week placed from your plan.');
+  });
 }
 
 function say(msg) {
@@ -113,12 +226,14 @@ function render() {
             return '<div style="padding:4px 12px;"><input class="line-input hand" data-edit-task="' + esc(t.id) +
                    '" value="' + esc(t.title) + '" aria-label="Edit this line"></div>';
           }
+          const note = capacityNotes[t.id];
           return '<button type="button" class="task-line hand' + (t.done ? ' is-done' : '') +
                  (selected && selected.kind === 'task' && selected.id === t.id ? ' is-selected' : '') +
                  '" data-task-id="' + esc(t.id) + '" data-task-date="' + esc(t.date) + '" ' +
                  'aria-pressed="' + (t.done ? 'true' : 'false') + '">' +
                  '<span class="t-title">' + esc(t.title) + '</span>' +
                  (t.who ? '<span class="t-who">' + esc(t.who) + '</span>' : '') +
+                 (note ? '<span class="t-note">' + esc(note) + '</span>' : '') +
                  '</button>';
         }).join('')
       : '<div class="day-empty">nothing written here yet</div>';
@@ -416,8 +531,18 @@ document.getElementById('this-week').addEventListener('click', () => commit(setW
 document.getElementById('save-now').addEventListener('click', () => saver.saveNow());
 document.getElementById('reset-proto').addEventListener('click', () => {
   if (!window.confirm('Start this prototype over with its sample week? Your real plan is not affected.')) return;
+  capacityNotes = {};
+  planNote('');
   commit(buildDefaultPlannerState());
 });
+
+document.getElementById('plan-student').addEventListener('change', ev => {
+  chosenStudentId = ev.target.value;
+  planNote(chosenStudentId
+    ? 'Choose a week above, then start it from your plan.'
+    : 'The sample week is a made-up week for trying the spread out.');
+});
+document.getElementById('plan-generate').addEventListener('click', startFromPlan);
 
 document.getElementById('undo-bar').addEventListener('click', ev => {
   if (!ev.target.closest('#undo-btn')) return;
@@ -447,6 +572,7 @@ document.getElementById('school-day-toggles').addEventListener('change', ev => {
   commit(Object.assign({}, s, { schoolDays: nextDays }));
 });
 
+renderStudentChooser();
 render();
 window.__plannerReady = true;
 </script>

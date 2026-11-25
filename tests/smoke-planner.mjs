@@ -292,6 +292,160 @@ const prod = await page.evaluate(([a, b]) => [localStorage.getItem(a), localStor
 ok('The production storage key is byte-identical after a full session',
   prod[0] === SENTINEL && prod[1] === SENTINEL);
 
+// ---------------------------------------------------------------------------
+// 10 — one learner's week, generated from the real saved plan
+//
+// The plan below is made up: neutral learner names, neutral strand labels, and
+// day capacities taken from the capacity model's own vocabulary. Wednesday and
+// Friday are off for the first learner, so the generated week must show
+// exactly the other days as school days.
+// ---------------------------------------------------------------------------
+const REAL_PLAN = {
+  appStateVersion: 1,
+  students: [
+    {
+      id: 'learner_one', name: 'Wren', initials: 'W', active: true, sortOrder: 0, gradeBand: 'form1',
+      dayCapacity: { mon: 'full', tue: 'full', wed: 'off', thu: 'full', fri: 'off' }
+    },
+    {
+      id: 'learner_two', name: 'Ash', initials: 'A', active: true, sortOrder: 1, gradeBand: 'form2',
+      dayCapacity: { mon: 'full', tue: 'full', wed: 'full', thu: 'full', fri: 'full' }
+    }
+  ],
+  groups: [{ id: 'grp_both', label: 'Both Learners', studentIds: ['learner_one', 'learner_two'], active: true }],
+  subjectColumns: [{ id: 'col_a', label: 'Column A', visible: true, sortOrder: 0 }],
+  cards: [
+    { id: 'card_one', title: 'Strand One', subjectColumnId: 'col_a', audience: 'individual', participantMode: 'individual', participantIds: ['learner_one'], status: 'active' },
+    { id: 'card_two', title: 'Strand Two', subjectColumnId: 'col_a', audience: 'group', participantMode: 'group', participantIds: ['grp_both'], status: 'active' }
+  ],
+  loops: [{ id: 'loop_one', title: 'Bucket One', audience: 'group', participantMode: 'group', participantIds: ['grp_both'], itemIds: ['item_a'], currentItemId: 'item_a' }],
+  loopItems: [{ id: 'item_a', loopId: 'loop_one', title: 'First Item' }],
+  sequences: [], sequenceItems: [], resources: [], resourceUses: [], extensionWorks: [],
+  weeklyRhythm: {
+    id: 'rhythm_one', title: 'Our Weekly Rhythm',
+    days: [
+      { id: 'rd1', label: 'Day 1', sortOrder: 0, dateMode: 'day-number' },
+      { id: 'rd2', label: 'Day 2', sortOrder: 1, dateMode: 'day-number' },
+      { id: 'rd4', label: 'Day 4', sortOrder: 3, dateMode: 'day-number' }
+    ],
+    blocks: [{ id: 'blk_morning', label: 'Morning', sortOrder: 0 }],
+    assignments: [
+      { id: 'as1', dayId: 'rd1', blockId: 'blk_morning', label: 'Strand One', assignmentType: 'card', referencedId: 'card_one', sortOrder: 0 },
+      { id: 'as2', dayId: 'rd1', blockId: 'blk_morning', label: 'Bucket One', assignmentType: 'loop', referencedId: 'loop_one', sortOrder: 1 },
+      { id: 'as3', dayId: 'rd2', blockId: 'blk_morning', label: 'Strand Two', assignmentType: 'card', referencedId: 'card_two', sortOrder: 0 }
+    ]
+  }
+};
+const REAL_PLAN_JSON = JSON.stringify(REAL_PLAN);
+
+// Seed the prototype's own week AND a real plan, with the real plan recorded
+// here as the sentinel it must still be byte-for-byte at the end.
+async function seedWithRealPlan(state) {
+  await page.goto(BASE + '/docs/app/');
+  await page.evaluate(([k, v, pk, ok2, sentinel, plan]) => {
+    localStorage.clear();
+    localStorage.setItem(pk, plan);
+    localStorage.setItem(ok2, sentinel);
+    if (v) localStorage.setItem(k, v);
+  }, [PROTO_KEY, JSON.stringify(state), PROD_KEY, OLD_KEY, SENTINEL, REAL_PLAN_JSON]);
+}
+
+await seedWithRealPlan(FIXTURE);
+await reload();
+
+const chooserOptions = await page.$$eval('#plan-student option', els => els.map(e => e.textContent));
+ok('A chooser asks whose week this is, listing the learners from the saved plan',
+  same(chooserOptions, ['Sample week', 'Wren', 'Ash']));
+const chooserLabel = (await page.textContent('#plan-bar')) || '';
+ok('The chooser asks in plain words', /Whose week is this\?/.test(chooserLabel));
+ok('A week chooser shows the real dates of the week on the spread',
+  /March 2/.test((await page.textContent('#week-label')) || ''));
+
+// The confirmation must come BEFORE anything on the spread is replaced.
+const beforeGenerate = await spread();
+await page.selectOption('#plan-student', 'learner_one');
+await page.click('#plan-generate');
+await page.waitForTimeout(200);
+ok('Starting a week from the plan asks first', !!(await page.$('#plan-confirm-overlay')));
+const confirmText = (await page.textContent('#plan-confirm-card')) || '';
+ok('The confirmation names the learner and what would be lost',
+  /Start Wren’s week over from your plan\?/.test(confirmText) && /will be replaced/.test(confirmText));
+ok('Nothing is replaced while the question is still on screen', same(await spread(), beforeGenerate));
+await page.click('#plan-confirm-no');
+await page.waitForTimeout(200);
+ok('Keeping the spread leaves the week exactly as it was', same(await spread(), beforeGenerate));
+
+await page.click('#plan-generate');
+await page.waitForTimeout(150);
+await page.click('#plan-confirm-yes');
+await page.waitForTimeout(300);
+const generated = await spread();
+ok('The generated week puts the plan\'s own labels on real dates',
+  same(generated[MON], ['Strand One', 'Bucket One — next item']) &&
+  same(generated[TUE], ['Strand Two']));
+ok('Only this learner\'s work is placed', !JSON.stringify(generated).includes('Strand Three'));
+const generatedWho = await page.$$eval('.task-line .t-who', els => els.map(e => e.textContent));
+ok('Each line says whose work it is', generatedWho.every(w => w === 'Wren'));
+const wedOff = await page.$eval('.day-col[data-date="' + WED + '"]',
+  el => el.classList.contains('not-school-day'));
+const thuOn = await page.$eval('.day-col[data-date="' + THU + '"]',
+  el => !el.classList.contains('not-school-day'));
+ok('The days this learner has off are the days shown as off, and no others', wedOff && thuOn);
+// innerText, not textContent: textContent would also hand back the page's own
+// inline script source, which is not on screen.
+const bodyText = await page.evaluate(() => document.body.innerText);
+ok('No id and no technical word reaches the screen',
+  !/learner_one|card_one|loop_one|rd1|localStorage|schemaVersion/.test(bodyText));
+ok('Nothing on screen speaks in error language',
+  !/\berror\b|\binvalid\b|\bfailed\b|\bconflict\b|\bviolation\b/i.test(bodyText));
+ok('A loop bucket is one line and names no item of its own',
+  !/First Item/.test(bodyText) &&
+  (await page.$$eval('.task-line .t-title', els => els.filter(e => /Bucket One/.test(e.textContent)).length)) === 1);
+
+// A day can still be bumped after generating, and Undo still works.
+await dragTo('.day-col[data-date="' + MON + '"] .day-head',
+             '.day-col[data-date="' + TUE + '"] .day-head');
+ok('A generated day can still be bumped onto another day', !!(await page.$('#choice-overlay')));
+await page.click('#choice-cascade');
+await page.waitForTimeout(250);
+const bumped = await spread();
+ok('Bumping a generated day moves its work and flows what came after',
+  same(bumped[TUE], ['Strand One', 'Bucket One — next item']) && same(bumped[MON], []) &&
+  same(bumped[WED], []) && same(bumped[THU], ['Strand Two']));
+ok('Undo is still offered after bumping a generated day',
+  /Undo/.test((await page.textContent('#undo-bar')) || ''));
+
+// With no plan saved at all, the page stays calm and keeps the sample week.
+await seed(FIXTURE);     // PROD_KEY back to the non-plan sentinel
+await reload();
+const noPlanOptions = await page.$$eval('#plan-student option', els => els.map(e => e.textContent));
+ok('With no saved plan the chooser offers only the sample week', same(noPlanOptions, ['Sample week']));
+const noPlanNote = (await page.textContent('#plan-note')) || '';
+ok('And says so plainly, in plain language',
+  /No saved plan/.test(noPlanNote) && !/error|invalid/i.test(noPlanNote));
+await page.click('#plan-generate');
+await page.waitForTimeout(200);
+ok('Asking for a week with no plan saved never empties the spread',
+  same((await spread())[MON], ['Bible reading', 'Math lesson']));
+
+// And the real plan itself is byte-identical after all of that.
+await seedWithRealPlan(FIXTURE);
+await reload();
+await page.selectOption('#plan-student', 'learner_two');
+await page.click('#plan-generate');
+await page.waitForTimeout(150);
+await page.click('#plan-confirm-yes');
+await page.waitForTimeout(1200);
+const planAfter = await page.evaluate(k => localStorage.getItem(k), PROD_KEY);
+ok('The saved plan is byte-identical after generating and editing a week',
+  planAfter === REAL_PLAN_JSON);
+const keysAfterPlan = await page.evaluate(() => Object.keys(localStorage).sort());
+ok('Still only the prototype\'s own keys were written',
+  same(keysAfterPlan, [OLD_KEY, PROD_KEY, PROTO_KEY, PROTO_KEY + '.savedAt'].sort()));
+const savedProto = await page.evaluate(k => localStorage.getItem(k), PROTO_KEY);
+ok('What the prototype saves carries no derived notes or report',
+  !/capacityNote|unresolved|studentName/.test(savedProto || ''));
+
 ok('No JS errors anywhere in the planner suite', jsErrors.length === 0);
 if (jsErrors.length) jsErrors.forEach(e => console.log('  JS error: ' + e));
 

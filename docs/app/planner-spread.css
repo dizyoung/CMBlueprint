@@ -436,3 +436,59 @@ input.line-input:focus { outline: none; border-bottom: 2px solid var(--lagoon); 
   .day-lines { min-height: 90px; }
   .proto-top, .week-bar, .save-row, #undo-bar, .move-panel { padding-left: 16px; padding-right: 16px; }
 }
+
+/* --- Lines generated from the saved plan ------------------------------- */
+/* A quiet aside on a line that sits on a lighter day. Derived, never saved. */
+.task-line .t-note {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 11px;
+  color: var(--ink-soft);
+  display: block;
+  margin-top: 1px;
+  font-style: italic;
+}
+
+#plan-bar select {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  background: #fffdf7;
+  border: 1px solid var(--rule);
+  color: var(--pencil);
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+
+#plan-note:empty { display: none; }
+
+#plan-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(60, 54, 44, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+
+#plan-confirm-card {
+  background: #fffdf7;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 22px 24px;
+  max-width: 460px;
+  box-shadow: 0 10px 30px rgba(60, 54, 44, 0.18);
+}
+
+#plan-confirm-card p {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+#plan-confirm-card .choice-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}

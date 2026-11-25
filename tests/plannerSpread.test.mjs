@@ -374,8 +374,17 @@ test('the prototype writes only its own keys — the production keys are never n
   ];
   for (const file of files) {
     const body = fs.readFileSync(new URL('../' + file, import.meta.url), 'utf8');
-    assert.ok(!body.includes('cmblueprint.familySchoolMap'), file + ' never names the Family School Map key');
     assert.ok(!body.includes('cm_blueprint_data_v3'), file + ' never names the old planner key');
+    // The page itself may now NAME the Family School Map key, because it reads
+    // the saved plan to offer "start this week from my plan" — but reading is
+    // the whole of it: nowhere on this prototype is anything ever written to
+    // storage except through plannerSpreadStore.mjs's own two keys.
+    if (file === 'docs/app/planner-spread-prototype.html') {
+      assert.ok(!/setItem|removeItem|\.clear\s*\(/.test(body),
+        file + ' never writes to storage at all');
+    } else {
+      assert.ok(!body.includes('cmblueprint.familySchoolMap'), file + ' never names the Family School Map key');
+    }
   }
 
   // With a stub localStorage in place, a real save touches nothing else.
