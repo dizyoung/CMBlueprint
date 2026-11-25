@@ -199,10 +199,10 @@ function askDayShift(fromDate, toDate) {
       '<h2 class="hand" id="choice-title">Move ' + esc(fromLabel) + '’s work to ' + esc(toLabel) + '?</h2>' +
       '<p>Choose what should happen to the work that comes after.</p>' +
       '<div class="choice-buttons">' +
-        '<button type="button" id="choice-cascade">Flow everything after' +
-          '<span class="why">' + esc(toLabel) + '’s work and everything later moves on to its next school day.</span></button>' +
-        '<button type="button" id="choice-stack">Just add to ' + esc(toLabel) +
-          '<span class="why">Both days sit on ' + esc(toLabel) + '. Nothing else moves.</span></button>' +
+        '<button type="button" id="choice-stack">Double up on ' + esc(toLabel) +
+          '<span class="why">Both days sit together on ' + esc(toLabel) + '. Nothing else moves.</span></button>' +
+        '<button type="button" id="choice-cascade">Bump everything down' +
+          '<span class="why">' + esc(toLabel) + '’s work and everything after it moves on to its next school day.</span></button>' +
         '<button type="button" class="cancel" id="choice-cancel">Cancel</button>' +
       '</div>' +
     '</div>';

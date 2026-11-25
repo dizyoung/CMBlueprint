@@ -165,8 +165,8 @@ const title = (await page.textContent('#choice-title')) || '';
 ok('It asks in plain language, naming the real days', /Move Monday’s work to Tuesday\?/.test(title));
 const cascadeText = (await page.textContent('#choice-cascade')) || '';
 const stackText = (await page.textContent('#choice-stack')) || '';
-ok('Both choices are offered — flow everything after, and just add to that day',
-  /Flow everything after/.test(cascadeText) && /Just add to Tuesday/.test(stackText));
+ok('Both choices are offered — double up on that day, and bump everything down',
+  /Bump everything down/.test(cascadeText) && /Double up on Tuesday/.test(stackText));
 ok('Cancel is offered too', !!(await page.$('#choice-cancel')));
 const wording = (await page.textContent('#choice-card')) || '';
 ok('The words cascade and stack never appear on screen', !/cascade|stack/i.test(wording));
